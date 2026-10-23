@@ -19,7 +19,7 @@ import java.util.regex.Pattern
 
 android {
 
-    compileSdkVersion 30
+    compileSdk = 36
 
     signingConfigs {
         release {
@@ -46,11 +46,12 @@ android {
     }
 
     defaultConfig {
-        signingConfig signingConfigs.debug
+        // Gradle 9 removed the 'propName value' space-assignment syntax for
+        // Gradle-generated properties; these must use '=' assignment.
+        signingConfig = signingConfigs.debug
         applicationId 'com.qualcomm.ftcrobotcontroller'
-        minSdkVersion 24
-        //noinspection ExpiredTargetSdkVersion
-        targetSdkVersion 28
+        minSdk = 24
+        targetSdk = 36
 
         /**
          * We keep the versionCode and versionName of robot controller applications in sync with
@@ -84,7 +85,7 @@ android {
     // http://google.github.io/android-gradle-dsl/current/com.android.build.gradle.internal.dsl.BuildType.html
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            signingConfig = signingConfigs.release
 
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a"
@@ -107,9 +108,8 @@ android {
     packagingOptions {
         pickFirst '**/*.so'
     }
-    ndkVersion '21.3.6528147'
+    ndkVersion = '21.3.6528147'
 }
 
 repositories {
 }
-

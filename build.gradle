@@ -15,6 +15,12 @@ plugins {
     // Note for FTC Teams: Do not modify this yourself.
     id 'com.android.application' version '8.13.2' apply false
     id 'com.android.library' version '8.13.2' apply false
+    // Kotlin 2.4.10: Pedro Pathing 3's tuning artifact pulls Sloth 0.3.2, which is
+    // built against kotlin-stdlib 2.4.10. A Kotlin compiler can only read stdlib
+    // metadata up to one minor version ahead (2.2 -> 2.3), so the compiler must be
+    // >= 2.3 and is matched to 2.4.10. Supports Gradle <= 9.5.0, AGP 8.5.2-9.1.0.
+    // See DEV_NOTES.md before changing Gradle, AGP or this version.
+    id 'org.jetbrains.kotlin.android' version '2.4.10' apply false
 }
 
 // This is now required because aapt2 has to be downloaded from the

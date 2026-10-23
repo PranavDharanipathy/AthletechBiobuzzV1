@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android' // required: TeamCode has .kt sources (Systems/FIArm)
 
 //
 // build.gradle in TeamCode
@@ -20,7 +21,19 @@ android {
     namespace = 'org.firstinspires.ftc.teamcode'
 
     packagingOptions {
-        jniLibs.useLegacyPackaging true
+        // '=' assignment required: Gradle 9 removed space-assignment for
+        // Gradle-generated properties (this one was flagged in the problems report).
+        jniLibs.useLegacyPackaging = true
+    }
+}
+
+// Keep the Kotlin bytecode target aligned with the Java 8 target set in
+// build.common.gradle. A mismatch is a hard build failure
+// ("Inconsistent JVM-target compatibility"), not a warning.
+// Uses the modern compilerOptions DSL; the old `kotlinOptions` block is deprecated.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
     }
 }
 

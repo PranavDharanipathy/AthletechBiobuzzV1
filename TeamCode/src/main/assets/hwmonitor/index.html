@@ -1,0 +1,1840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware Monitor</title>
+<!--
+  HardwareMonitor dashboard. Served by the Robot Controller at /hwmonitor (see
+  Utility/Monitoring/MonitorWebServer.java). Also works opened straight from disk: use
+  "Open folder" on a copy made with  adb pull /sdcard/FIRST/data/HardwareMonitor
+  Self-contained on purpose: a laptop on the robot's Wi-Fi has no internet, so no CDNs.
+-->
+<style>
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --panel2: #f8f9fb; --text: #1a2030; --muted: #657085;
+  --border: #e1e5ec; --grid: #edf0f4; --axis: #8a93a5;
+  --accent: #2f6fed; --accent-weak: #e7eefe; --good: #15803d; --warn: #b45309; --bad: #dc2626;
+  --good-bg: #e8f6ee; --warn-bg: #fdf3e2; --bad-bg: #fdecec; --info-bg: #eaf1fe;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1016; --panel: #141a22; --panel2: #19202a; --text: #e5eaf1; --muted: #8b95a7;
+    --border: #252e3a; --grid: #1f2732; --axis: #6f7a8c;
+    --accent: #5b8dff; --accent-weak: #1a2846; --good: #3fb950; --warn: #e3a008; --bad: #f85149;
+    --good-bg: #13291c; --warn-bg: #2d230e; --bad-bg: #331617; --info-bg: #15233d;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1016; --panel: #141a22; --panel2: #19202a; --text: #e5eaf1; --muted: #8b95a7;
+  --border: #252e3a; --grid: #1f2732; --axis: #6f7a8c;
+  --accent: #5b8dff; --accent-weak: #1a2846; --good: #3fb950; --warn: #e3a008; --bad: #f85149;
+  --good-bg: #13291c; --warn-bg: #2d230e; --bad-bg: #331617; --info-bg: #15233d;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); }
+[hidden] { display: none !important; }
+
+header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.brand { font-weight: 700; font-size: 16px; letter-spacing: .2px; }
+.brand span { color: var(--accent); }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--panel2);
+  border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.spacer { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--panel); cursor: pointer; white-space: nowrap;
+  text-decoration: none; color: var(--text); font-size: 13px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover { border-color: var(--bad); }
+.btn.small { padding: 2px 8px; font-size: 12px; }
+
+#layout { display: grid; grid-template-columns: 290px 1fr; min-height: calc(100% - 53px); }
+aside { border-right: 1px solid var(--border); background: var(--panel); padding: 12px 10px;
+  position: sticky; top: 53px; height: calc(100vh - 53px); overflow: auto; }
+.side-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px;
+  font-weight: 600; }
+.sess { display: grid; grid-template-columns: 18px 1fr; gap: 2px 8px; padding: 8px 8px; border-radius: 8px;
+  cursor: pointer; border: 1px solid transparent; margin-bottom: 4px; }
+.sess:hover { background: var(--panel2); }
+.sess.active { background: var(--accent-weak); border-color: var(--accent); }
+.sess input { margin: 3px 0 0; }
+.sess .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess .meta { grid-column: 2; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 99px;
+  vertical-align: 1px; }
+.badge.live { background: var(--bad); color: #fff; animation: pulse 1.6s infinite; }
+.badge.inc { background: var(--warn-bg); color: var(--warn); }
+@keyframes pulse { 50% { opacity: .55; } }
+
+main { padding: 16px 20px 40px; min-width: 0; }
+.empty { max-width: 720px; margin: 40px auto; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; padding: 22px 26px; box-shadow: var(--shadow); }
+.empty h2 { margin-top: 0; }
+.empty code { font-family: var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
+
+.sess-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
+.sess-header h1 { font-size: 20px; margin: 0; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.tab { padding: 8px 14px; border: 0; background: none; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 14px; }
+.panel h3 { margin: 0 0 8px; font-size: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); }
+.kpi .label { font-size: 12px; color: var(--muted); }
+.kpi .value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .value small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.kpi .sub { font-size: 12px; color: var(--muted); }
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.finding { padding: 7px 10px 7px 12px; border-radius: 8px; border-left: 4px solid; font-size: 13px; }
+.finding.good { background: var(--good-bg); border-color: var(--good); }
+.finding.info { background: var(--info-bg); border-color: var(--accent); }
+.finding.warn { background: var(--warn-bg); border-color: var(--warn); }
+.finding.bad { background: var(--bad-bg); border-color: var(--bad); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; align-items: start; }
+.chart { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 6px;
+  box-shadow: var(--shadow); min-width: 0; }
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 4px; }
+.chart-title { font-weight: 600; font-size: 13px; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--muted); }
+.legend span { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
+.legend span.off { opacity: .4; text-decoration: line-through; }
+.legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.chart-canvas { position: relative; }
+.chart-canvas canvas { display: block; width: 100%; cursor: crosshair; }
+.tip { position: absolute; top: 4px; pointer-events: none; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); z-index: 5;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tip b { font-weight: 600; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.kpi.good { border-left: 4px solid var(--good); }
+.kpi.warn { border-left: 4px solid var(--warn); }
+.kpi.bad { border-left: 4px solid var(--bad); }
+.cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 18px 0 8px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 9px; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--panel); cursor: pointer; user-select: none; }
+.chip.on { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); }
+.chip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.hint { font-size: 12px; color: var(--muted); margin: -6px 0 10px; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+.controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
+.chk { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; padding: 2px 8px;
+  border: 1px solid var(--border); border-radius: 99px; cursor: pointer; background: var(--panel); }
+select, input[type=search], input[type=text] { background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 8px; }
+
+.dt-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
+table.dt { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+table.dt th, table.dt td { padding: 4px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.dt thead th { position: sticky; top: 0; background: var(--panel2); text-align: left; cursor: pointer;
+  user-select: none; z-index: 2; font-weight: 600; }
+table.dt thead th.num, table.dt td.num { text-align: right; }
+table.dt thead th:hover { color: var(--accent); }
+table.dt tbody tr:hover td { background: var(--accent-weak); }
+table.dt tfoot td { position: sticky; background: var(--panel2); font-size: 11.5px; color: var(--muted); }
+table.dt tfoot tr:nth-child(1) td { bottom: 46px; }
+table.dt tfoot tr:nth-child(2) td { bottom: 23px; }
+table.dt tfoot tr:nth-child(3) td { bottom: 0; }
+table.dt td.rowlabel { color: var(--muted); }
+.dt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tables-layout { display: grid; grid-template-columns: 200px 1fr; gap: 14px; }
+.ds-list { display: flex; flex-direction: column; gap: 2px; }
+.ds-list button { text-align: left; padding: 6px 10px; border-radius: 7px; border: 1px solid transparent;
+  background: none; cursor: pointer; font-size: 13px; }
+.ds-list button:hover { background: var(--panel2); }
+.ds-list button.active { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.ds-list .group { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 8px 10px 2px; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; }
+#drop { position: fixed; inset: 0; background: rgba(47, 111, 237, .14); border: 3px dashed var(--accent);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; z-index: 50; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 60; }
+@media (max-width: 900px) {
+  #layout { grid-template-columns: 1fr; }
+  aside { position: static; height: auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .grid2 { grid-template-columns: 1fr; }
+  .tables-layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Hardware <span>Monitor</span></div>
+  <div id="source" class="pill">connecting…</div>
+  <div class="spacer"></div>
+  <button id="btnRefresh" class="btn" title="Reload the session list">Refresh</button>
+  <label class="btn" title="Browse a HardwareMonitor folder copied off the robot">Open folder…
+    <input id="folderInput" type="file" webkitdirectory multiple hidden></label>
+  <label class="btn" title="Open individual session files">Open files…
+    <input id="filesInput" type="file" multiple accept=".csv,.json" hidden></label>
+  <button id="btnClear" class="btn danger" hidden>Clear database</button>
+  <button id="btnTheme" class="btn" title="Switch light / dark" aria-label="Switch light / dark"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+</header>
+<div id="layout">
+  <aside>
+    <div class="side-head"><span>Sessions <span id="sessCount" class="muted"></span></span>
+      <span class="muted" style="font-size:12px;font-weight:400" title="Tick sessions to compare them">☑ compare</span></div>
+    <div id="sessList"></div>
+    <div id="dbInfo" class="muted" style="font-size:12px;padding:8px 4px"></div>
+  </aside>
+  <main>
+    <div id="emptyView" class="empty" hidden></div>
+    <div id="sessionView" hidden>
+      <div id="sessHeader" class="sess-header"></div>
+      <nav id="tabs" class="tabs"></nav>
+      <section id="tabBody"></section>
+    </div>
+  </main>
+</div>
+<div id="drop" hidden>Drop a HardwareMonitor folder or session files</div>
+<div id="toast" hidden></div>
+<script>
+'use strict';
+/* =====================================================================================
+ *  Basics
+ * ===================================================================================== */
+const API = '/hwmonitor/api/';
+const SESSION_FILES = ['summary.json', 'system.csv', 'motors.csv', 'devices.csv', 'events.csv'];
+const PALETTE = ['#4e79a7', '#f28e2b', '#e15759', '#59a14f', '#b07aa1', '#edc948', '#76b7b2', '#ff9da7', '#9c755f', '#79706e'];
+const color = i => PALETTE[i % PALETTE.length];
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'text') el.textContent = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c instanceof Node ? c : String(c));
+  return el;
+}
+const $ = (s, el = document) => el.querySelector(s);
+const ok = v => v != null && Number.isFinite(Number(v)) && v !== '';
+const fmt = (v, d = 2) => ok(v) ? Number(v).toFixed(d) : '–';
+const fmtInt = v => ok(v) ? Math.round(v).toLocaleString() : '–';
+function fmtBytes(b) {
+  if (!ok(b)) return '–';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+function fmtDur(s) {
+  if (!ok(s)) return '–';
+  if (s < 60) return s.toFixed(1) + ' s';
+  const m = Math.floor(s / 60);
+  return m + 'm ' + String(Math.round(s - m * 60)).padStart(2, '0') + 's';
+}
+/** Compact number for tables and tooltips. */
+function smart(v) {
+  if (!ok(v)) return v == null ? '' : String(v);
+  v = Number(v);
+  if (Number.isInteger(v) && Math.abs(v) < 1e12) return String(v);
+  const a = Math.abs(v);
+  const d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 3 : a >= 0.01 ? 4 : 6;
+  return v.toFixed(d);
+}
+function toast(msg, ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms);
+}
+function download(name, text, type = 'text/csv') {
+  const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  document.body.append(a); a.click(); a.remove();
+}
+const get = (o, path, d) => path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o) ?? d;
+
+/* =====================================================================================
+ *  Data sources: the robot's web API, or files from the user's disk
+ * ===================================================================================== */
+class RobotSource {
+  constructor() { this.kind = 'robot'; this.label = 'Robot · ' + location.host; }
+  async listSessions() {
+    const r = await fetch(API + 'sessions', { cache: 'no-store' });
+    if (!r.ok) throw new Error('sessions: HTTP ' + r.status);
+    return r.json();
+  }
+  async file(id, name, offset = 0) {
+    const r = await fetch(`${API}file?session=${encodeURIComponent(id)}&name=${name}&offset=${offset}`, { cache: 'no-store' });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+    const next = Number(r.headers.get('X-Next-Offset'));
+    return { text: await r.text(), next: Number.isFinite(next) ? next : null };
+  }
+  async live() {
+    const r = await fetch(API + 'live', { cache: 'no-store' });
+    if (r.status === 204) return null;
+    if (!r.ok) throw new Error('live: HTTP ' + r.status);
+    return r.json();
+  }
+  downloadHref(id, name) { return `${API}file?session=${encodeURIComponent(id)}&name=${name}&download=1`; }
+  async remove(id) {
+    const r = await fetch(`${API}delete?session=${encodeURIComponent(id)}`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+  }
+  async clear() {
+    const r = await fetch(API + 'clear', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+}
+
+class LocalSource {
+  /** @param files Map(sessionId -> Map(fileName -> File)) */
+  constructor(files) { this.kind = 'local'; this.label = 'Local files'; this.files = files; }
+  async listSessions() {
+    const sessions = [];
+    let total = 0;
+    for (const [id, m] of this.files) {
+      const info = { id, opMode: id, start: '', files: {}, sizeBytes: 0, complete: false, recording: false };
+      for (const [n, f] of m) { info.files[n] = f.size; info.sizeBytes += f.size; }
+      total += info.sizeBytes;
+      if (m.has('summary.json')) {
+        try { Object.assign(info, sessionInfoFromSummary(JSON.parse(await m.get('summary.json').text()))); } catch (e) { /* unreadable */ }
+      }
+      sessions.push(info);
+    }
+    sessions.sort((a, b) => String(b.id).localeCompare(String(a.id)));
+    return { recording: null, sessions, path: 'files on this computer', totalBytes: total };
+  }
+  async file(id, name, offset = 0) {
+    const f = this.files.get(id) && this.files.get(id).get(name);
+    if (!f) return null;
+    const text = await f.text();
+    return { text: offset ? text.slice(offset) : text, next: f.size };
+  }
+  async live() { return null; }
+  downloadHref(id, name) {
+    const f = this.files.get(id) && this.files.get(id).get(name);
+    return f ? URL.createObjectURL(f) : '#';
+  }
+}
+
+function sessionInfoFromSummary(s) {
+  const se = s.session || {}, lp = s.loop || {}, pw = s.power || {};
+  return {
+    opMode: se.opMode, start: se.start, durationS: se.durationS, loops: lp.count, avgLoopMs: lp.avgMs,
+    p95LoopMs: lp.p95Ms, minBatteryV: get(pw, 'batteryV.min'), energyWh: pw.energyWh,
+    devices: (s.devices || []).length, complete: !!se.complete,
+  };
+}
+
+/** Groups loose files into sessions by their parent folder name. */
+function addLocalFile(map, path, file) {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  const name = parts[parts.length - 1];
+  if (!SESSION_FILES.includes(name)) return;
+  const id = parts.length >= 2 ? parts[parts.length - 2] : 'opened-files';
+  if (!map.has(id)) map.set(id, new Map());
+  map.get(id).set(name, file);
+}
+async function entriesToFiles(entry, path, out) {
+  if (entry.isFile) {
+    const f = await new Promise((res, rej) => entry.file(res, rej));
+    out.push([path + entry.name, f]);
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const e of batch) await entriesToFiles(e, path + entry.name + '/', out);
+    }
+  }
+}
+
+/* =====================================================================================
+ *  CSV
+ * ===================================================================================== */
+class Table {
+  constructor(header) { this.header = header || []; this.rows = []; this.index = new Map(this.header.map((c, i) => [c, i])); this.cache = new Map(); }
+  get length() { return this.rows.length; }
+  has(c) { return this.index.has(c); }
+  num(c) {
+    if (this.cache.has(c)) return this.cache.get(c);
+    const i = this.index.get(c), out = new Float64Array(this.rows.length);
+    for (let r = 0; r < this.rows.length; r++) {
+      const s = i == null ? '' : this.rows[r][i];
+      out[r] = s === '' || s == null ? NaN : +s;
+    }
+    this.cache.set(c, out);
+    return out;
+  }
+  str(c) { const i = this.index.get(c); return this.rows.map(r => r[i]); }
+  append(rows) { for (const r of rows) this.rows.push(r); this.cache.clear(); }
+}
+/** Incremental CSV reader: feed text chunks (e.g. live appends); keeps a partial last line. */
+class CsvStream {
+  constructor() { this.table = null; this.pending = ''; this.offset = 0; }
+  feed(text) {
+    const all = this.pending + text;
+    const cut = all.lastIndexOf('\n');
+    if (cut < 0) { this.pending = all; return; }
+    this.pending = all.slice(cut + 1);
+    const rows = [];
+    for (let line of all.slice(0, cut).split('\n')) {
+      if (line.endsWith('\r')) line = line.slice(0, -1);
+      if (!line || line[0] === '#') continue;
+      const cells = line.split(',');
+      if (!this.table) this.table = new Table(cells); else rows.push(cells);
+    }
+    if (this.table && rows.length) this.table.append(rows);
+  }
+  finish() { if (this.pending) { const p = this.pending; this.pending = ''; this.feed(p + '\n'); } return this.table || new Table([]); }
+}
+function parseCsv(text) { const s = new CsvStream(); s.feed(text); return s.finish(); }
+
+/** events.csv can hold millions of rows: parse straight into typed arrays. */
+function parseEvents(text) {
+  let n = 0;
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) n++;
+  const ev = {
+    t: new Float64Array(n), dev: new Int32Array(n), op: new Int16Array(n), write: new Uint8Array(n),
+    flag: new Uint8Array(n), lat: new Float32Array(n), devNames: [], opNames: [], n: 0,
+  };
+  const opIndex = new Map();
+  let pos = text.indexOf('\n') + 1, k = 0;
+  while (pos > 0 && pos < text.length) {
+    let end = text.indexOf('\n', pos); if (end < 0) end = text.length;
+    if (text.charCodeAt(pos) !== 35 /* # */ && end > pos) {
+      const c1 = text.indexOf(',', pos), c2 = text.indexOf(',', c1 + 1), c3 = text.indexOf(',', c2 + 1),
+        c4 = text.indexOf(',', c3 + 1), c5 = text.indexOf(',', c4 + 1), c6 = text.indexOf(',', c5 + 1);
+      if (c6 > 0 && c6 < end) {
+        const id = +text.slice(c1 + 1, c2);
+        if (ev.devNames[id] == null) ev.devNames[id] = text.slice(c2 + 1, c3);
+        const opName = text.slice(c3 + 1, c4);
+        let oi = opIndex.get(opName);
+        if (oi == null) { oi = ev.opNames.length; ev.opNames.push(opName); opIndex.set(opName, oi); }
+        ev.t[k] = +text.slice(pos, c1); ev.dev[k] = id; ev.op[k] = oi;
+        ev.write[k] = text.charCodeAt(c4 + 1) === 87 ? 1 : 0; ev.flag[k] = text.charCodeAt(c5 + 1) === 49 ? 1 : 0;
+        ev.lat[k] = +text.slice(c6 + 1, text.charCodeAt(end - 1) === 13 ? end - 1 : end);
+        k++;
+      }
+    }
+    pos = end + 1;
+  }
+  ev.n = k;
+  return ev;
+}
+
+/* =====================================================================================
+ *  Charts (canvas, no libraries). Drag to zoom, double-click to reset, hover for values,
+ *  click legend entries to hide series. Charts in a ChartGroup zoom together.
+ * ===================================================================================== */
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function niceTicks(min, max, count) {
+  const span = max - min;
+  if (!(span > 0)) return [min];
+  const raw = span / Math.max(1, count), mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+  const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
+  const out = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  return out;
+}
+function tickFmt(v, step) {
+  const d = step >= 1 ? 0 : Math.min(6, Math.ceil(-Math.log10(step)));
+  const s = v.toFixed(d);
+  return Math.abs(v) >= 10000 ? (v / 1000).toFixed(step >= 1000 ? 0 : 1) + 'k' : s;
+}
+function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
+
+class ChartGroup {
+  constructor() { this.charts = []; }
+  add(c) { c.group = this; this.charts.push(c); return c; }
+  setRange(r) { for (const c of this.charts) { c.range = r; c.draw(); } }
+}
+
+class LineChart {
+  /**
+   * opts: title, unit, height, decimals, zeroBased, hlines:[{y,label,color}]
+   * series: [{name, x, y, color, dash, width, hidden}]
+   */
+  constructor(opts) {
+    this.o = Object.assign({ height: 210, unit: '', decimals: 2, zeroBased: false }, opts);
+    this.series = []; this.hlines = this.o.hlines || []; this.range = null; this.group = null;
+    this.legend = h('div', { class: 'legend' });
+    this.canvas = h('canvas');
+    this.tip = h('div', { class: 'tip', hidden: true });
+    this.wrap = h('div', { class: 'chart-canvas', style: { height: this.o.height + 'px' } }, this.canvas, this.tip);
+    this.el = h('div', { class: 'chart' },
+      h('div', { class: 'chart-head' }, h('div', { class: 'chart-title' }, this.o.title), this.legend), this.wrap);
+    const c = this.canvas;
+    c.addEventListener('mousemove', e => this.onMove(e));
+    c.addEventListener('mouseleave', () => { this.hoverPx = null; this.drag = null; this.tip.hidden = true; this.draw(); });
+    c.addEventListener('mousedown', e => { const x = this.px(e); if (x >= this.L && x <= this.L + this.pw) { this.drag = { a: x, b: x }; e.preventDefault(); } });
+    c.addEventListener('mouseup', () => this.endDrag());
+    c.addEventListener('dblclick', () => this.zoom(null));
+    if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => this.draw())).observe(this.wrap);
+  }
+  px(e) { return e.clientX - this.canvas.getBoundingClientRect().left; }
+  setSeries(series) {
+    const hidden = new Set(this.series.filter(s => s.hidden).map(s => s.name));
+    this.series = series.filter(s => s && s.x && s.x.length);
+    for (const s of this.series) if (hidden.has(s.name)) s.hidden = true;
+    this.legend.replaceChildren(...this.series.map(s => {
+      const sp = h('span', { class: s.hidden ? 'off' : '', title: 'click to show/hide' },
+        h('i', { style: { background: s.color } }), s.name);
+      sp.onclick = () => { s.hidden = !s.hidden; sp.className = s.hidden ? 'off' : ''; this.draw(); };
+      return sp;
+    }));
+    this.draw();
+    return this;
+  }
+  zoom(r) { if (this.group) this.group.setRange(r); else { this.range = r; this.draw(); } }
+  endDrag() {
+    const d = this.drag; this.drag = null;
+    if (d && Math.abs(d.b - d.a) > 6) {
+      const a = this.toX(Math.min(d.a, d.b)), b = this.toX(Math.max(d.a, d.b));
+      this.zoom([a, b]);
+    } else this.draw();
+  }
+  toX(px) { return this.xmin + (px - this.L) / this.pw * (this.xmax - this.xmin); }
+  X(v) { return this.L + (v - this.xmin) / (this.xmax - this.xmin) * this.pw; }
+  Y(v) { return this.T + (1 - (v - this.ymin) / (this.ymax - this.ymin)) * this.ph; }
+  extentX() {
+    let a = Infinity, b = -Infinity;
+    for (const s of this.series) if (!s.hidden && s.x.length) { a = Math.min(a, s.x[0]); b = Math.max(b, s.x[s.x.length - 1]); }
+    return Number.isFinite(a) ? [a, b] : [0, 1];
+  }
+  onMove(e) {
+    const x = this.px(e);
+    if (this.drag) { this.drag.b = Math.max(this.L, Math.min(this.L + this.pw, x)); this.draw(); return; }
+    this.hoverPx = x >= this.L && x <= this.L + this.pw ? x : null;
+    this.draw();
+  }
+  draw() {
+    const w = this.wrap.clientWidth, H = this.o.height;
+    if (!w) return;
+    const dpr = window.devicePixelRatio || 1, c = this.canvas;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(H * dpr)) {
+      c.width = Math.round(w * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px';
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, H);
+    const L = this.L = 56, R = 12, T = this.T = 8, B = 24;
+    this.pw = Math.max(10, w - L - R); this.ph = Math.max(10, H - T - B);
+    [this.xmin, this.xmax] = this.range || this.extentX();
+    if (!(this.xmax > this.xmin)) this.xmax = this.xmin + 1;
+
+    let ymin = Infinity, ymax = -Infinity;
+    const vis = [];
+    for (const s of this.series) {
+      if (s.hidden) continue;
+      const i0 = Math.max(0, lowerBound(s.x, this.xmin) - 1), i1 = Math.min(s.x.length, lowerBound(s.x, this.xmax) + 1);
+      vis.push([s, i0, i1]);
+      for (let i = i0; i < i1; i++) { const v = s.y[i]; if (v === v && v !== Infinity && v !== -Infinity) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; } }
+    }
+    for (const l of this.hlines) { if (l.y < ymin) ymin = l.y; if (l.y > ymax) ymax = l.y; }
+    const empty = !Number.isFinite(ymin);
+    if (empty) { ymin = 0; ymax = 1; }
+    if (this.o.zeroBased && ymin > 0) ymin = 0;
+    if (ymax === ymin) { const d = Math.abs(ymax) * 0.1 || 1; ymax += d; ymin -= d; }
+    const pad = (ymax - ymin) * 0.06;
+    ymax += pad; if (!(this.o.zeroBased && ymin === 0)) ymin -= pad;
+    this.ymin = ymin; this.ymax = ymax;
+
+    const gridC = cssVar('--grid'), axisC = cssVar('--axis'), textC = cssVar('--muted');
+    ctx.font = '11px system-ui, sans-serif'; ctx.lineWidth = 1; ctx.fillStyle = textC;
+    const yt = niceTicks(ymin, ymax, Math.max(2, Math.floor(this.ph / 38)));
+    const ys = yt.length > 1 ? yt[1] - yt[0] : 1;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const v of yt) {
+      const y = Math.round(this.Y(v)) + 0.5;
+      ctx.strokeStyle = gridC; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + this.pw, y); ctx.stroke();
+      ctx.fillText(tickFmt(v, ys), L - 6, y);
+    }
+    const xt = niceTicks(this.xmin, this.xmax, Math.max(2, Math.floor(this.pw / 80)));
+    const xs = xt.length > 1 ? xt[1] - xt[0] : 1;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const v of xt) {
+      const x = Math.round(this.X(v)) + 0.5;
+      ctx.strokeStyle = gridC; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + this.ph); ctx.stroke();
+      ctx.fillText(tickFmt(v, xs) + (v === xt[xt.length - 1] ? ' s' : ''), x, T + this.ph + 5);
+    }
+    ctx.strokeStyle = axisC; ctx.beginPath(); ctx.moveTo(L + 0.5, T); ctx.lineTo(L + 0.5, T + this.ph); ctx.lineTo(L + this.pw, T + this.ph + 0.5); ctx.stroke();
+    if (this.o.unit) { ctx.save(); ctx.translate(11, T + this.ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.o.unit, 0, 0); ctx.restore(); }
+
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T, this.pw, this.ph); ctx.clip();
+    for (const l of this.hlines) {
+      const y = this.Y(l.y);
+      ctx.strokeStyle = l.color || cssVar('--bad'); ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + this.pw, y); ctx.stroke(); ctx.setLineDash([]);
+      if (l.label) { ctx.fillStyle = l.color || cssVar('--bad'); ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(l.label, L + this.pw - 4, y - 2); }
+    }
+    for (const l of this.o.vlines || []) {
+      if (!(l.x >= this.xmin && l.x <= this.xmax)) continue;
+      const x = Math.round(this.X(l.x)) + 0.5;
+      ctx.strokeStyle = axisC; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + this.ph); ctx.stroke(); ctx.setLineDash([]);
+      if (l.label) { ctx.fillStyle = textC; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(l.label, x + 3, T + 1); }
+    }
+    for (const [s, i0, i1] of vis) this.drawSeries(ctx, s, i0, i1);
+    ctx.restore();
+
+    if (empty) { ctx.fillStyle = textC; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '12px system-ui'; ctx.fillText('no data', L + this.pw / 2, T + this.ph / 2); }
+    if (this.drag) {
+      ctx.fillStyle = 'rgba(91,141,255,.15)'; ctx.fillRect(Math.min(this.drag.a, this.drag.b), T, Math.abs(this.drag.b - this.drag.a), this.ph);
+    }
+    this.drawHover(ctx, vis);
+  }
+  drawSeries(ctx, s, i0, i1) {
+    const xs = s.x, ys = s.y;
+    if (s.points) return this.drawPoints(ctx, s, i0, i1);
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.width || 1.6; ctx.setLineDash(s.dash || []); ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let pen = false;
+    if (i1 - i0 > this.pw * 2) {
+      // more points than pixels: draw min/max per pixel column
+      let col = null, mn = 0, mx = 0;
+      const flush = () => { if (col == null) return; const a = this.Y(mn), b = this.Y(mx); if (!pen) { ctx.moveTo(col, a); pen = true; } else ctx.lineTo(col, a); ctx.lineTo(col, b); };
+      for (let i = i0; i < i1; i++) {
+        const v = ys[i];
+        if (v !== v) { flush(); col = null; pen = false; continue; }
+        const px = Math.round(this.X(xs[i]));
+        if (px !== col) { flush(); col = px; mn = mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      flush();
+    } else {
+      for (let i = i0; i < i1; i++) {
+        const v = ys[i];
+        if (v !== v) { pen = false; continue; }
+        const x = this.X(xs[i]), y = this.Y(v);
+        if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+      }
+      if (i1 - i0 < 40) for (let i = i0; i < i1; i++) { if (ys[i] === ys[i]) { ctx.moveTo(this.X(xs[i]) + 2, this.Y(ys[i])); ctx.arc(this.X(xs[i]), this.Y(ys[i]), 2, 0, 6.3); } }
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  drawPoints(ctx, s, i0, i1) {
+    ctx.fillStyle = s.color; ctx.globalAlpha = 0.7;
+    if (i1 - i0 > this.pw * 2) {
+      let col = null, mn = 0, mx = 0;
+      const flush = () => { if (col != null) { const a = this.Y(mx), b = this.Y(mn); ctx.fillRect(col - 1, a - 1, 2, Math.max(2, b - a + 2)); } };
+      for (let i = i0; i < i1; i++) {
+        const v = s.y[i]; if (v !== v) continue;
+        const px = Math.round(this.X(s.x[i]));
+        if (px !== col) { flush(); col = px; mn = mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      flush();
+    } else {
+      for (let i = i0; i < i1; i++) { const v = s.y[i]; if (v === v) ctx.fillRect(this.X(s.x[i]) - 1.5, this.Y(v) - 1.5, 3, 3); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  drawHover(ctx, vis) {
+    if (this.hoverPx == null || !vis.length) { this.tip.hidden = true; return; }
+    const xv = this.toX(this.hoverPx);
+    ctx.strokeStyle = cssVar('--axis'); ctx.setLineDash([3, 3]); ctx.beginPath();
+    ctx.moveTo(this.hoverPx + 0.5, this.T); ctx.lineTo(this.hoverPx + 0.5, this.T + this.ph); ctx.stroke(); ctx.setLineDash([]);
+    const rows = [];
+    for (const [s] of vis) {
+      let i = lowerBound(s.x, xv);
+      if (i > 0 && (i >= s.x.length || Math.abs(s.x[i - 1] - xv) < Math.abs(s.x[i] - xv))) i--;
+      if (i < 0 || i >= s.x.length) continue;
+      const v = s.y[i];
+      if (v === v) {
+        ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(this.X(s.x[i]), this.Y(v), 3, 0, 6.3); ctx.fill();
+      }
+      rows.push(h('div', null, h('i', { style: { background: s.color } }), s.name + ': ', h('b', null, v === v ? smart(v) : '–'), this.o.unit ? ' ' + this.o.unit : ''));
+    }
+    this.tip.replaceChildren(h('div', { class: 'muted' }, 't = ' + xv.toFixed(3) + ' s'), ...rows);
+    this.tip.hidden = false;
+    const tw = this.tip.offsetWidth, cw = this.wrap.clientWidth;
+    this.tip.style.left = (this.hoverPx + 14 + tw > cw ? this.hoverPx - tw - 14 : this.hoverPx + 14) + 'px';
+  }
+}
+
+/** Horizontal bars, one per item. items: [{label, value, color, note}] */
+class BarChart {
+  constructor(opts) {
+    this.o = Object.assign({ unit: '', decimals: 1 }, opts);
+    this.items = [];
+    this.canvas = h('canvas');
+    this.tip = h('div', { class: 'tip', hidden: true });
+    this.wrap = h('div', { class: 'chart-canvas' }, this.canvas, this.tip);
+    this.el = h('div', { class: 'chart' }, h('div', { class: 'chart-head' }, h('div', { class: 'chart-title' }, this.o.title)), this.wrap);
+    this.canvas.addEventListener('mousemove', e => { const r = this.canvas.getBoundingClientRect(); this.hover = Math.floor((e.clientY - r.top - 6) / this.rowH); this.draw(); });
+    this.canvas.addEventListener('mouseleave', () => { this.hover = null; this.draw(); });
+    if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => this.draw())).observe(this.wrap);
+  }
+  setData(items) { this.items = items.filter(i => ok(i.value)); this.draw(); return this; }
+  draw() {
+    const w = this.wrap.clientWidth;
+    if (!w) return;
+    this.rowH = 24;
+    const H = Math.max(40, this.items.length * this.rowH + 12);
+    this.wrap.style.height = H + 'px';
+    const dpr = window.devicePixelRatio || 1, c = this.canvas;
+    c.width = Math.round(w * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px';
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, H);
+    ctx.font = '12px system-ui, sans-serif';
+    if (!this.items.length) { ctx.fillStyle = cssVar('--muted'); ctx.fillText('no data', 8, 22); return; }
+    let lw = 0;
+    for (const it of this.items) lw = Math.max(lw, ctx.measureText(it.label).width);
+    lw = Math.min(lw + 12, w * 0.4);
+    const max = Math.max(...this.items.map(i => Math.abs(i.value))) || 1;
+    const vw = 76, bw = Math.max(10, w - lw - vw);
+    this.items.forEach((it, k) => {
+      const y = 6 + k * this.rowH;
+      ctx.fillStyle = k === this.hover ? cssVar('--accent') : cssVar('--text');
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(it.label, lw - 8, y + this.rowH / 2 - 1, lw - 10);
+      ctx.fillStyle = cssVar('--grid'); ctx.fillRect(lw, y + 4, bw, this.rowH - 9);
+      ctx.fillStyle = it.color || color(k); ctx.globalAlpha = k === this.hover ? 1 : 0.85;
+      ctx.fillRect(lw, y + 4, Math.max(1, Math.abs(it.value) / max * bw), this.rowH - 9);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = cssVar('--text'); ctx.textAlign = 'left';
+      ctx.fillText(Number(it.value).toFixed(this.o.decimals) + (this.o.unit ? ' ' + this.o.unit : ''), lw + bw + 6, y + this.rowH / 2 - 1);
+    });
+    const it = this.items[this.hover];
+    if (it && it.note) {
+      this.tip.replaceChildren(h('b', null, it.label), h('div', null, it.note));
+      this.tip.hidden = false; this.tip.style.left = (lw + 8) + 'px'; this.tip.style.top = (6 + (this.hover + 1) * this.rowH) + 'px';
+    } else this.tip.hidden = true;
+  }
+}
+
+/** Vertical histogram. bins: [{lo, hi, count}], markers: [{x, label}] */
+class HistChart {
+  constructor(opts) {
+    this.o = Object.assign({ height: 200, unit: '', log: false }, opts);
+    this.bins = []; this.markers = [];
+    this.canvas = h('canvas');
+    this.tip = h('div', { class: 'tip', hidden: true });
+    this.wrap = h('div', { class: 'chart-canvas', style: { height: this.o.height + 'px' } }, this.canvas, this.tip);
+    this.el = h('div', { class: 'chart' }, h('div', { class: 'chart-head' }, h('div', { class: 'chart-title' }, this.o.title)), this.wrap);
+    this.canvas.addEventListener('mousemove', e => { this.hx = e.clientX - this.canvas.getBoundingClientRect().left; this.draw(); });
+    this.canvas.addEventListener('mouseleave', () => { this.hx = null; this.tip.hidden = true; this.draw(); });
+    if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(() => this.draw())).observe(this.wrap);
+  }
+  setData(bins, markers) { this.bins = bins || []; this.markers = markers || []; this.draw(); return this; }
+  draw() {
+    const w = this.wrap.clientWidth, H = this.o.height;
+    if (!w) return;
+    const dpr = window.devicePixelRatio || 1, c = this.canvas;
+    c.width = Math.round(w * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px';
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, H);
+    ctx.font = '11px system-ui, sans-serif';
+    const L = 48, R = 10, T = 14, B = 24, pw = w - L - R, ph = H - T - B;
+    if (!this.bins.length) { ctx.fillStyle = cssVar('--muted'); ctx.fillText('no data', L, T + 20); return; }
+    const max = Math.max(...this.bins.map(b => b.count)) || 1;
+    const n = this.bins.length, bw = pw / n;
+    const yt = niceTicks(0, max, 4);
+    ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const v of yt) { const y = T + ph - v / max * ph; ctx.strokeStyle = cssVar('--grid'); ctx.beginPath(); ctx.moveTo(L, y + 0.5); ctx.lineTo(L + pw, y + 0.5); ctx.stroke(); ctx.fillText(tickFmt(v, yt[1] - yt[0] || 1), L - 6, y); }
+    let hov = this.hx != null ? Math.floor((this.hx - L) / bw) : -1;
+    this.bins.forEach((b, i) => {
+      const bh = b.count / max * ph;
+      ctx.fillStyle = this.o.color || cssVar('--accent'); ctx.globalAlpha = i === hov ? 1 : 0.75;
+      ctx.fillRect(L + i * bw + 0.5, T + ph - bh, Math.max(1, bw - 1), bh);
+    });
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / 60))));
+    for (let i = 0; i <= n; i += every) {
+      const v = i < n ? this.bins[i].lo : this.bins[n - 1].hi;
+      ctx.fillText(sig3(v), L + i * bw, T + ph + 5);
+    }
+    const lo = this.bins[0].lo, hi = this.bins[n - 1].hi;
+    const xOf = v => this.o.log ? L + (Math.log(v) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)) * pw : L + (v - lo) / (hi - lo) * pw;
+    let lastX = -1e9, row = 0;
+    for (const m of this.markers.filter(m => ok(m.x) && m.x >= lo && m.x <= hi).sort((a, b) => a.x - b.x)) {
+      const x = xOf(m.x);
+      row = x - lastX < 34 ? row + 1 : 0; lastX = x;
+      ctx.strokeStyle = cssVar('--bad'); ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = cssVar('--bad'); ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.fillText(m.label, x + 3, T + 11 + row * 12);
+    }
+    if (hov >= 0 && hov < n) {
+      const b = this.bins[hov];
+      this.tip.replaceChildren(h('div', null, sig3(b.lo) + ' – ' + sig3(b.hi) + ' ' + this.o.unit), h('b', null, b.count.toLocaleString() + ' samples'));
+      this.tip.hidden = false; this.tip.style.left = Math.min(w - 150, L + hov * bw + bw + 6) + 'px';
+    } else this.tip.hidden = true;
+  }
+}
+function sig3(v) { if (!ok(v)) return ''; const a = Math.abs(v); return a >= 1000 ? Math.round(v).toLocaleString() : Number(v.toPrecision(3)).toString(); }
+/** Equal-width bins with "nice" edges (multiples of 1, 2 or 5 x 10^n) covering lo..hi. */
+function linearBins(values, count, lo, hi) {
+  const bins = [];
+  if (!(hi > lo)) return bins;
+  const raw = (hi - lo) / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+  lo = Math.floor(lo / step) * step;
+  count = Math.max(1, Math.ceil((hi - lo) / step)); hi = lo + count * step;
+  for (let i = 0; i < count; i++) bins.push({ lo: lo + i * step, hi: lo + (i + 1) * step, count: 0 });
+  for (const v of values) { if (v === v && v >= lo && v <= hi) bins[Math.min(count - 1, Math.floor((v - lo) / step))].count++; }
+  return bins;
+}
+function logBins(values, perDecade, lo, hi) {
+  const bins = [];
+  if (!(lo > 0 && hi > lo)) return bins;
+  const n = Math.max(1, Math.ceil(Math.log10(hi / lo) * perDecade)), f = Math.pow(hi / lo, 1 / n);
+  for (let i = 0; i < n; i++) bins.push({ lo: lo * Math.pow(f, i), hi: lo * Math.pow(f, i + 1), count: 0 });
+  const lf = Math.log(f), llo = Math.log(lo);
+  for (const v of values) { if (v >= lo && v <= hi) bins[Math.min(n - 1, Math.floor((Math.log(v) - llo) / lf))].count++; }
+  return bins;
+}
+
+/* =====================================================================================
+ *  Data table: sort (click headers), filter, paging, min/mean/max footer, CSV/JSON export.
+ *  Works on a "dataset" {n, cols:[{label,num}], get(row,col)} so millions of event rows
+ *  are never copied into arrays of objects.
+ * ===================================================================================== */
+function arrayDataset(cols, rows) { return { n: rows.length, cols, get: (r, c) => rows[r][c] }; }
+function tableDataset(t) {
+  const cols = t.header.map((name, i) => {
+    let num = t.rows.length > 0, seen = 0;
+    for (let r = 0; r < t.rows.length && seen < 60; r++) { const s = t.rows[r][i]; if (s === '' || s == null) continue; seen++; if (!Number.isFinite(+s)) { num = false; break; } }
+    return { label: name, num };
+  });
+  const numCache = cols.map((c, i) => c.num ? t.num(t.header[i]) : null);
+  return { n: t.rows.length, cols, get: (r, c) => numCache[c] ? numCache[c][r] : t.rows[r][c] };
+}
+
+class DataTable {
+  constructor(ds, opts) {
+    this.o = Object.assign({ pageSize: 100, name: 'data' }, opts);
+    this.ds = ds; this.sortCol = -1; this.sortDir = 1; this.page = 0; this.filter = '';
+    this.filterInput = h('input', { type: 'search', placeholder: 'Filter rows…', style: { width: '220px' } });
+    let timer;
+    this.filterInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { this.filter = this.filterInput.value.trim().toLowerCase(); this.page = 0; this.compute(); this.render(); }, 220); });
+    this.info = h('span', { class: 'muted', style: { fontSize: '12px' } });
+    this.pager = h('span', { style: { display: 'inline-flex', gap: '4px', alignItems: 'center' } });
+    this.tableWrap = h('div', { class: 'dt-wrap' });
+    this.el = h('div', null,
+      h('div', { class: 'dt-bar' }, this.filterInput, this.info, h('span', { class: 'spacer' }), this.pager,
+        h('button', { class: 'btn small', onclick: () => this.export('csv') }, 'Export CSV'),
+        h('button', { class: 'btn small', onclick: () => this.export('json') }, 'Export JSON')),
+      this.tableWrap);
+    this.compute(); this.render();
+  }
+  setDataset(ds) { this.ds = ds; this.compute(); this.render(); }
+  cellText(v, c) {
+    const col = this.ds.cols[c];
+    if (col.fmt) return col.fmt(v);
+    if (col.num) return ok(v) ? smart(v) : '';
+    return v == null ? '' : String(v);
+  }
+  compute() {
+    const { n, cols } = this.ds;
+    let idx;
+    if (this.filter) {
+      const q = this.filter, out = [];
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < cols.length; c++) { if (this.cellText(this.ds.get(r, c), c).toLowerCase().includes(q)) { out.push(r); break; } }
+      }
+      idx = Int32Array.from(out);
+    } else { idx = new Int32Array(n); for (let r = 0; r < n; r++) idx[r] = r; }
+    if (this.sortCol >= 0) {
+      const c = this.sortCol, num = cols[c].num, dir = this.sortDir, get = this.ds.get;
+      const key = num ? Float64Array.from(idx, r => { const v = +get(r, c); return v === v ? v : -Infinity; }) : Array.from(idx, r => String(get(r, c) ?? ''));
+      const order = Array.from(idx.keys());
+      order.sort(num ? (a, b) => (key[a] - key[b]) * dir : (a, b) => key[a].localeCompare(key[b]) * dir);
+      idx = Int32Array.from(order, k => idx[k]);
+    }
+    this.idx = idx;
+    // footer stats over the filtered rows
+    this.stats = cols.map((col, c) => {
+      if (!col.num) return null;
+      let mn = Infinity, mx = -Infinity, sum = 0, cnt = 0;
+      for (let k = 0; k < idx.length; k++) { const v = +this.ds.get(idx[k], c); if (v === v && Number.isFinite(v)) { cnt++; sum += v; if (v < mn) mn = v; if (v > mx) mx = v; } }
+      return cnt ? { mn, mx, mean: sum / cnt } : null;
+    });
+  }
+  render() {
+    const { cols } = this.ds, ps = this.o.pageSize, pages = Math.max(1, Math.ceil(this.idx.length / ps));
+    this.page = Math.min(this.page, pages - 1);
+    const thead = h('tr', null, cols.map((col, c) => h('th', {
+      class: col.num ? 'num' : '', title: 'sort',
+      onclick: () => { if (this.sortCol === c) this.sortDir = -this.sortDir; else { this.sortCol = c; this.sortDir = col.num ? -1 : 1; } this.compute(); this.render(); },
+    }, col.label, this.sortCol === c ? (this.sortDir > 0 ? ' ▲' : ' ▼') : '')));
+    const body = [];
+    const start = this.page * ps, end = Math.min(this.idx.length, start + ps);
+    for (let k = start; k < end; k++) {
+      const r = this.idx[k];
+      body.push(h('tr', { style: this.o.onRow ? { cursor: 'pointer' } : null, onclick: this.o.onRow ? () => this.o.onRow(r) : null },
+        cols.map((col, c) => h('td', { class: col.num ? 'num' : '' }, this.cellText(this.ds.get(r, c), c)))));
+    }
+    const hasStats = this.o.stats !== false && this.stats.some(Boolean) && this.idx.length > 1;
+    const foot = hasStats ? ['min', 'mean', 'max'].map((lab, j) => h('tr', null, cols.map((col, c) => {
+      const s = this.stats[c];
+      if (!s) return h('td', { class: c === 0 ? 'rowlabel' : '' }, c === 0 ? lab : '');
+      const v = j === 0 ? s.mn : j === 1 ? s.mean : s.mx;
+      return h('td', { class: 'num' }, (c === 0 ? lab + ': ' : '') + smart(v));
+    }))) : [];
+    this.tableWrap.replaceChildren(h('table', { class: 'dt' }, h('thead', null, thead), h('tbody', null, body), hasStats ? h('tfoot', null, foot) : null));
+    this.info.textContent = `${this.idx.length.toLocaleString()} of ${this.ds.n.toLocaleString()} rows`;
+    this.pager.replaceChildren(
+      h('button', { class: 'btn small', disabled: this.page === 0 ? true : null, onclick: () => { this.page--; this.render(); } }, '‹'),
+      h('span', { class: 'muted', style: { fontSize: '12px' } }, `page ${this.page + 1} / ${pages}`),
+      h('button', { class: 'btn small', disabled: this.page >= pages - 1 ? true : null, onclick: () => { this.page++; this.render(); } }, '›'));
+  }
+  export(kind) {
+    const { cols } = this.ds;
+    if (kind === 'csv') {
+      const lines = [cols.map(c => c.label).join(',')];
+      for (const r of this.idx) lines.push(cols.map((c, i) => { const v = this.ds.get(r, i); return v == null ? '' : String(v).replace(/,/g, ';'); }).join(','));
+      download(this.o.name + '.csv', lines.join('\n') + '\n');
+    } else {
+      const out = [];
+      for (const r of this.idx) { const o = {}; cols.forEach((c, i) => { o[c.label] = this.ds.get(r, i); }); out.push(o); }
+      download(this.o.name + '.json', JSON.stringify(out, null, 1), 'application/json');
+    }
+  }
+}
+</script>
+<script>
+'use strict';
+/* =====================================================================================
+ *  App state
+ * ===================================================================================== */
+const S = {
+  src: null, list: null, id: null, tab: 'overview', sess: null, view: null,
+  compare: new Set(), cache: new Map(), hiddenMotors: new Set(), customCols: [],
+  tableDs: 'stats', device: null, pollTimer: null, listTimer: null, online: true,
+};
+const TABS = [['overview', 'Overview'], ['timeline', 'Timeline'], ['motors', 'Motors'], ['devices', 'Devices'],
+  ['events', 'Events'], ['tables', 'Tables'], ['compare', 'Compare']];
+const sysT = s => (s && s.sys.table) || new Table([]);
+const motT = s => (s && s.mot.table) || new Table([]);
+const isStats = o => o && typeof o === 'object' && !Array.isArray(o) && 'n' in o && 'avg' in o;
+const sessLabel = s => (get(s, 'opMode') || get(s, 'id') || '?') + (s && s.start ? ' · ' + String(s.start).slice(5, 19) : '');
+
+function readHash() { const p = new URLSearchParams(location.hash.slice(1)); return { s: p.get('s'), t: p.get('t') }; }
+function writeHash() {
+  const p = new URLSearchParams();
+  if (S.id) p.set('s', S.id);
+  p.set('t', S.tab);
+  try { history.replaceState(null, '', '#' + p.toString()); } catch (e) { /* file:// in some browsers */ }
+}
+function panel(title, ...kids) { return h('div', { class: 'panel' }, title ? h('h3', null, title) : null, ...kids); }
+function errorBox(e) { return h('div', { class: 'finding bad' }, 'Error: ' + (e && e.message ? e.message : String(e))); }
+function kpi(label, value, unit, sub, tone) {
+  return h('div', { class: 'kpi' + (tone ? ' ' + tone : '') }, h('div', { class: 'label' }, label),
+    h('div', { class: 'value' }, value, unit ? h('small', null, unit) : null), sub ? h('div', { class: 'sub' }, sub) : null);
+}
+/** Series from parallel columns, skipping blanks so sparse columns still draw as lines. */
+function ser(x, y, name, c, extra, idx) {
+  if (!x || !y) return null;
+  const xs = [], ys = [];
+  const n = idx ? idx.length : y.length;
+  for (let k = 0; k < n; k++) {
+    const i = idx ? idx[k] : k;
+    if (y[i] === y[i] && x[i] === x[i]) { xs.push(x[i]); ys.push(y[i]); }
+  }
+  if (!xs.length) return null;
+  return Object.assign({ name, x: Float64Array.from(xs), y: Float64Array.from(ys), color: typeof c === 'string' ? c : color(c) }, extra);
+}
+function groupRows(t, col) {
+  const g = new Map();
+  if (!t.has(col)) return g;
+  t.str(col).forEach((k, i) => { if (!g.has(k)) g.set(k, []); g.get(k).push(i); });
+  return g;
+}
+/** Hub column prefixes in system.csv, mapped to readable names from the summary. */
+function hubList(t, summary) {
+  const names = (get(summary, 'hubs') || []).map(x => x.name);
+  const out = [];
+  for (const c of t.header) {
+    if (!c.endsWith('_current_a') || c === 'total_current_a') continue;
+    const prefix = c.slice(0, -'_current_a'.length);
+    out.push({ prefix, name: names.find(n => n.replace(/\s+/g, '_') === prefix) || prefix.replace(/_/g, ' ') });
+  }
+  return out;
+}
+function confirmButton(label, action, cls) {
+  const b = h('button', { class: cls || 'btn small danger' }, label);
+  armConfirm(b, label, action);
+  return b;
+}
+function armConfirm(b, label, action) {
+  let armed = null;
+  b.onclick = async () => {
+    if (!armed) { b.textContent = 'Click again to confirm'; armed = setTimeout(() => { armed = null; b.textContent = label; }, 4000); return; }
+    clearTimeout(armed); armed = null; b.disabled = true;
+    try { await action(); } catch (e) { toast('Failed: ' + (e.message || e)); } finally { b.disabled = false; b.textContent = label; }
+  };
+}
+
+/* =====================================================================================
+ *  Sources, session list, loading, live polling
+ * ===================================================================================== */
+async function useSource(src, preferId) {
+  const list = await src.listSessions();
+  S.src = src; S.list = list; S.cache.clear(); S.compare.clear();
+  setConn(true);
+  $('#btnClear').hidden = src.kind !== 'robot';
+  renderList();
+  const hs = readHash();
+  if (TABS.some(t => t[0] === hs.t)) S.tab = hs.t;
+  const want = preferId || hs.s;
+  const pick = list.sessions.find(s => s.id === want) || list.sessions.find(s => s.recording) || list.sessions[0];
+  clearInterval(S.listTimer);
+  if (src.kind === 'robot') S.listTimer = setInterval(() => refreshList(false), 5000);
+  if (pick) await selectSession(pick.id); else showEmpty();
+}
+function setConn(online, err) {
+  S.online = online;
+  const p = $('#source');
+  p.textContent = S.src ? S.src.label + (online ? '' : ' · offline') : 'no data';
+  p.style.color = online ? '' : 'var(--bad)';
+  if (!online && err) p.title = String(err.message || err);
+}
+async function refreshList(force) {
+  if (!S.src) return;
+  try {
+    const list = await S.src.listSessions();
+    const sig = l => JSON.stringify(l.sessions.map(s => [s.id, s.recording, s.complete, Math.round((s.sizeBytes || 0) / 65536)]));
+    const prevRec = S.list && S.list.recording;
+    const changed = force || !S.list || sig(list) !== sig(S.list);
+    S.list = list; setConn(true);
+    if (changed) renderList();
+    if (list.recording && list.recording !== prevRec && list.recording !== S.id) {
+      const s = list.sessions.find(x => x.id === list.recording);
+      toast('Recording started: ' + (s ? s.opMode : list.recording) + ' – click it in the list to watch live', 5000);
+    }
+    if (!S.id && list.sessions.length) selectSession(list.sessions[0].id);
+  } catch (e) { setConn(false, e); }
+}
+function renderList() {
+  const L = S.list, box = $('#sessList');
+  $('#sessCount').textContent = L.sessions.length ? '(' + L.sessions.length + ')' : '';
+  box.replaceChildren(...L.sessions.map(s => {
+    const cb = h('input', {
+      type: 'checkbox', title: 'Compare this session', checked: S.compare.has(s.id) ? true : null,
+      onclick: e => e.stopPropagation(),
+      onchange: e => { if (e.target.checked) S.compare.add(s.id); else S.compare.delete(s.id); renderTabs(); if (S.tab === 'compare') renderTab(); },
+    });
+    return h('div', { class: 'sess' + (s.id === S.id ? ' active' : ''), 'data-id': s.id, onclick: () => selectSession(s.id) },
+      cb,
+      h('div', { class: 'name', title: s.id }, s.opMode || s.id, ' ',
+        s.recording ? h('span', { class: 'badge live' }, 'LIVE')
+          : !s.complete ? h('span', { class: 'badge inc', title: 'Not closed cleanly (power loss or crash)' }, 'incomplete') : null),
+      h('div', { class: 'meta' }, h('span', null, s.start || ''), h('span', null, s.recording ? 'recording now' : fmtDur(s.durationS)),
+        ok(s.avgLoopMs) ? h('span', null, fmt(s.avgLoopMs, 1) + ' ms/loop') : null, h('span', null, fmtBytes(s.sizeBytes))));
+  }));
+  if (!L.sessions.length) box.append(h('div', { class: 'muted', style: { padding: '6px 8px', fontSize: '13px' } }, 'No sessions yet.'));
+  $('#dbInfo').textContent = `${L.sessions.length} session${L.sessions.length === 1 ? '' : 's'} · ${fmtBytes(L.totalBytes)} · ${L.path || ''}`;
+}
+function showEmpty() {
+  S.id = null; S.sess = null; clearInterval(S.pollTimer);
+  $('#sessionView').hidden = true;
+  const ev = $('#emptyView'); ev.hidden = false;
+  const robot = S.src && S.src.kind === 'robot';
+  ev.replaceChildren(robot
+    ? h('div', null, h('h2', null, 'No sessions recorded yet'),
+      h('p', null, 'Sessions appear here as soon as an OpMode creates a ', h('code', null, 'Monitored*'), ' device (and calls ',
+        h('code', null, 'HardwareMonitor.get().update()'), ' each loop). This page refreshes on its own.'))
+    : h('div', null, h('h2', null, 'Hardware Monitor'),
+      h('p', null, 'Open this page from the robot to browse its database live: connect to the robot\'s Wi-Fi and go to ',
+        h('code', null, 'http://192.168.43.1:8080/hwmonitor'), ' (Control Hub) or ', h('code', null, 'http://192.168.49.1:8080/hwmonitor'), ' (phone).'),
+      h('p', null, 'Or look at a copy on this computer:'),
+      h('ol', null,
+        h('li', null, 'Copy the database off the robot: ', h('code', null, 'adb pull /sdcard/FIRST/data/HardwareMonitor')),
+        h('li', null, 'Click ', h('b', null, 'Open folder…'), ' and pick that ', h('code', null, 'HardwareMonitor'), ' folder (or one session folder), or drag it onto this page.')),
+      h('p', { class: 'muted' }, 'Individual files (summary.json, system.csv, motors.csv, devices.csv, events.csv) can be opened with Open files….')));
+}
+async function selectSession(id) {
+  S.id = id; writeHash();
+  document.querySelectorAll('.sess').forEach(e => e.classList.toggle('active', e.dataset.id === id));
+  $('#emptyView').hidden = true; $('#sessionView').hidden = false;
+  $('#sessHeader').replaceChildren(h('h1', null, 'Loading…'));
+  $('#tabs').replaceChildren(); $('#tabBody').replaceChildren();
+  clearInterval(S.pollTimer);
+  let sess;
+  try { sess = await loadSession(id); } catch (e) { if (S.id === id) $('#tabBody').replaceChildren(errorBox(e)); return; }
+  if (S.id !== id) return;
+  S.sess = sess;
+  if (S.device && !(get(sess.summary, 'devices') || []).some(d => d.name === S.device)) S.device = null;
+  renderHeader(); renderTabs(); renderTab();
+  if (sess.live) S.pollTimer = setInterval(poll, 2000);
+}
+async function loadSession(id) {
+  const info = (S.list.sessions || []).find(s => s.id === id) || { id };
+  const live = !!info.recording;
+  const sess = { id, info, live, summary: null, sys: new CsvStream(), mot: new CsvStream(), devices: null, events: null, off: {} };
+  const [liveSum, sys, mot, dev] = await Promise.all([
+    live ? S.src.live().catch(() => null) : null,
+    S.src.file(id, 'system.csv'), S.src.file(id, 'motors.csv'), S.src.file(id, 'devices.csv')]);
+  let summary = liveSum && get(liveSum, 'session.id') === id ? liveSum : null;
+  if (!summary) {
+    const f = await S.src.file(id, 'summary.json');
+    if (f) { try { summary = JSON.parse(f.text); } catch (e) { sess.summaryError = 'summary.json is incomplete or damaged'; } }
+  }
+  sess.summary = summary || {};
+  if (!summary && !sess.summaryError) sess.summaryError = 'No summary.json in this session';
+  if (sys) { sess.sys.feed(sys.text); sess.off.system = sys.next; }
+  if (mot) { sess.mot.feed(mot.text); sess.off.motors = mot.next; }
+  if (!live) { sess.sys.finish(); sess.mot.finish(); }
+  sess.devices = dev ? parseCsv(dev.text) : new Table([]);
+  return sess;
+}
+let polling = false;
+async function poll() {
+  const sess = S.sess;
+  if (!sess || !sess.live || polling) return;
+  polling = true;
+  try {
+    const sum = await S.src.live();
+    if (S.sess !== sess) return;
+    if (!sum || get(sum, 'session.id') !== sess.id) {
+      clearInterval(S.pollTimer);
+      await refreshList(true);
+      toast('Recording finished – showing the saved session');
+      await selectSession(sess.id);
+      return;
+    }
+    const [sys, mot] = await Promise.all([
+      S.src.file(sess.id, 'system.csv', sess.off.system || 0), S.src.file(sess.id, 'motors.csv', sess.off.motors || 0)]);
+    if (S.sess !== sess) return;
+    sess.summary = sum;
+    if (sys) { sess.sys.feed(sys.text); if (sys.next != null) sess.off.system = sys.next; }
+    if (mot) { sess.mot.feed(mot.text); if (mot.next != null) sess.off.motors = mot.next; }
+    setConn(true);
+    renderHeader();
+    if (S.view && S.view.update) S.view.update();
+  } catch (e) { setConn(false, e); } finally { polling = false; }
+}
+async function openLocal(pairs) {
+  const map = new Map();
+  for (const [path, file] of pairs) addLocalFile(map, path, file);
+  if (!map.size) { toast('No HardwareMonitor files found (summary.json, system.csv, motors.csv, devices.csv, events.csv)', 5000); return; }
+  clearInterval(S.pollTimer); clearInterval(S.listTimer);
+  await useSource(new LocalSource(map));
+  toast(`Opened ${map.size} session${map.size === 1 ? '' : 's'} from this computer`);
+}
+
+/* =====================================================================================
+ *  Header, tabs
+ * ===================================================================================== */
+function renderHeader() {
+  const sess = S.sess, se = get(sess.summary, 'session') || {}, info = sess.info || {};
+  const files = info.files ? SESSION_FILES.filter(n => n in info.files) : SESSION_FILES;
+  const del = S.src.kind === 'robot' && !sess.live ? confirmButton('Delete session', async () => {
+    await S.src.remove(sess.id);
+    toast('Deleted ' + sess.id);
+    S.compare.delete(sess.id); S.id = null;
+    try { history.replaceState(null, '', '#'); } catch (e) { /* ignore */ }
+    await useSource(S.src);
+  }) : null;
+  $('#sessHeader').replaceChildren(...[
+    h('h1', null, se.opMode || info.opMode || sess.id),
+    sess.live ? h('span', { class: 'badge live' }, 'LIVE · updates every 2 s')
+      : se.complete === false || (info.complete === false && !se.opMode) ? h('span', { class: 'badge inc' }, 'incomplete') : null,
+    h('span', { class: 'muted' }, [se.start || info.start, ok(se.durationS) ? fmtDur(se.durationS) : null, sess.id].filter(Boolean).join(' · ')),
+    h('span', { class: 'spacer' }),
+    h('span', { class: 'files' }, files.map(n => h('a', {
+      class: 'btn small', href: S.src.downloadHref(sess.id, n), download: sess.id + '_' + n, title: 'Download ' + n,
+    }, '⤓ ' + n + (info.files && ok(info.files[n]) && !sess.live ? ' · ' + fmtBytes(info.files[n]) : '')))),
+    del].filter(Boolean));
+}
+function renderTabs() {
+  $('#tabs').replaceChildren(...TABS.map(([k, label]) => h('button', {
+    class: 'tab' + (k === S.tab ? ' active' : ''), 'data-tab': k,
+    onclick: () => { S.tab = k; writeHash(); renderTabs(); renderTab(); },
+  }, label, k === 'compare' && S.compare.size ? ` (${S.compare.size})` : '')));
+}
+function renderTab() {
+  const sess = S.sess;
+  if (!sess) return;
+  let v;
+  try { v = (VIEWS[S.tab] || VIEWS.overview)(sess); } catch (e) { console.error(e); v = { el: errorBox(e) }; }
+  S.view = v;
+  const body = $('#tabBody');
+  body.replaceChildren(sess.summaryError && S.tab !== 'tables' ? h('div', { class: 'finding warn', style: { marginBottom: '12px' } },
+    sess.summaryError + ' – summary numbers are missing; the CSV-based charts and tables still work.') : '', v.el);
+}
+
+/* =====================================================================================
+ *  Overview
+ * ===================================================================================== */
+function findings(sess) {
+  const s = sess.summary || {}, se = s.session || {}, lp = s.loop || {}, pw = s.power || {}, mon = s.monitor || {};
+  const out = [], add = (level, text) => out.push({ level, text });
+  if (!sess.live && se.complete === false) add('warn', 'This session was not closed cleanly (power loss, app restart or a crash). Data is complete up to the last save.');
+  if (ok(lp.p95Ms)) {
+    if (lp.p95Ms > 30) add('bad', `Slow loop: 95% of loops take up to ${fmt(lp.p95Ms, 1)} ms (${fmt(1000 / lp.p95Ms, 0)} Hz). Control code gets sluggish below ~50 Hz.`);
+    else if (lp.p95Ms > 15) add('warn', `Loop p95 is ${fmt(lp.p95Ms, 1)} ms (${fmt(1000 / lp.p95Ms, 0)} Hz) – fine, with room to speed up.`);
+    else add('good', `Fast loop: p95 ${fmt(lp.p95Ms, 1)} ms, ${fmt(lp.avgHz, 0)} Hz on average.`);
+  }
+  if (ok(lp.p50Ms) && ok(lp.maxMs) && lp.maxMs > 4 * lp.p50Ms && lp.maxMs > 20) {
+    add('info', `Loop spikes: the slowest loop took ${fmt(lp.maxMs, 1)} ms, ${fmt(lp.maxMs / lp.p50Ms, 0)}× the median${ok(lp.p99Ms) ? ` (p99 ${fmt(lp.p99Ms, 1)} ms)` : ''}. Look for sleeps, blocking reads or telemetry bursts at those times in Timeline.`);
+  }
+  if (ok(lp.hwPctOfLoop) && lp.hwPctOfLoop > 60) add('warn', `Hardware calls take ${fmt(lp.hwPctOfLoop, 0)}% of each loop (${fmt(lp.hwMsPerLoop, 1)} ms). Fewer reads, read caching or bulk caching will speed the loop up the most.`);
+  const hubs = s.hubs || [];
+  const off = hubs.filter(x => x.bulkCachingMode === 'OFF');
+  if (off.length) add('warn', `Bulk caching is OFF on ${off.map(x => x.name).join(', ')}. AUTO or MANUAL turns many motor and encoder reads into one hub transaction.`);
+  for (const x of hubs) {
+    if (x.notRespondingSamples > 0) add('bad', `${x.name} stopped responding ${x.notRespondingSamples} time(s) – check its cable and for static discharge.`);
+    const tc = get(x, 'tempC.max');
+    if (ok(tc) && tc > 60) add('warn', `${x.name} reached ${fmt(tc, 0)} °C.`);
+  }
+  const bat = pw.batteryV || {};
+  if (pw.lowVoltageEvents > 0) add('bad', `Battery dropped below ${fmt(pw.lowVoltageThresholdV, 1)} V ${pw.lowVoltageEvents} time(s) (min ${fmt(bat.min, 2)} V) – brown-out risk.`);
+  else if (ok(bat.min) && bat.min < 11.5) add('warn', `Battery sagged to ${fmt(bat.min, 2)} V under load. Charge or swap it before a match.`);
+  else if (ok(bat.min)) add('good', `Battery stayed at or above ${fmt(bat.min, 2)} V.`);
+  for (const m of s.motors || []) {
+    const mx = get(m, 'currentA.max');
+    if (ok(mx) && mx > 8) add('warn', `${m.name} drew up to ${fmt(mx, 1)} A – stalled or binding? Sustained high current heats the motor and can trip over-current protection.`);
+    const r = get(m, 'bemfToBattery.max');
+    if (ok(r) && r > 0.95) add('info', `${m.name} reached ${fmt(r * 100, 0)}% of the battery voltage as back-EMF – it was at full speed for this battery.`);
+  }
+  const devs = s.devices || [];
+  for (const d of devs) {
+    if (!d.cacheReads) for (const o of d.ops || []) {
+      if (o.kind === 'R' && lp.count > 0 && o.count / lp.count > 1.5) add('info', `${d.name}.${o.op}() is read ${fmt(o.count / lp.count, 1)}× per loop with read caching off. Pass true for cacheReads to hit the hardware once per loop.`);
+    }
+    if (d.writes >= 50 && d.redundantWrites / d.writes > 0.5) add('info', `${d.name}: ${fmt(100 * d.redundantWrites / d.writes, 0)}% of writes repeated the value it already had.`);
+  }
+  devs.filter(d => d.hardwareReads > 0 && d.avgReadLatencyUs > 1500).sort((a, b) => b.avgReadLatencyUs - a.avgReadLatencyUs).slice(0, 3)
+    .forEach(d => add('info', `${d.name} reads take ${fmt(d.avgReadLatencyUs / 1000, 2)} ms each on average (${fmtInt(d.hardwareReads)} hardware reads)${d.cacheReads ? '.' : ' – read it once per loop or enable caching.'}`));
+  const top = devs.slice().sort((a, b) => (b.totalIoMs || 0) - (a.totalIoMs || 0))[0];
+  if (top && top.totalIoMs > 0 && lp.count > 0) add('info', `Biggest hardware cost: ${top.name}, ${fmt(top.ioSharePct, 0)}% of all hardware time (${fmt(top.totalIoMs / lp.count, 2)} ms per loop).`);
+  if (mon.eventLogLimitReached) add('info', 'events.csv reached its size limit, so later individual events were not logged (counts and statistics are still complete).');
+  if (mon.eventsDropped > 0) add('info', `${fmtInt(mon.eventsDropped)} events were dropped because the logger fell behind.`);
+  if (mon.sampleErrors > 0) add('info', `${fmtInt(mon.sampleErrors)} monitor sample reads failed.`);
+  if (se.lifecycleHook === false) add('info', 'The OpMode lifecycle hook was not active, so this session relied on start()/stop() calls.');
+  return out;
+}
+function viewOverview(sess) {
+  const kpis = h('div', { class: 'kpis' }), list = h('ul', { class: 'findings' });
+  const g = new ChartGroup();
+  const loopC = g.add(new LineChart({ title: 'Loop time (sampled every 50 ms)', unit: 'ms', zeroBased: true, height: 190 }));
+  const batC = g.add(new LineChart({ title: 'Battery voltage', unit: 'V', height: 190 }));
+  const hist = new HistChart({ title: 'Loop time distribution', unit: 'ms', height: 190 });
+  const bars = new BarChart({ title: 'Hardware time per loop, by device', unit: 'ms', decimals: 3 });
+  const el = h('div', null, kpis,
+    h('div', { class: 'grid2' }, h('div', { class: 'panel' }, h('h3', null, 'Findings'), list), bars.el),
+    h('div', { class: 'section-title' }, 'Trends'),
+    h('div', { class: 'grid2' }, loopC.el, batC.el, hist.el));
+  function fill() {
+    const s = sess.summary || {}, se = s.session || {}, lp = s.loop || {}, pw = s.power || {}, jvm = s.jvm || {}, mon = s.monitor || {};
+    const bat = pw.batteryV || {}, cur = pw.totalCurrentA || {}, pwr = pw.totalPowerW || {};
+    kpis.replaceChildren(
+      kpi('Duration', fmtDur(se.durationS), '', `init ${fmt(se.initS, 1)} s · run ${fmt(se.runS, 1)} s`),
+      kpi('Loops', fmtInt(lp.count), '', `${fmt(lp.avgHz, 1)} Hz average`),
+      kpi('Loop time', fmt(lp.avgMs, 2), 'ms avg', `p50 ${fmt(lp.p50Ms, 1)} · p95 ${fmt(lp.p95Ms, 1)} · p99 ${fmt(lp.p99Ms, 1)} · max ${fmt(lp.maxMs, 1)}`,
+        !ok(lp.p95Ms) ? '' : lp.p95Ms > 30 ? 'bad' : lp.p95Ms > 15 ? 'warn' : 'good'),
+      kpi('Hardware time', fmt(lp.hwMsPerLoop, 2), 'ms/loop', `${fmt(lp.hwPctOfLoop, 0)}% of the loop · max ${fmt(lp.hwMsPerLoopMax, 1)} ms`),
+      kpi('Hardware calls', fmt(lp.readsPerLoop, 1), 'reads/loop', `${fmt(lp.writesPerLoop, 1)} writes · ${fmt(lp.cacheHitsPerLoop, 1)} cache hits per loop`),
+      kpi('Battery', fmt(bat.min, 2), 'V min', `start ${fmt(bat.start, 2)} → end ${fmt(bat.end, 2)} · avg ${fmt(bat.avg, 2)}`,
+        !ok(bat.min) ? '' : bat.min < 10 || pw.lowVoltageEvents > 0 ? 'bad' : bat.min < 11.5 ? 'warn' : 'good'),
+      kpi('Current', fmt(cur.avg, 2), 'A avg', `peak ${fmt(cur.max, 2)} A · ${fmt(pwr.avg, 0)} W avg · ${fmt(pwr.max, 0)} W peak`),
+      kpi('Energy used', fmt(pw.energyWh, 3), 'Wh', `${fmt(pw.chargeMah, 0)} mAh of battery charge`),
+      kpi('Monitor overhead', fmt(mon.overheadMsPerLoop, 3), 'ms/loop', `${fmtInt(mon.sampleReads)} sample reads · ${fmtInt(mon.eventsLogged)} events logged`),
+      kpi('Robot Controller', fmt(get(jvm, 'cpuPctOfOneCore.avg'), 0), '% CPU', `heap up to ${fmt(get(jvm, 'heapUsedMb.max'), 0)} of ${fmt(jvm.heapMaxMb, 0)} MB`));
+    const f = findings(sess);
+    list.replaceChildren(...(f.length ? f : [{ level: 'info', text: 'Nothing to report yet.' }]).map(x => h('li', { class: 'finding ' + x.level }, x.text)));
+    const t = sysT(sess), ts = t.num('t_s');
+    const initS = get(s, 'session.initS');
+    loopC.o.vlines = batC.o.vlines = ok(initS) && initS > 0 ? [{ x: initS, label: 'start' }] : [];
+    loopC.hlines = ok(lp.p95Ms) ? [{ y: lp.p95Ms, label: 'p95', color: cssVar('--warn') }] : [];
+    loopC.setSeries([ser(ts, t.num('loop_ms'), 'loop', 0), ser(ts, t.num('loop_avg_ms'), 'average', 1, { width: 2.2 })]);
+    batC.hlines = ok(pw.lowVoltageThresholdV) && ok(bat.min) && bat.min < pw.lowVoltageThresholdV + 1.5 ? [{ y: pw.lowVoltageThresholdV, label: 'low-voltage threshold' }] : [];
+    batC.setSeries([ser(ts, t.num('battery_v'), 'battery', 3)]);
+    const lm = Array.from(t.num('loop_ms')).filter(v => v === v).sort((a, b) => a - b);
+    const hi = lm.length ? lm[Math.min(lm.length - 1, Math.floor(lm.length * 0.995))] * 1.15 : 0;
+    hist.setData(linearBins(lm, 40, 0, hi || 1), [{ x: lp.p50Ms, label: 'p50' }, { x: lp.p95Ms, label: 'p95' }]);
+    const loops = Math.max(1, lp.count || 1);
+    bars.setData((s.devices || []).filter(d => d.totalIoMs > 0).sort((a, b) => b.totalIoMs - a.totalIoMs).slice(0, 12).map((d, i) => ({
+      label: d.name, value: d.totalIoMs / loops, color: color(i),
+      note: `${d.type} · ${fmtInt(d.reads)} reads (${fmtInt(d.cacheHits)} cached) · ${fmtInt(d.writes)} writes · ${fmt(d.ioSharePct, 1)}% of hardware time`,
+    })));
+  }
+  fill();
+  return { el, update: fill };
+}
+
+/* =====================================================================================
+ *  Timeline (system.csv)
+ * ===================================================================================== */
+function timelineDefs(sess) {
+  const t = sysT(sess), hubs = hubList(t, sess.summary);
+  const lowV = get(sess.summary, 'power.lowVoltageThresholdV');
+  const hubLines = suffix => hubs.map(x => [x.prefix + suffix, x.name]);
+  return [
+    { title: 'Loop time', unit: 'ms', zero: true, lines: [['loop_ms', 'loop'], ['loop_avg_ms', 'average', { width: 2.2 }]] },
+    { title: 'Loop rate', unit: 'Hz', zero: true, lines: [['loop_hz', 'loop rate']] },
+    { title: 'Hardware time per loop', unit: 'ms', zero: true, lines: [['hw_ms_per_loop', 'hardware time']] },
+    { title: 'Hardware share of loop', unit: '%', zero: true, lines: [['hw_pct', 'share']] },
+    { title: 'Hardware calls per loop', unit: 'calls', zero: true, lines: [['reads_per_loop', 'reads'], ['writes_per_loop', 'writes'], ['cache_hits_per_loop', 'cache hits']] },
+    { title: 'Battery & hub input voltage', unit: 'V', hlines: ok(lowV) ? [{ y: lowV, label: 'low' }] : [], lines: [['battery_v', 'battery'], ...hubLines('_input_v')], hideHlines: true },
+    { title: 'Current draw', unit: 'A', zero: true, lines: [['total_current_a', 'total'], ...hubLines('_current_a')] },
+    { title: 'Electrical power', unit: 'W', zero: true, lines: [['total_power_w', 'total']] },
+    { title: 'Energy used', unit: 'Wh', zero: true, lines: [['energy_wh', 'energy']] },
+    { title: 'Battery charge used', unit: 'mAh', zero: true, lines: [['charge_mah', 'charge']] },
+    { title: 'Hub temperature', unit: '°C', lines: hubLines('_temp_c') },
+    { title: 'Hub 5 V rail', unit: 'V', lines: hubLines('_aux_v') },
+    { title: 'Hub I²C and GPIO current', unit: 'A', zero: true, lines: [...hubs.map(x => [x.prefix + '_i2c_a', x.name + ' I²C']), ...hubs.map(x => [x.prefix + '_gpio_a', x.name + ' GPIO', { dash: [4, 3] }])] },
+    { title: 'App memory (Java heap)', unit: 'MB', zero: true, lines: [['heap_mb', 'heap used']] },
+    { title: 'App CPU (% of one core)', unit: '%', zero: true, lines: [['cpu_pct', 'CPU']] },
+  ];
+}
+function viewTimeline(sess) {
+  const g = new ChartGroup();
+  let defs = timelineDefs(sess);
+  const charts = defs.map(d => g.add(new LineChart({ title: d.title, unit: d.unit, zeroBased: d.zero, height: 200 })));
+  const custom = g.add(new LineChart({ title: 'Custom chart', unit: '', height: 240 }));
+  const chips = h('div', { class: 'chips' });
+  const customHint = h('div', { class: 'muted', style: { fontSize: '12px', margin: '4px 0 8px' } }, 'Pick any columns of system.csv to plot together:');
+  const el = h('div', null,
+    h('div', { class: 'controls' },
+      h('span', { class: 'hint', style: { margin: 0 } }, 'Drag across any chart to zoom (all charts follow) · double-click to reset · click a legend entry to hide it'),
+      h('span', { class: 'spacer' }), h('button', { class: 'btn small', onclick: () => g.setRange(null) }, 'Reset zoom')),
+    h('div', { class: 'grid2' }, charts.map(c => c.el)),
+    h('div', { class: 'section-title' }, 'Custom'),
+    h('div', { class: 'panel' }, customHint, chips), custom.el);
+  function fill() {
+    const t = sysT(sess), ts = t.num('t_s'), initS = get(sess.summary, 'session.initS');
+    defs = timelineDefs(sess);
+    const v = ok(initS) && initS > 0 ? [{ x: initS, label: 'start' }] : [];
+    defs.forEach((d, i) => {
+      const c = charts[i];
+      if (!c) return;
+      const series = d.lines.map(([col, name, extra], k) => t.has(col) ? ser(ts, t.num(col), name, k, extra) : null).filter(Boolean);
+      c.o.vlines = v;
+      let min = Infinity;
+      for (const s of series) for (let i = 0; i < s.y.length; i++) if (s.y[i] < min) min = s.y[i];
+      c.hlines = (d.hlines || []).filter(l => !d.hideHlines || min < l.y + 1.5);
+      c.el.hidden = !series.length;
+      c.setSeries(series);
+    });
+    const numCols = t.header.filter(c => c !== 't_s');
+    chips.replaceChildren(...numCols.map(col => {
+      const on = S.customCols.includes(col);
+      const k = S.customCols.indexOf(col);
+      return h('span', {
+        class: 'chip' + (on ? ' on' : ''),
+        onclick: () => { if (on) S.customCols = S.customCols.filter(c => c !== col); else S.customCols.push(col); fill(); },
+      }, on ? h('i', { style: { background: color(k) } }) : null, col);
+    }));
+    custom.o.vlines = v;
+    custom.el.hidden = !S.customCols.some(c => t.has(c));
+    custom.setSeries(S.customCols.filter(c => t.has(c)).map((c, k) => ser(ts, t.num(c), c, k)).filter(Boolean));
+  }
+  fill();
+  return { el, update: fill };
+}
+
+/* =====================================================================================
+ *  Motors (motors.csv + summary.motors)
+ * ===================================================================================== */
+const MOTOR_METRICS = [
+  ['commanded_power', 'Commanded power', ''], ['current_a', 'Current', 'A'], ['velocity_tps', 'Velocity', 'ticks/s'],
+  ['bemf_v', 'Back-EMF (estimated from velocity)', 'V'], ['bemf_electrical_v', 'Back-EMF (from current, needs winding resistance)', 'V'],
+  ['bemf_to_battery', 'Back-EMF ÷ battery voltage (1.0 = no speed headroom left)', 'ratio'],
+  ['input_power_w', 'Electrical input power', 'W'], ['energy_wh', 'Energy used', 'Wh'],
+];
+function viewMotors(sess) {
+  const g = new ChartGroup();
+  const charts = MOTOR_METRICS.map(([, title, unit]) => g.add(new LineChart({ title, unit, height: 200, zeroBased: unit === 'A' || unit === 'W' || unit === 'Wh' })));
+  const chips = h('div', { class: 'chips' });
+  const energy = new BarChart({ title: 'Energy used by motor', unit: 'Wh', decimals: 4 });
+  const curBar = new BarChart({ title: 'Average current (peak in tooltip)', unit: 'A', decimals: 2 });
+  const tableBox = h('div');
+  let table = null;
+  const el = h('div', null,
+    h('div', { class: 'controls' }, h('b', null, 'Motors:'), chips, h('span', { class: 'spacer' }),
+      h('button', { class: 'btn small', onclick: () => g.setRange(null) }, 'Reset zoom')),
+    h('div', { class: 'grid2' }, energy.el, curBar.el),
+    h('div', { class: 'section-title' }, 'Over time'),
+    h('div', { class: 'grid2' }, charts.map(c => c.el)),
+    h('div', { class: 'section-title' }, 'Per-motor statistics'), tableBox);
+  function fill() {
+    const t = motT(sess), groups = groupRows(t, 'motor'), sm = get(sess.summary, 'motors') || [];
+    const names = [...new Set([...sm.map(m => m.name), ...groups.keys()])];
+    if (!names.length) { el.replaceChildren(panel(null, h('p', { class: 'muted' }, 'No motors were monitored in this session. Use MonitoredDcMotor / MonitoredDcMotorEx to record motor data.'))); return; }
+    chips.replaceChildren(...names.map((n, k) => h('span', {
+      class: 'chip' + (S.hiddenMotors.has(n) ? '' : ' on'),
+      onclick: () => { if (S.hiddenMotors.has(n)) S.hiddenMotors.delete(n); else S.hiddenMotors.add(n); fill(); },
+    }, h('i', { style: { background: color(k) } }), n)));
+    const shown = names.filter(n => !S.hiddenMotors.has(n));
+    const ts = t.num('t_s');
+    MOTOR_METRICS.forEach(([col], i) => {
+      const series = t.has(col) ? shown.map(n => ser(ts, t.num(col), n, names.indexOf(n), null, groups.get(n) || [])).filter(Boolean) : [];
+      charts[i].el.hidden = !series.length;
+      charts[i].setSeries(series);
+    });
+    const bm = sm.filter(m => !S.hiddenMotors.has(m.name));
+    energy.setData(bm.map(m => ({ label: m.name, value: m.energyWh, color: color(names.indexOf(m.name)), note: `${fmt(m.energyWh / Math.max(1e-9, get(sess.summary, 'session.durationS') / 3600), 1)} W on average over the session` })));
+    curBar.setData(bm.map(m => ({ label: m.name, value: get(m, 'currentA.avg'), color: color(names.indexOf(m.name)), note: `peak ${fmt(get(m, 'currentA.max'), 2)} A · ${fmtInt(get(m, 'currentA.n'))} samples` })));
+    const cols = [
+      { label: 'motor' }, { label: 'motor type' }, { label: 'samples', num: true },
+      { label: 'current avg A', num: true }, { label: 'current max A', num: true },
+      { label: 'velocity avg t/s', num: true }, { label: 'velocity min t/s', num: true }, { label: 'velocity max t/s', num: true },
+      { label: 'back-EMF avg V', num: true }, { label: 'back-EMF min V', num: true }, { label: 'back-EMF max V', num: true },
+      { label: 'back-EMF/battery max', num: true }, { label: 'input power avg W', num: true }, { label: 'input power max W', num: true },
+      { label: 'energy Wh', num: true }, { label: 'winding Ω', num: true },
+    ];
+    const rows = sm.map(m => [m.name, m.motorType, m.samples, get(m, 'currentA.avg'), get(m, 'currentA.max'),
+      get(m, 'velocityTps.avg'), get(m, 'velocityTps.min'), get(m, 'velocityTps.max'),
+      get(m, 'bemfV.avg'), get(m, 'bemfV.min'), get(m, 'bemfV.max'), get(m, 'bemfToBattery.max'),
+      get(m, 'inputPowerW.avg'), get(m, 'inputPowerW.max'), m.energyWh, m.windingResistanceOhms]);
+    const ds = arrayDataset(cols, rows);
+    if (!table) { table = new DataTable(ds, { name: sess.id + '_motors', pageSize: 50 }); tableBox.replaceChildren(table.el); } else table.setDataset(ds);
+  }
+  fill();
+  return { el, update: fill };
+}
+
+/* =====================================================================================
+ *  Devices (summary.devices)
+ * ===================================================================================== */
+const DEVICE_COLS = [
+  ['name', 'device'], ['type', 'type'], ['cacheReads', 'cache'], ['reads', 'reads', 1], ['writes', 'writes', 1], ['cacheHits', 'cache hits', 1],
+  ['cacheHitPct', 'cache hit %', 1], ['hardwareReads', 'hardware reads', 1], ['redundantWrites', 'repeated writes', 1],
+  ['recentReadHz', 'read Hz (recent)', 1], ['recentWriteHz', 'write Hz (recent)', 1], ['avgReadHz', 'read Hz (avg)', 1], ['avgWriteHz', 'write Hz (avg)', 1],
+  ['avgReadLatencyUs', 'read µs avg', 1], ['maxReadLatencyUs', 'read µs max', 1], ['avgWriteLatencyUs', 'write µs avg', 1], ['maxWriteLatencyUs', 'write µs max', 1],
+  ['totalIoMs', 'hardware ms total', 1], ['ioSharePct', 'share of hardware %', 1], ['firstReadS', 'first read s', 1], ['lastReadS', 'last read s', 1],
+  ['firstWriteS', 'first write s', 1], ['lastWriteS', 'last write s', 1], ['monitorReads', 'monitor reads', 1], ['monitorIoMs', 'monitor ms', 1],
+  ['deviceClass', 'class'], ['connection', 'connection'],
+];
+function devicesDataset(sess) {
+  const devs = get(sess.summary, 'devices') || [];
+  return arrayDataset(DEVICE_COLS.map(([, label, num]) => ({ label, num: !!num })),
+    devs.map(d => DEVICE_COLS.map(([k]) => k === 'cacheReads' ? (d[k] ? 'on' : 'off') : d[k])));
+}
+function opsRows(devs) {
+  const rows = [];
+  for (const d of devs) for (const o of d.ops || []) rows.push([d.name, o.op, o.kind === 'W' ? 'write' : 'read', o.count,
+    o.kind === 'W' ? null : o.cacheHits, o.kind === 'W' ? o.redundant : null, o.avgLatencyUs, o.minLatencyUs, o.maxLatencyUs, o.avgHz, o.firstS, o.lastS]);
+  return rows;
+}
+const OPS_COLS = [{ label: 'device' }, { label: 'operation' }, { label: 'kind' }, { label: 'calls', num: true }, { label: 'cache hits', num: true },
+  { label: 'repeated', num: true }, { label: 'µs avg', num: true }, { label: 'µs min', num: true }, { label: 'µs max', num: true },
+  { label: 'Hz avg', num: true }, { label: 'first s', num: true }, { label: 'last s', num: true }];
+function viewDevices(sess) {
+  const timeBar = new BarChart({ title: 'Hardware time per loop', unit: 'ms', decimals: 3 });
+  const latBar = new BarChart({ title: 'Average hardware read latency', unit: 'µs', decimals: 0 });
+  const rateBar = new BarChart({ title: 'Calls per second (reads + writes, recent)', unit: 'Hz', decimals: 0 });
+  const hitBar = new BarChart({ title: 'Cache hit rate (devices with caching on)', unit: '%', decimals: 0 });
+  const tableBox = h('div'), detail = h('div');
+  let table = null;
+  const el = h('div', null,
+    h('div', { class: 'grid2' }, timeBar.el, latBar.el, rateBar.el, hitBar.el),
+    h('div', { class: 'section-title' }, 'All devices (click a row for details)'), tableBox,
+    h('div', { class: 'section-title' }, 'Device detail'), detail);
+  function renderDetail() {
+    const devs = get(sess.summary, 'devices') || [];
+    if (!devs.length) { detail.replaceChildren(panel(null, h('p', { class: 'muted' }, 'No devices in this session.'))); return; }
+    const d = devs.find(x => x.name === S.device) || devs[0];
+    const pick = h('select', { onchange: e => { S.device = e.target.value; renderDetail(); } },
+      devs.map(x => h('option', { value: x.name, selected: x === d ? true : null }, x.name + ' (' + x.type + ')')));
+    const kv = (k, v) => [h('dt', null, k), h('dd', null, v)];
+    const ops = new DataTable(arrayDataset(OPS_COLS, opsRows([d])), { name: sess.id + '_' + d.name + '_ops', pageSize: 50 });
+    const kindOf = new Map((d.ops || []).map(o => [o.op, o.kind]));
+    const recent = new DataTable(arrayDataset([{ label: 't s', num: true }, { label: 'operation' }, { label: 'kind' }, { label: 'latency µs', num: true }, { label: 'flag' }],
+      (d.recentEvents || []).slice().reverse().map(e => [e[0], e[1], kindOf.get(e[1]) === 'W' ? 'write' : 'read', e[2], e[3] ? (kindOf.get(e[1]) === 'W' ? 'repeated' : 'cache hit') : ''])),
+    { name: sess.id + '_' + d.name + '_recent', pageSize: 64, stats: false });
+    detail.replaceChildren(
+      h('div', { class: 'controls' }, h('label', null, 'Device ', pick)),
+      h('div', { class: 'grid2' },
+        panel('Identity', h('dl', { class: 'kv' }, kv('name', d.name), kv('type', d.type), kv('class', d.deviceClass || '–'), kv('connection', d.connection || '–'),
+          kv('read caching', d.cacheReads ? 'on' : 'off'), kv('reads', `${fmtInt(d.reads)} (${fmtInt(d.cacheHits)} from cache, ${fmtInt(d.hardwareReads)} from hardware)`),
+          kv('writes', `${fmtInt(d.writes)} (${fmtInt(d.redundantWrites)} repeated a value)`), kv('hardware time', `${fmt(d.totalIoMs, 1)} ms (${fmt(d.ioSharePct, 1)}% of all)`),
+          kv('monitor sampling', `${fmtInt(d.monitorReads)} reads, ${fmt(d.monitorIoMs, 1)} ms`))),
+        panel('Timing', h('dl', { class: 'kv' }, kv('read latency', `${fmt(d.avgReadLatencyUs, 0)} µs avg · ${fmt(d.maxReadLatencyUs, 0)} µs max`),
+          kv('write latency', `${fmt(d.avgWriteLatencyUs, 0)} µs avg · ${fmt(d.maxWriteLatencyUs, 0)} µs max`),
+          kv('read rate', `${fmt(d.recentReadHz, 0)} Hz recent · ${fmt(d.avgReadHz, 1)} Hz avg`), kv('write rate', `${fmt(d.recentWriteHz, 0)} Hz recent · ${fmt(d.avgWriteHz, 1)} Hz avg`),
+          kv('first / last read', `${fmt(d.firstReadS, 3)} s / ${fmt(d.lastReadS, 3)} s`), kv('first / last write', `${fmt(d.firstWriteS, 3)} s / ${fmt(d.lastWriteS, 3)} s`)))),
+      panel('Operations', ops.el), panel('Most recent calls', recent.el));
+  }
+  function fill() {
+    const devs = get(sess.summary, 'devices') || [], loops = Math.max(1, get(sess.summary, 'loop.count') || 1);
+    const by = (k, f) => devs.filter(f || (d => ok(d[k]) && d[k] > 0)).sort((a, b) => b[k] - a[k]).slice(0, 14);
+    timeBar.setData(by('totalIoMs').map((d, i) => ({ label: d.name, value: d.totalIoMs / loops, color: color(i), note: `${fmt(d.totalIoMs, 0)} ms in total · ${fmt(d.ioSharePct, 1)}% of hardware time` })));
+    latBar.setData(by('avgReadLatencyUs', d => d.hardwareReads > 0).map((d, i) => ({ label: d.name, value: d.avgReadLatencyUs, color: color(i), note: `max ${fmt(d.maxReadLatencyUs, 0)} µs · ${fmtInt(d.hardwareReads)} hardware reads` })));
+    rateBar.setData(devs.map(d => ({ d, v: (d.recentReadHz || 0) + (d.recentWriteHz || 0) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 14)
+      .map((x, i) => ({ label: x.d.name, value: x.v, color: color(i), note: `${fmt(x.d.recentReadHz, 0)} reads/s · ${fmt(x.d.recentWriteHz, 0)} writes/s` })));
+    hitBar.setData(devs.filter(d => d.cacheReads && d.reads > 0).sort((a, b) => b.cacheHitPct - a.cacheHitPct)
+      .map((d, i) => ({ label: d.name, value: d.cacheHitPct, color: color(i), note: `${fmtInt(d.cacheHits)} of ${fmtInt(d.reads)} reads served from cache` })));
+    const ds = devicesDataset(sess);
+    if (!table) {
+      table = new DataTable(ds, { name: sess.id + '_devices', pageSize: 100, onRow: r => { S.device = ds.get(r, 0); renderDetail(); detail.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+      tableBox.replaceChildren(table.el);
+    } else { table.o.onRow = r => { S.device = table.ds.get(r, 0); renderDetail(); }; table.setDataset(ds); }
+    renderDetail();
+  }
+  fill();
+  return { el, update: fill };
+}
+
+/* =====================================================================================
+ *  Events (events.csv: every read and write with timestamp and latency)
+ * ===================================================================================== */
+async function loadEvents(sess) {
+  const f = await S.src.file(sess.id, 'events.csv');
+  sess.events = parseEvents(f ? f.text : 't_s\n');
+  sess.eventsTruncated = !!(f && /\n#/.test(f.text));
+  sess.eventsAt = new Date();
+}
+function viewEvents(sess) {
+  const box = h('div');
+  const size = sess.info && sess.info.files ? sess.info.files['events.csv'] : undefined;
+  const load = async () => {
+    box.replaceChildren(panel(null, h('p', { class: 'muted' }, `Loading events.csv${ok(size) ? ' (' + fmtBytes(size) + ')' : ''}…`)));
+    try { await loadEvents(sess); } catch (e) { box.replaceChildren(errorBox(e)); return; }
+    if (S.sess === sess && S.tab === 'events') box.replaceChildren(eventsBody(sess, load));
+  };
+  if (sess.events) box.append(eventsBody(sess, load));
+  else if (size === 0 || (sess.info.files && size === undefined)) box.append(panel(null, h('p', { class: 'muted' }, 'No events.csv in this session (event logging is controlled by HardwareMonitor.CONFIG.logEvents).')));
+  else if (size > 12e6) box.append(panel('Event log', h('p', null, `events.csv is ${fmtBytes(size)}: every hardware read and write, with its time and latency. It can take a while to load over Wi-Fi.`),
+    h('button', { class: 'btn primary', onclick: load }, 'Load events')));
+  else load();
+  return { el: box };
+}
+function eventsBody(sess, reload) {
+  const ev = sess.events, F = S.evFilter || (S.evFilter = { dev: -1, op: -1, kind: '', hideHits: false });
+  if (F.dev >= ev.devNames.length) F.dev = -1;
+  if (F.op >= ev.opNames.length) F.op = -1;
+  const devIds = ev.devNames.map((n, i) => n == null ? -1 : i).filter(i => i >= 0);
+  const sel = (opts, value, onchange) => h('select', { onchange }, opts.map(([v, l]) => h('option', { value: v, selected: String(v) === String(value) ? true : null }, l)));
+  const stats = h('div', { class: 'muted', style: { fontSize: '13px', marginBottom: '10px' } });
+  const g = new ChartGroup();
+  const rate = g.add(new LineChart({ title: 'Calls per second', unit: 'Hz', zeroBased: true, height: 210 }));
+  const lat = g.add(new LineChart({ title: 'Latency of each hardware call (cache hits excluded)', unit: 'µs', zeroBased: true, height: 210 }));
+  const hist = new HistChart({ title: 'Latency distribution (log scale)', unit: 'µs', height: 210, log: true });
+  const slowBox = h('div'), allBox = h('div');
+  const body = h('div', null,
+    h('div', { class: 'controls' },
+      h('label', null, 'Device ', sel([[-1, 'All devices'], ...devIds.map(i => [i, ev.devNames[i]])], F.dev, e => { F.dev = +e.target.value; apply(); })),
+      h('label', null, 'Operation ', sel([[-1, 'All operations'], ...ev.opNames.map((n, i) => [i, n])], F.op, e => { F.op = +e.target.value; apply(); })),
+      h('label', null, 'Kind ', sel([['', 'Reads and writes'], ['R', 'Reads'], ['W', 'Writes']], F.kind, e => { F.kind = e.target.value; apply(); })),
+      h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: F.hideHits ? true : null, onchange: e => { F.hideHits = e.target.checked; apply(); } }), 'hide cache hits / repeated writes'),
+      h('span', { class: 'spacer' }),
+      h('span', { class: 'muted', style: { fontSize: '12px' } }, sess.live ? 'snapshot from ' + sess.eventsAt.toLocaleTimeString() : ''),
+      sess.live ? h('button', { class: 'btn small', onclick: reload }, 'Reload') : null,
+      h('button', { class: 'btn small', onclick: () => g.setRange(null) }, 'Reset zoom')),
+    sess.eventsTruncated ? h('div', { class: 'finding info', style: { marginBottom: '10px' } }, 'events.csv hit its size limit, so it stops before the end of the session. Counts in the other tabs are complete.') : null,
+    stats,
+    h('div', { class: 'grid2' }, rate.el, lat.el, hist.el, h('div', { class: 'panel' }, h('h3', null, 'Slowest calls'), slowBox)),
+    h('div', { class: 'section-title' }, 'Every event'), allBox);
+  let allTable = null, slowTable = null;
+  function apply() {
+    const n = ev.n, idx = [];
+    let reads = 0, writes = 0, flagged = 0, latSum = 0, latN = 0;
+    for (let k = 0; k < n; k++) {
+      if (F.dev >= 0 && ev.dev[k] !== F.dev) continue;
+      if (F.op >= 0 && ev.op[k] !== F.op) continue;
+      const w = ev.write[k];
+      if (F.kind === 'R' && w) continue;
+      if (F.kind === 'W' && !w) continue;
+      if (F.hideHits && ev.flag[k]) continue;
+      idx.push(k);
+      if (w) writes++; else reads++;
+      if (ev.flag[k]) flagged++;
+      if (!(ev.flag[k] && !w)) { latSum += ev.lat[k]; latN++; }
+    }
+    const I = Int32Array.from(idx);
+    stats.textContent = `${I.length.toLocaleString()} of ${n.toLocaleString()} events · ${reads.toLocaleString()} reads · ${writes.toLocaleString()} writes · ` +
+      `${flagged.toLocaleString()} cache hits / repeated writes · average hardware latency ${latN ? fmt(latSum / latN, 0) : '–'} µs`;
+    // Calls per second, one line per device (or per operation when one device is picked)
+    const t0 = n ? ev.t[0] : 0, t1 = n ? ev.t[n - 1] : 1;
+    const bw = Math.max(0.1, (t1 - t0) / 300), nb = Math.max(1, Math.ceil((t1 - t0) / bw) + 1);
+    const keyOf = F.dev >= 0 ? k => ev.op[k] : k => ev.dev[k];
+    const labelOf = F.dev >= 0 ? key => ev.opNames[key] : key => ev.devNames[key];
+    const counts = new Map();
+    for (const k of I) { const key = keyOf(k); let a = counts.get(key); if (!a) counts.set(key, a = new Float64Array(nb)); a[Math.floor((ev.t[k] - t0) / bw)]++; }
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b).reduce((x, y) => x + y, 0) - counts.get(a).reduce((x, y) => x + y, 0)).slice(0, 10);
+    const bx = Float64Array.from({ length: nb }, (_, i) => t0 + (i + 0.5) * bw);
+    rate.setSeries(keys.map((key, i) => ({ name: labelOf(key), x: bx, y: counts.get(key).map(c => c / bw), color: color(F.dev >= 0 ? i : key) })));
+    // Latency scatter, one series per device / op
+    const pts = new Map();
+    for (const k of I) {
+      if (ev.flag[k] && !ev.write[k]) continue;
+      const key = keyOf(k); let p = pts.get(key); if (!p) pts.set(key, p = { x: [], y: [] });
+      p.x.push(ev.t[k]); p.y.push(ev.lat[k]);
+    }
+    lat.setSeries(keys.filter(key => pts.has(key)).map((key, i) => ({ name: labelOf(key), x: Float64Array.from(pts.get(key).x), y: Float64Array.from(pts.get(key).y), color: color(F.dev >= 0 ? i : key), points: true })));
+    // Histogram + percentiles
+    const lv = [];
+    for (const k of I) if (!(ev.flag[k] && !ev.write[k]) && ev.lat[k] > 0) lv.push(ev.lat[k]);
+    lv.sort((a, b) => a - b);
+    const pct = p => lv.length ? lv[Math.min(lv.length - 1, Math.floor(p * lv.length))] : NaN;
+    hist.setData(lv.length ? logBins(lv, 12, Math.max(1, lv[0] * 0.9), lv[lv.length - 1] * 1.1) : [], [{ x: pct(0.5), label: 'p50' }, { x: pct(0.95), label: 'p95' }, { x: pct(0.99), label: 'p99' }]);
+    const evCols = [{ label: 't s', num: true }, { label: 'device' }, { label: 'operation' }, { label: 'kind' }, { label: 'flag' }, { label: 'latency µs', num: true }];
+    const getter = list => (r, c) => {
+      const k = list[r];
+      switch (c) {
+        case 0: return ev.t[k];
+        case 1: return ev.devNames[ev.dev[k]];
+        case 2: return ev.opNames[ev.op[k]];
+        case 3: return ev.write[k] ? 'W' : 'R';
+        case 4: return ev.flag[k] ? (ev.write[k] ? 'repeated' : 'cache hit') : '';
+        default: return ev.lat[k];
+      }
+    };
+    const slow = Array.from(I).sort((a, b) => ev.lat[b] - ev.lat[a]).slice(0, 200);
+    const slowDs = { n: slow.length, cols: evCols, get: getter(slow) };
+    const allDs = { n: I.length, cols: evCols, get: getter(I) };
+    if (!slowTable) { slowTable = new DataTable(slowDs, { name: sess.id + '_slowest', pageSize: 15, stats: false }); slowBox.replaceChildren(slowTable.el); } else slowTable.setDataset(slowDs);
+    if (!allTable) { allTable = new DataTable(allDs, { name: sess.id + '_events', pageSize: 200 }); allBox.replaceChildren(allTable.el); } else allTable.setDataset(allDs);
+  }
+  apply();
+  return body;
+}
+
+/* =====================================================================================
+ *  Tables: every number in the database, sortable / filterable / exportable
+ * ===================================================================================== */
+function statsDataset(sess) {
+  const s = sess.summary || {}, rows = [];
+  const push = (group, item, metric, o) => { if (isStats(o)) rows.push([group, item, metric, o.n, o.avg, o.min, o.max, o.std, o.last]); };
+  for (const [k, o] of Object.entries(s.power || {})) push('power', 'robot', k, o);
+  for (const x of s.hubs || []) for (const [k, o] of Object.entries(x)) push('hub', x.name, k, o);
+  for (const m of s.motors || []) for (const [k, o] of Object.entries(m)) push('motor', m.name, k, o);
+  for (const [k, o] of Object.entries(s.jvm || {})) push('app', 'Robot Controller', k, o);
+  const lp = s.loop || {};
+  if (ok(lp.avgMs)) rows.push(['loop', 'loop time ms', 'loopMs', lp.count, lp.avgMs, lp.minMs, lp.maxMs, lp.stdMs, null]);
+  return arrayDataset([{ label: 'group' }, { label: 'item' }, { label: 'metric' }, { label: 'n', num: true }, { label: 'avg', num: true },
+    { label: 'min', num: true }, { label: 'max', num: true }, { label: 'std', num: true }, { label: 'last', num: true }], rows);
+}
+function keyValueDataset(sess) {
+  const rows = [];
+  const walk = (o, path) => {
+    for (const [k, v] of Object.entries(o)) {
+      const p = path ? path + '.' + k : k;
+      if (Array.isArray(v)) { rows.push([p, v.length + ' entries (see their own tables)']); continue; }
+      if (v && typeof v === 'object') { if (!isStats(v)) walk(v, p); else rows.push([p, `avg ${smart(v.avg)} · min ${smart(v.min)} · max ${smart(v.max)} (n=${v.n})`]); continue; }
+      rows.push([p, v]);
+    }
+  };
+  walk(sess.summary || {}, '');
+  return arrayDataset([{ label: 'key' }, { label: 'value' }], rows);
+}
+function hubsDataset(sess) {
+  const hubs = get(sess.summary, 'hubs') || [], metrics = ['currentA', 'inputV', 'auxV', 'i2cA', 'gpioA', 'tempC'];
+  const cols = [{ label: 'hub' }, { label: 'bulk caching' }, { label: 'not responding', num: true }];
+  for (const m of metrics) cols.push({ label: m + ' avg', num: true }, { label: m + ' min', num: true }, { label: m + ' max', num: true });
+  return arrayDataset(cols, hubs.map(x => [x.name, x.bulkCachingMode, x.notRespondingSamples, ...metrics.flatMap(m => [get(x, m + '.avg'), get(x, m + '.min'), get(x, m + '.max')])]));
+}
+function sessionsDataset() {
+  const cols = [{ label: 'session' }, { label: 'opmode' }, { label: 'start' }, { label: 'duration s', num: true }, { label: 'loops', num: true },
+    { label: 'avg loop ms', num: true }, { label: 'p95 loop ms', num: true }, { label: 'min battery V', num: true }, { label: 'energy Wh', num: true },
+    { label: 'devices', num: true }, { label: 'complete' }, { label: 'size bytes', num: true }];
+  return arrayDataset(cols, (S.list.sessions || []).map(s => [s.id, s.opMode, s.start, s.durationS, s.loops, s.avgLoopMs, s.p95LoopMs, s.minBatteryV, s.energyWh, s.devices,
+    s.recording ? 'recording' : s.complete ? 'yes' : 'no', s.sizeBytes]));
+}
+const TABLE_SETS = [
+  { group: 'Summary (summary.json)' },
+  { key: 'stats', label: 'All statistics', desc: 'Every measured quantity with its sample count, average, min, max, standard deviation and last value.', ds: statsDataset },
+  { key: 'kv', label: 'Session values', desc: 'Every single value in summary.json (session, loop, power, monitor, app).', ds: keyValueDataset },
+  { key: 'devices', label: 'Devices', desc: 'Reads, writes, cache hits, rates and latencies per device.', ds: devicesDataset },
+  { key: 'ops', label: 'Device operations', desc: 'The same, split by method (getCurrentPosition, setPower, …).', ds: s => arrayDataset(OPS_COLS, opsRows(get(s.summary, 'devices') || [])) },
+  { key: 'motors', label: 'Motors', desc: 'Current, velocity, back-EMF, power and energy per motor.', ds: viewMotorsTable },
+  { key: 'hubs', label: 'Hubs', desc: 'REV hub current, voltages, bus currents and temperature.', ds: hubsDataset },
+  { group: 'Raw files' },
+  { key: 'system.csv', label: 'system.csv', desc: 'Time series sampled every 50 ms: loop timing, hardware time, battery, current, power, hubs, app.', ds: s => tableDataset(sysT(s)), file: 'system.csv' },
+  { key: 'motors.csv', label: 'motors.csv', desc: 'Motor samples over time (each row holds the values sampled at that moment; blanks were not sampled).', ds: s => tableDataset(motT(s)), file: 'motors.csv' },
+  { key: 'devices.csv', label: 'devices.csv', desc: 'The devices registered in the session.', ds: s => tableDataset(s.devices), file: 'devices.csv' },
+  { key: 'events.csv', label: 'events.csv', desc: 'Every hardware read and write with time and latency (flag 1 = cache hit for reads, repeated value for writes).', file: 'events.csv', events: true },
+  { group: 'Database' },
+  { key: 'sessions', label: 'All sessions', desc: 'Every session stored on the robot.', ds: sessionsDataset },
+];
+function viewMotorsTable(sess) {
+  const sm = get(sess.summary, 'motors') || [], stats = ['currentA', 'velocityTps', 'bemfV', 'bemfElectricalV', 'bemfToBattery', 'inputPowerW'];
+  const cols = [{ label: 'motor' }, { label: 'motor type' }, { label: 'samples', num: true }, { label: 'energy Wh', num: true }, { label: 'winding Ω', num: true }];
+  for (const m of stats) cols.push({ label: m + ' avg', num: true }, { label: m + ' min', num: true }, { label: m + ' max', num: true });
+  return arrayDataset(cols, sm.map(m => [m.name, m.motorType, m.samples, m.energyWh, m.windingResistanceOhms, ...stats.flatMap(k => [get(m, k + '.avg'), get(m, k + '.min'), get(m, k + '.max')])]));
+}
+function viewTables(sess) {
+  const listEl = h('div', { class: 'ds-list' }), main = h('div', { style: { minWidth: 0 } });
+  let table = null, current = null;
+  function show(key) {
+    S.tableDs = key;
+    current = TABLE_SETS.find(d => d.key === key) || TABLE_SETS[1];
+    listEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === current.key));
+    table = null;
+    const head = h('div', { class: 'dt-bar' }, h('h3', { style: { margin: 0 } }, current.label), h('span', { class: 'muted', style: { fontSize: '12.5px' } }, current.desc),
+      h('span', { class: 'spacer' }),
+      current.file ? h('a', { class: 'btn small', href: S.src.downloadHref(sess.id, current.file), download: sess.id + '_' + current.file }, '⤓ original file') : null);
+    if (current.events) {
+      const go = async () => {
+        main.replaceChildren(head, h('p', { class: 'muted' }, 'Loading events.csv…'));
+        try { if (!sess.events) await loadEvents(sess); } catch (e) { main.replaceChildren(head, errorBox(e)); return; }
+        if (S.sess !== sess || S.tab !== 'tables' || current.key !== key) return;
+        const ev = sess.events;
+        const ds = { n: ev.n, cols: [{ label: 't_s', num: true }, { label: 'device_id', num: true }, { label: 'device' }, { label: 'op' }, { label: 'kind' }, { label: 'flag', num: true }, { label: 'latency_us', num: true }],
+          get: (r, c) => {
+            switch (c) {
+              case 0: return ev.t[r];
+              case 1: return ev.dev[r];
+              case 2: return ev.devNames[ev.dev[r]];
+              case 3: return ev.opNames[ev.op[r]];
+              case 4: return ev.write[r] ? 'W' : 'R';
+              case 5: return ev.flag[r];
+              default: return ev.lat[r];
+            }
+          } };
+        table = new DataTable(ds, { name: sess.id + '_events', pageSize: 200 });
+        main.replaceChildren(head, table.el);
+      };
+      const size = sess.info.files ? sess.info.files['events.csv'] : undefined;
+      if (!sess.events && size > 12e6) main.replaceChildren(head, h('p', null, `events.csv is ${fmtBytes(size)}. `, h('button', { class: 'btn primary', onclick: go }, 'Load it')));
+      else go();
+      return;
+    }
+    table = new DataTable(current.ds(sess), { name: sess.id + '_' + current.key.replace(/\.csv$/, ''), pageSize: 200 });
+    main.replaceChildren(head, table.el);
+  }
+  listEl.replaceChildren(...TABLE_SETS.map(d => d.group ? h('div', { class: 'group' }, d.group)
+    : h('button', { 'data-key': d.key, onclick: () => show(d.key) }, d.label)));
+  show(S.tableDs);
+  return {
+    el: h('div', { class: 'tables-layout' }, h('div', { class: 'panel', style: { padding: '8px' } }, listEl), h('div', { class: 'panel' }, main)),
+    update: () => { if (table && current && current.ds) table.setDataset(current.ds(sess)); },
+  };
+}
+
+/* =====================================================================================
+ *  Compare sessions
+ * ===================================================================================== */
+async function sessionData(id) {
+  if (S.sess && S.sess.id === id && !S.sess.live) return { summary: S.sess.summary, system: sysT(S.sess) };
+  if (S.cache.has(id)) return S.cache.get(id);
+  const [sum, sys] = await Promise.all([S.src.file(id, 'summary.json'), S.src.file(id, 'system.csv')]);
+  let summary = {};
+  try { summary = sum ? JSON.parse(sum.text) : {}; } catch (e) { /* damaged */ }
+  const d = { summary, system: sys ? parseCsv(sys.text) : new Table([]) };
+  S.cache.set(id, d);
+  return d;
+}
+const COMPARE_METRICS = [
+  ['Duration', 's', 'session.durationS'], ['Loops', '', 'loop.count'], ['Loop time avg', 'ms', 'loop.avgMs', -1], ['Loop time p50', 'ms', 'loop.p50Ms', -1],
+  ['Loop time p95', 'ms', 'loop.p95Ms', -1], ['Loop time p99', 'ms', 'loop.p99Ms', -1], ['Loop time max', 'ms', 'loop.maxMs', -1], ['Loop rate', 'Hz', 'loop.avgHz', 1],
+  ['Hardware time per loop', 'ms', 'loop.hwMsPerLoop', -1], ['Hardware share of loop', '%', 'loop.hwPctOfLoop', -1], ['Reads per loop', '', 'loop.readsPerLoop', -1],
+  ['Writes per loop', '', 'loop.writesPerLoop', -1], ['Cache hits per loop', '', 'loop.cacheHitsPerLoop'], ['Battery min', 'V', 'power.batteryV.min', 1],
+  ['Battery avg', 'V', 'power.batteryV.avg'], ['Current avg', 'A', 'power.totalCurrentA.avg'], ['Current max', 'A', 'power.totalCurrentA.max'],
+  ['Power avg', 'W', 'power.totalPowerW.avg'], ['Energy', 'Wh', 'power.energyWh'], ['Charge', 'mAh', 'power.chargeMah'], ['Low-voltage events', '', 'power.lowVoltageEvents', -1],
+  ['Devices', '', s => (s.devices || []).length], ['Monitor overhead per loop', 'ms', 'monitor.overheadMsPerLoop', -1], ['App CPU avg', '%', 'jvm.cpuPctOfOneCore.avg', -1],
+];
+function viewCompare(sess) {
+  const box = h('div');
+  const ids = [...S.compare];
+  if (ids.length < 2) {
+    box.append(panel('Compare sessions', h('p', null, 'Tick the box next to two or more sessions in the list on the left to compare loop times, hardware cost, battery and energy side by side.'),
+      !S.compare.has(sess.id) ? h('button', { class: 'btn', onclick: () => { S.compare.add(sess.id); renderList(); renderTabs(); renderTab(); } }, 'Add this session') : null));
+    return { el: box };
+  }
+  box.append(panel(null, h('p', { class: 'muted' }, 'Loading ' + ids.length + ' sessions…')));
+  (async () => {
+    let data;
+    try { data = await Promise.all(ids.map(sessionData)); } catch (e) { box.replaceChildren(errorBox(e)); return; }
+    if (S.sess !== sess || S.tab !== 'compare') return;
+    const infos = ids.map((id, i) => Object.assign({ id }, (S.list.sessions || []).find(s => s.id === id) || {}, { opMode: get(data[i].summary, 'session.opMode') || id, start: get(data[i].summary, 'session.start') || '' }));
+    const labels = infos.map(sessLabel);
+    const cols = [{ label: 'metric' }, { label: 'unit' }, ...labels.map(l => ({ label: l, num: true })), { label: 'best' }];
+    const rows = COMPARE_METRICS.map(([name, unit, path, better]) => {
+      const vals = data.map(d => typeof path === 'function' ? path(d.summary) : get(d.summary, path));
+      let best = '';
+      if (better) {
+        const okv = vals.map((v, i) => [v, i]).filter(([v]) => ok(v));
+        if (okv.length > 1) { okv.sort((a, b) => (a[0] - b[0]) * -better); if (okv[0][0] !== okv[okv.length - 1][0]) best = labels[okv[0][1]]; }
+      }
+      return [name, unit, ...vals, best];
+    });
+    const g = new ChartGroup();
+    const loopC = g.add(new LineChart({ title: 'Loop time (rolling average)', unit: 'ms', zeroBased: true, height: 220 }));
+    const batC = g.add(new LineChart({ title: 'Battery voltage', unit: 'V', height: 220 }));
+    const curC = g.add(new LineChart({ title: 'Total current', unit: 'A', zeroBased: true, height: 220 }));
+    const hwC = g.add(new LineChart({ title: 'Hardware time per loop', unit: 'ms', zeroBased: true, height: 220 }));
+    const mk = col => data.map((d, i) => ser(d.system.num('t_s'), d.system.num(col), labels[i], i)).filter(Boolean);
+    loopC.setSeries(mk('loop_avg_ms')); batC.setSeries(mk('battery_v')); curC.setSeries(mk('total_current_a')); hwC.setSeries(mk('hw_ms_per_loop'));
+    const bar = (title, unit, path, dec) => new BarChart({ title, unit, decimals: dec }).setData(data.map((d, i) => ({ label: labels[i], value: get(d.summary, path), color: color(i) })));
+    box.replaceChildren(
+      h('div', { class: 'grid2' }, bar('Average loop time', 'ms', 'loop.avgMs', 2).el, bar('p95 loop time', 'ms', 'loop.p95Ms', 2).el,
+        bar('Hardware time per loop', 'ms', 'loop.hwMsPerLoop', 2).el, bar('Energy used', 'Wh', 'power.energyWh', 3).el),
+      h('div', { class: 'section-title' }, 'Side by side'),
+      panel(null, new DataTable(arrayDataset(cols, rows), { name: 'compare', pageSize: 100, stats: false }).el),
+      h('div', { class: 'section-title' }, 'Over time (x = seconds since each session started)'),
+      h('div', { class: 'grid2' }, loopC.el, batC.el, curC.el, hwC.el));
+  })();
+  return { el: box };
+}
+
+const VIEWS = { overview: viewOverview, timeline: viewTimeline, motors: viewMotors, devices: viewDevices, events: viewEvents, tables: viewTables, compare: viewCompare };
+
+/* =====================================================================================
+ *  Wiring
+ * ===================================================================================== */
+function applyTheme(t) {
+  try { if (t === undefined) t = localStorage.getItem('hwmonitor.theme'); } catch (e) { t = null; }
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+}
+function wire() {
+  $('#btnTheme').onclick = () => {
+    const sys = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const next = (document.documentElement.dataset.theme || sys) === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('hwmonitor.theme', next); } catch (e) { /* private mode */ }
+    applyTheme(next);
+    if (S.sess) renderTab();
+  };
+  $('#btnRefresh').onclick = async () => {
+    if (!S.src) { location.reload(); return; }
+    await refreshList(true);
+    if (S.id) { S.cache.delete(S.id); await selectSession(S.id); }
+  };
+  armConfirm($('#btnClear'), 'Clear database', async () => {
+    const r = await S.src.clear();
+    toast(`Deleted ${r.deleted} session${r.deleted === 1 ? '' : 's'}` + (S.list.recording ? ' (the recording session was kept)' : ''));
+    S.id = null;
+    try { history.replaceState(null, '', '#'); } catch (e) { /* ignore */ }
+    await useSource(S.src);
+  });
+  $('#folderInput').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; openLocal(fs.map(f => [f.webkitRelativePath || f.name, f])); };
+  $('#filesInput').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; openLocal(fs.map(f => [f.name, f])); };
+  let depth = 0;
+  const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; depth++; $('#drop').hidden = false; e.preventDefault(); });
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; $('#drop').hidden = true; } });
+  window.addEventListener('drop', async e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; $('#drop').hidden = true;
+    const items = [...e.dataTransfer.items];
+    const entries = items.map(it => it.webkitGetAsEntry ? it.webkitGetAsEntry() : null);
+    const loose = items.map(it => it.getAsFile());
+    const out = [];
+    for (let i = 0; i < items.length; i++) {
+      if (entries[i]) await entriesToFiles(entries[i], '', out);
+      else if (loose[i]) out.push([loose[i].name, loose[i]]);
+    }
+    openLocal(out);
+  });
+}
+async function init() {
+  applyTheme();
+  wire();
+  if (/^https?:$/.test(location.protocol)) {
+    try { await useSource(new RobotSource()); return; } catch (e) { console.info('HardwareMonitor API not reachable:', e.message); }
+  }
+  $('#source').textContent = 'no robot connection';
+  showEmpty();
+}
+init();
+</script>
+</body>
+</html>
