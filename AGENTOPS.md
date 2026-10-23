@@ -18,14 +18,16 @@ From the repo root:
 # Build the competition app
 ./gradlew :TeamCode:assembleDebug
 
-# Build the simulation app
-./gradlew :Sim:assembleDebug
+# Build + test the desktop sim module (plain JVM, no device needed)
+./gradlew :Sim:build
 
-# Everything
+# All Android modules
 ./gradlew assembleDebug
 ```
 
-Use `gradlew.bat` on Windows (this project is developed on Windows).
+Always invoke it as `./gradlew`, including on Windows. A bare `gradlew` fails in
+PowerShell, which does not execute from the current directory without an explicit
+`./` prefix. `./gradlew` works in PowerShell and Git Bash alike.
 
 First build after the SDK/dependency bump will re-resolve Pedro Pathing, FTC
 Dashboard and commons-math — it needs network access to Maven Central and
@@ -48,12 +50,43 @@ Dashboard and commons-math — it needs network access to Maven Central and
 - **Pedro Pathing**: path/localizer tuners also surface through Dashboard; keep
   tuned constants in `Constants/`.
 
+## Sims and the robot profile (desktop, no robot needed)
+
+All commands go through Gradle from the repo root; arguments go in `--args="..."`.
+Paths given to the commands are relative to the `Sim/` folder. Full list:
+`./gradlew :Sim:run --args="help"`.
+
+```bash
+./gradlew :Sim:run --args="profile report"              # what is filled / missing
+./gradlew :Sim:run --args="profile set robot.mass_kg 13.4 --source measured"
+./gradlew :Sim:run --args="profile import-monitor C:/path/to/HardwareMonitor"   # after adb pull
+./gradlew :Sim:run --args="profile import-shots data/my_shots.csv"
+./gradlew :Sim:run --args="sim all --save"              # drive, localization, launcher -> profile
+./gradlew :Sim:run --args="predict shot --distance 2.0 --ball pollen"
+./gradlew :Sim:run --args="profile export --format json" # for engines without SQLite
+./gradlew :Sim:test                                     # unit tests
+```
+
+- Results and HTML reports go to `Sim/out/` (ignored by git). `profile report --html` charts
+  every curve in the profile.
+- Trying things without real data: use a scratch profile,
+  `--args="profile init --example --db out/example_profile.db"`, then pass the same `--db` to `sim`.
+  Never run `--example` against `data/robot_profile.db`.
+- After changing `Catalog.java`: `profile init` (adds new rows, keeps values) and
+  `profile docs` (regenerates `Sim/PROFILE.md`). Commit both the code and the updated DB.
+- Sims take about 20 s (`--trials` sets Monte Carlo trials per point, default 1000).
+- Missing inputs stop a sim with a list of keys and how to set them. That is expected
+  until the profile is filled in.
+
 ## Verify
 
 - Compilation is **not** proof the robot behaves — an agent cannot confirm runtime
   behavior. State clearly what was built vs. what still needs a human to run.
 - After dependency or SDK changes, do a clean build to catch resolution/merge
   issues: `./gradlew clean :TeamCode:assembleDebug`.
+- Sim changes: `./gradlew :Sim:test`, then rerun the affected sim on a scratch profile and
+  look at its `Sim/out/<sim>/report.html`. Sim numbers are only as good as the inputs: say
+  which inputs were placeholders.
 - Lint/merge problems surface in `build/reports/` — check the problems report if a
   configuration phase fails.
 
@@ -70,4 +103,4 @@ Dashboard and commons-math — it needs network access to Maven Central and
 
 - `./gradlew clean` clears module `build/` output.
 - Don't commit `.gradle/`, `build/`, or `local.properties` (already covered by
-  `.gitignore`).
+  `.gitignore`), or `Sim/out/` (covered by `Sim/.gitignore`).

@@ -3,6 +3,90 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-23 — Sim module: robot physics sims + robot profile database
+
+**Decisions (asked the user):** `Sim` is now a plain JVM desktop module (was an empty Android
+app). The game-sim data file is SQLite. The game engine is undecided, so the profile stays
+engine-neutral, with JSON/CSV export. The drivetrain is mecanum.
+
+- Build: `Sim/build.gradle.kts` uses `org.jetbrains.kotlin.jvm` (2.4.10, declared in the root
+  `build.gradle` next to the Android Kotlin plugin) + `application`, Java/Kotlin target 8 (was 17;
+  see the Java 8 note below),
+  `org.xerial:sqlite-jdbc:3.50.3.0`. `run` and `test` pass `--enable-native-access=ALL-UNNAMED`
+  because sqlite-jdbc loads a native library and JDK 24+ warns otherwise.
+- The game is **BIOBUZZ** (FTC 2026-27): POLLEN (2.8 in) and NECTAR (3.6 in) balls are launched into
+  the upward-facing HIVE CELL (20 x 14 in opening, 12 in deep). FLOWERS (4 in top opening, 21.5 in up)
+  are scored by placing. These numbers are pre-filled in the profile as `game_manual`. Not in the manual
+  text, so measure them: the CELL opening's height and tilt, ball masses, and how many balls tip a HIVE.
+- **Profile DB** (`Sim/data/robot_profile.db`, tracked): `Catalog.java` lists all 181 entries
+  (parameters, curves, 2-D surfaces, error distributions, timed actions) plus observation tables
+  for real shots and pose checks. It started with only the manual values filled. Each value records
+  its source. Priority is measured = game_manual > manual > sim > placeholder, enforced in
+  `ProfileDb`. Sim output computed from any placeholder input is saved as placeholder, so example
+  numbers can never pass for real data.
+- **Physics:**
+  - Motors use the linear DC model from datasheet points: R = V/I_stall, Kt = T_stall/(I_stall - I_free),
+    Kv from free speed, friction from free current.
+  - The battery is Voc - I*R, solved together with every motor load each step. That is what makes speed
+    and acceleration fall when current draw sags the bus.
+  - Mecanum uses the standard Jacobian, strafe efficiency, a traction cap of mu*N/sqrt(2) per wheel, and
+    rolling resistance.
+  - The flywheel uses a feedforward + P controller, and each shot takes energy from the wheel.
+  - Balls fly by RK4 with drag and Magnus. Scoring openings (`Aperture`) can face any way.
+- **Predictions:**
+  - `AimSolver` picks hood + speed by maximizing the estimated make chance under the profile's speed and
+    angle error sizes. Choosing on speed tolerance alone flipped to flat shots that were very sensitive to
+    angle error.
+  - `AimSolver.solveTable` builds the whole shooting table at once (dynamic programming over 1 deg hood
+    steps, penalising hood jumps) so neighbouring distances use the same arc. Where the best arc really
+    switches (> 6 deg), it adds two points 1 mm apart so interpolation never blends a lob with a flat shot.
+  - `ShotPredictor` is Monte Carlo over every error distribution, including localization error.
+  - `DriveTimePredictor` uses bang-bang moves (full power, then full reverse) with the switch point found
+    by bisection.
+- **Verified in the container** (javac + the real sqlite-jdbc jar; Gradle cannot run there):
+  - 32 JUnit tests pass. They cover the motor datasheet points, vacuum range = v^2/g, mecanum top
+    speed/strafe/traction limit, the shot energy balance, DB priorities, imports and export, the
+    shooting table's arc consistency, and stale-result clearing.
+  - `sim all` with example inputs gives sane numbers: 1.80 m/s top speed vs 1.70 m/s free speed at
+    12 V (the example battery is 13.2 V); traction-limited 5.85 m/s^2.
+  - The HardwareMonitor import was run on real monitor session files.
+  - **Not yet built with Gradle on the PC or fed real robot data.**
+- **Model limits** (also in `Sim/README.md`):
+  - Wheels never slip, so current while traction-limited is overstated.
+  - Bang-bang braking by reversing power draws about twice stall current per motor. Real paths are
+    slower; scale by `drive.path_overhead_factor`.
+  - Exit speed ratio and energy loss factor must be measured (slow-motion video).
+  - Bounce-outs are not modelled.
+  - `TeamCode/Sim/` (Adapters/Interfaces) is still empty. Running real OpMode code against the sim is a
+    later step.
+- **Review fixes (independent review of the first version):**
+  - Real shot/pose logs now write `*.measured_*` curves instead of overwriting the sim's curves; both are
+    kept so a game sim can prefer real data where it has enough of it.
+  - A ball coming up through the underside of the CELL no longer counts as a make.
+  - A sim result that can't be produced (NaN, no points) is saved as empty, so stale numbers from an
+    older run never survive next to new ones.
+  - Make-probability curves run 0.5 m to the field diagonal, with unreachable distances stored as 0.
+    `max_range_m` is found by bisection between grid points.
+  - Heading error from the localization sim is saved (`localization.heading_error_deg`) and used as aim
+    error in the shot Monte Carlo.
+  - Catalog sync only runs when `Catalog.java` changes (fingerprint in `meta`); SQLite busy timeout 5 s.
+  - `profile clear` works for curves, surfaces, distributions and actions too; `predict shot --battery V`
+    also prints the burst make rate on that battery.
+- **Java 8 (user request):** Android Studio showed hundreds of errors in Sim because the first
+  version used Java 9-17 features. Sim is now plain Java 8 like TeamCode: records became final
+  classes (same accessor names, `equals`/`hashCode`/`toString` kept, so the catalog fingerprint is
+  unchanged), arrow switches became classic ones, text blocks became concatenated strings, and
+  `List.of`/`Path.of`/`Files.readString`/`Stream.toList()`/`HexFormat` were swapped for Java 8 APIs.
+  `Rng.gaussian()` now uses the Marsaglia polar method (`SplittableRandom.nextGaussian` is Java 17+),
+  so Monte Carlo numbers differ slightly from before for the same seed. Checked with
+  `javac --release 8`; the help text, DB schema, catalog and PROFILE.md came out identical.
+- Removed the Android template leftovers from `Sim/` (`AndroidManifest.xml`, `res/`, `androidTest/`,
+  `proguard-rules.pro`, `ExampleUnitTest.java`); they went to the Windows Recycle Bin.
+- `./gradlew :Sim:build` passed on the PC (32 tests).
+- Sim performance: about 20 s for `sim all` on 2 cores. The aim solver dominates (about 6000 flights
+  per distance); Monte Carlo runs in parallel over distances with per-point seeds, so results don't
+  depend on the thread count.
+
 ## 2026-10-23 — Hardware monitor web dashboard
 
 - `Utility/Monitoring/MonitorWebServer` registers pages on the Robot Controller's built-in web

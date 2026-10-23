@@ -1,1 +1,3 @@
 /build
+# Sim run output (CSV, HTML reports, scratch profiles). Regenerate with ./gradlew :Sim:run
+/out

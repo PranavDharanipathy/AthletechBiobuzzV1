@@ -1,0 +1,7 @@
+# One row per localization check: drive, stop, measure where the robot really is (tape measure /
+# field tiles) and note where the robot thinks it is (telemetry). Import with:
+#   ./gradlew :Sim:run --args="profile import-poses path/to/poses.csv"
+# Required: true_x_m, true_y_m, est_x_m, est_y_m. Add distance_driven_m and/or elapsed_s since the
+# last reset so drift can be plotted against distance and time. Lines starting with # are ignored.
+recorded,elapsed_s,distance_driven_m,true_x_m,true_y_m,true_heading_deg,est_x_m,est_y_m,est_heading_deg,notes
+2026-10-24T15:10:00,45,18.5,0.61,-1.22,90,0.64,-1.19,90.8,example row - delete

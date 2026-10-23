@@ -1,0 +1,8 @@
+# One row per real shot. Import with:  ./gradlew :Sim:run --args="profile import-shots path/to/shots.csv"
+# Required: ball (pollen|nectar), distance_m (robot center to CELL opening center, horizontal), result.
+# result: make | miss_short | miss_long | miss_left | miss_right | miss_other | bounce_out
+# shot_in_burst: 1 for the first ball of a back-to-back burst, 2 for the second... leave empty for single shots.
+# Optional columns can stay empty. Lines starting with # are ignored; delete the example rows.
+recorded,ball,target,distance_m,bearing_deg,robot_speed_mps,target_rpm,actual_rpm,hood_deg,turret_error_deg,battery_v,shot_in_burst,result,notes
+2026-10-24T15:02:00,pollen,cell,1.8,0,0,2450,2438,62,0.5,12.9,,make,example row - delete
+2026-10-24T15:02:05,pollen,cell,1.8,0,0,2450,2410,62,1.2,12.9,1,miss_short,example row - delete

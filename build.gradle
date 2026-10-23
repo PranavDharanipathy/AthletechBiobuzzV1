@@ -21,6 +21,8 @@ plugins {
     // >= 2.3 and is matched to 2.4.10. Supports Gradle <= 9.5.0, AGP 8.5.2-9.1.0.
     // See DEV_NOTES.md before changing Gradle, AGP or this version.
     id 'org.jetbrains.kotlin.android' version '2.4.10' apply false
+    // Same Kotlin version for the desktop Sim module (plain JVM, not Android).
+    id 'org.jetbrains.kotlin.jvm' version '2.4.10' apply false
 }
 
 // This is now required because aapt2 has to be downloaded from the

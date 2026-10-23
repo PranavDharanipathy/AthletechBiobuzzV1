@@ -6,10 +6,10 @@ project-specific decisions, gotchas and caveats live in [DEV_NOTES.md](./DEV_NOT
 
 ## What this is
 
-`AthletechBiobuzzV1` is a **FIRST Tech Challenge (FTC)** robot project built on the
-**FTC SDK 12.0.0** (DECODE era). It is a standard `FtcRobotController` Gradle
-project with an extra desktop/off-robot **simulation** module added alongside the
-competition code.
+`AthletechBiobuzzV1` is a **FIRST Tech Challenge (FTC)** robot project for the
+**BIOBUZZ** season (2026-2027), built on the **FTC SDK 12.0.0**. It is a standard
+`FtcRobotController` Gradle project with an extra desktop **simulation** module (`Sim`)
+added alongside the competition code.
 
 ## Modules
 
@@ -17,7 +17,7 @@ competition code.
 |--------|------|---------------------|---------|
 | `FtcRobotController` | `com.android.library` | `com.qualcomm.ftcrobotcontroller` | Stock FTC SDK app shell. **Do not edit** — it is updated wholesale from upstream. |
 | `TeamCode` | `com.android.application` | `org.firstinspires.ftc.teamcode` | The robot app we actually write. OpModes, subsystems, autonomous, tuning. This is what deploys to the Robot Controller / Control Hub. |
-| `Sim` | `com.android.application` | `org.athletech.sim` | Standalone simulation app (Kotlin DSL build). Physics/field/visualization for testing logic off-robot. |
+| `Sim` | plain JVM (`org.jetbrains.kotlin.jvm` + `application`) | `org.athletech.sim` | Desktop physics sims, prediction algorithms, and the **robot profile database** (`Sim/data/robot_profile.db`) that game simulators read. Never deployed. See [Sim/README.md](./Sim/README.md). |
 
 ### `TeamCode` source layout (`org.firstinspires.ftc.teamcode`)
 
@@ -40,10 +40,26 @@ Utility/           Shared helpers (MathUtil, BetterGamepad, RobotLogger, ...)
   opmodes/         Utility OpModes (Hardware Monitor Viewer, Clear Database, example)
 ```
 
-### `Sim` source layout (`org.athletech.sim`)
+### `Sim` layout (`org.athletech.sim`)
 
 ```
-config/ field/ input/ physics/ robot/ telemetry/ undeterminables/ util/ visualization/
+Sim/
+  README.md          how to run sims and fill the profile
+  PROFILE.md         data dictionary of the profile DB (generated: profile docs)
+  data/robot_profile.db   THE robot profile (SQLite), tracked in git
+  data/templates/    CSV templates for real shot / pose logs
+  out/               reports + scratch profiles (git-ignored)
+  src/main/java/org/athletech/sim/
+    Main.java        CLI: profile ..., sim ..., predict ...
+    config/          Catalog (every profile entry), ProfileDb, ProfileSchema, RobotParams
+    physics/         motor, battery, projectile models
+    robot/           MecanumDrive, Flywheel, Launcher, Turret
+    field/           Aperture (scoring openings)
+    undeterminables/ error distributions, odometry drift
+    predict/         AimSolver, ShotPredictor (Monte Carlo), DriveTimePredictor
+    scenarios/       drive / launcher / localization sims that save results
+    input/           HardwareMonitor + shot/pose log importers
+    telemetry/ visualization/ util/
 ```
 
 ## Toolchain & build config
@@ -55,6 +71,14 @@ config/ field/ input/ physics/ robot/ telemetry/ undeterminables/ util/ visualiz
 - **JDK** 25 runs the build — this is why Gradle must be **≥ 9.1.0** (first Gradle with Java 25 support)
 - Shared config lives in `build.common.gradle`; shared dependencies/repos in
   `build.dependencies.gradle` (applied by both `FtcRobotController` and `TeamCode`).
+- **Sim** is a desktop module, also **Java 8** source/target (Kotlin `JVM_1_8`), with its own
+  dependencies in `Sim/build.gradle.kts` (`org.xerial:sqlite-jdbc`, commons-math3, JUnit 4). It must
+  not depend on the FTC SDK or Android.
+- **All Java in this repo is Java 8.** No `record`, `var`, `switch` arrows/expressions, text blocks
+  (`"""`), `instanceof` patterns, `List.of`/`Map.of`/`Set.of`, `Path.of`, `Files.readString`/
+  `writeString`, `String.isBlank`/`repeat`/`strip`, `Stream.toList()`, `Optional.orElseThrow()`
+  (no-arg), `HexFormat`. Use `Arrays.asList`, `Collections.*`, `Paths.get`, `Files.readAllBytes`/
+  `Files.write`, `collect(Collectors.toList())`, classic `switch` with `break`.
 
 Three constraints that are easy to break — all explained in DEV_NOTES:
 
@@ -108,6 +132,14 @@ Everything it needs from the SDK is already declared in `build.dependencies.grad
   expire by age (50 ms) and no loop timing is recorded.
 - Before adding a dependency, add it to `build.dependencies.gradle` (shared) unless
   it is sim-only, in which case it belongs in `Sim/build.gradle.kts`.
+- The robot profile DB is a contract with game-sim authors. Add or change entries only in
+  `Sim/.../config/Catalog.java` (naming `category.name_unit`), then run `profile init` and
+  `profile docs` so the DB and `Sim/PROFILE.md` follow. Never edit the DB schema by hand.
+- Sims must not overwrite better data: write results through `ProfileDb` with a source kind
+  (`measured` > `manual` > `sim` > `placeholder`). Never use `--force` on the shared profile
+  without the user asking.
+- Never fill `Sim/data/robot_profile.db` with `--example` placeholders. Example runs use a
+  scratch `--db out/...` file.
 
 ## Hardware monitoring
 
@@ -122,6 +154,16 @@ delete them with the **Hardware Monitor: Clear Database** OpMode, the dashboard,
 `HardwareMonitor.clearDatabase()`. Design, costs and limits
 are in [DEV_NOTES.md](./DEV_NOTES.md).
 
+## Simulation and the robot profile
+
+`Sim` simulates the robot (motors + battery sag, mecanum dynamics, flywheel launcher, ball flight,
+turret, odometry drift) and runs predictions (shooting table, Monte Carlo make probability,
+stop-to-stop move times). Its results, real-robot measurements (HardwareMonitor sessions, shot and
+pose logs) and the robot's build numbers all live in **one SQLite file**,
+`Sim/data/robot_profile.db`, which a separate game simulator reads. Every value records its source,
+and `profile report` shows what is still missing. Commands are in [AGENTOPS.md](./AGENTOPS.md);
+the data dictionary is [Sim/PROFILE.md](./Sim/PROFILE.md); model limits are in DEV_NOTES.
+
 ## Version control
 
 **Every new file you create in this repo gets added to git — don't leave work
@@ -135,7 +177,9 @@ git add <the files you just created or changed>
 Untracked files are invisible to teammates, get clobbered by branch switches, and
 Android Studio flags them as "unversioned" — if you created it on purpose, track it.
 This applies to all project sources and configuration: `*.md` docs, `*.gradle` /
-`*.gradle.kts`, `*.java` / `*.kt`, manifests, and `res/` files.
+`*.gradle.kts`, `*.java` / `*.kt`, manifests, and `res/` files. It also covers the robot
+profile, `Sim/data/robot_profile.db` (binary, tracked on purpose), and `Sim/data/templates/`.
+`Sim/out/` is ignored.
 
 **Do not add:**
 
