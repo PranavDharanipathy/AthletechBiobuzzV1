@@ -143,6 +143,79 @@ public final class ObservationImport {
         rms(db, "localization.measured_position_error_vs_time", byTime, 10, src, force, log);
     }
 
+    /**
+     * Disconnect log: one row per match (type "none") or per disconnect. Fills the measured rates,
+     * outage lengths and the rate vs humidity. Every match needs at least one row, so matches
+     * without problems count too.
+     */
+    public static void importDisconnects(ProfileDb db, Path csv, PrintStream log, boolean force) throws IOException, SQLException {
+        Csv.Table t = Csv.read(csv);
+        for (String col : Arrays.asList("match", "type")) {
+            if (!t.has(col)) throw new IOException(csv + ": missing column '" + col + "' (see data/templates/disconnects_template.csv)");
+        }
+        java.util.Set<String> types = new java.util.HashSet<>(org.athletech.sim.config.Catalog.disconnectModeIds());
+        types.add("none");
+        types.add("other");
+        List<ProfileDb.DisconnectObs> rows = new ArrayList<>();
+        int line = 1;
+        for (String[] r : t.rows) {
+            line++;
+            String match = t.str(r, "match"), type = t.str(r, "type");
+            if (match == null || match.trim().isEmpty()) throw new IOException(csv + " row " + line + ": match is empty");
+            type = type == null ? "" : type.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!types.contains(type)) throw new IOException(csv + " row " + line + ": type must be one of " + types);
+            rows.add(new ProfileDb.DisconnectObs(t.str(r, "recorded"), match.trim(), opt(t, r, "match_time_s"), type, opt(t, r, "outage_s"),
+                    opt(t, r, "humidity_pct"), t.str(r, "cause"), t.str(r, "notes")));
+        }
+        long src = db.addSource(SourceKind.MEASURED, "disconnect log " + csv.getFileName(), csv.toAbsolutePath().toString());
+        db.addDisconnects(rows, src);
+        log.println("Imported " + rows.size() + " disconnect-log rows from " + csv);
+
+        List<ProfileDb.DisconnectObs> all = db.disconnects();
+        java.util.Map<String, int[]> perMatch = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Double> humidity = new java.util.HashMap<>();
+        List<Double> outages = new ArrayList<>();
+        for (ProfileDb.DisconnectObs o : all) {
+            int[] c = perMatch.computeIfAbsent(o.match, k -> new int[1]);
+            if (!"none".equals(o.type)) {
+                c[0]++;
+                if (o.outageS != null) outages.add(o.outageS);
+            }
+            if (o.humidityPct != null && !humidity.containsKey(o.match)) humidity.put(o.match, o.humidityPct);
+        }
+        int matches = perMatch.size(), withAny = 0, events = 0;
+        TreeMap<Long, long[]> byRh = new TreeMap<>();
+        for (java.util.Map.Entry<String, int[]> e : perMatch.entrySet()) {
+            events += e.getValue()[0];
+            boolean any = e.getValue()[0] > 0;
+            if (any) withAny++;
+            Double rh = humidity.get(e.getKey());
+            if (rh != null) {
+                long[] b = byRh.computeIfAbsent((long) Math.floor(rh / 10), k -> new long[2]);
+                b[1]++;
+                if (any) b[0]++;
+            }
+        }
+        if (matches == 0) return;
+        db.setParam("disconnect.measured_per_match", (double) events / matches, null, null, src, force);
+        db.setParam("disconnect.measured_prob_per_match", (double) withAny / matches, null, null, src, force);
+        log.printf(java.util.Locale.ROOT, "  %d matches, %d disconnects: %.2f per match, %.0f%% of matches had one%n",
+                matches, events, (double) events / matches, 100.0 * withAny / matches);
+        if (outages.size() >= 2) {
+            double[] a = outages.stream().mapToDouble(Double::doubleValue).toArray();
+            db.setDist("disconnect.measured_outage_s", "empirical", Stats.mean(a), Stats.std(a), Stats.percentile(a, 0), Stats.percentile(a, 100), null, a, src, force);
+        }
+        List<double[]> pts = new ArrayList<>();
+        for (java.util.Map.Entry<Long, long[]> e : byRh.entrySet()) {
+            long k = e.getValue()[0], n = e.getValue()[1];
+            pts.add(new double[]{(e.getKey() + 0.5) * 10, (double) k / n, Stats.proportionStd(k, n), n});
+        }
+        if (!pts.isEmpty()) {
+            db.setCurve("disconnect.measured_prob_vs_humidity", pts, src, force);
+            log.println("  disconnect.measured_prob_vs_humidity: " + pts.size() + " humidity bins");
+        }
+    }
+
     private static void rms(ProfileDb db, String curve, TreeMap<Long, Stats.Running> bins, double w, long src, boolean force, PrintStream log) throws SQLException {
         List<double[]> pts = new ArrayList<>();
         for (java.util.Map.Entry<Long, Stats.Running> e : bins.entrySet()) {

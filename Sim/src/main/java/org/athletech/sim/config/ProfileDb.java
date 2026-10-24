@@ -1457,6 +1457,57 @@ public final class ProfileDb implements AutoCloseable {
         return out;
     }
 
+    /** One row of a disconnect log: a match (type "none") or one disconnect in it. */
+    public static final class DisconnectObs {
+        public final String recorded, match, type, cause, notes;
+        public final Double matchTimeS, outageS, humidityPct;
+
+        public DisconnectObs(String recorded, String match, Double matchTimeS, String type, Double outageS, Double humidityPct, String cause, String notes) {
+            this.recorded = recorded;
+            this.match = match;
+            this.matchTimeS = matchTimeS;
+            this.type = type;
+            this.outageS = outageS;
+            this.humidityPct = humidityPct;
+            this.cause = cause;
+            this.notes = notes;
+        }
+    }
+
+    public void addDisconnects(List<DisconnectObs> rows, long sourceId) throws SQLException {
+        transaction(() -> {
+            try (PreparedStatement ps = c.prepareStatement("INSERT INTO disconnect_observations(source_id, recorded, match, match_time_s, type, "
+                    + "outage_s, humidity_pct, cause, notes) VALUES (?,?,?,?,?,?,?,?,?)")) {
+                for (DisconnectObs r : rows) {
+                    ps.setLong(1, sourceId);
+                    ps.setString(2, r.recorded);
+                    ps.setString(3, r.match);
+                    setNullable(ps, 4, r.matchTimeS);
+                    ps.setString(5, r.type);
+                    setNullable(ps, 6, r.outageS);
+                    setNullable(ps, 7, r.humidityPct);
+                    ps.setString(8, r.cause);
+                    ps.setString(9, r.notes);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            touch();
+            return null;
+        });
+    }
+
+    public List<DisconnectObs> disconnects() throws SQLException {
+        List<DisconnectObs> out = new ArrayList<>();
+        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT * FROM disconnect_observations ORDER BY id")) {
+            while (rs.next()) {
+                out.add(new DisconnectObs(rs.getString("recorded"), rs.getString("match"), getNullable(rs, "match_time_s"), rs.getString("type"),
+                        getNullable(rs, "outage_s"), getNullable(rs, "humidity_pct"), rs.getString("cause"), rs.getString("notes")));
+            }
+        }
+        return out;
+    }
+
     public int count(String table) throws SQLException {
         try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return rs.next() ? rs.getInt(1) : 0;

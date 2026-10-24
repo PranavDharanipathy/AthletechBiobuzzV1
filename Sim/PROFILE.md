@@ -33,6 +33,7 @@ An empty value (`NULL`) means "not known yet". `v_missing` lists what is still n
 | `actions` | timed game action | `mean_time_s`, `std_time_s`, `min_time_s`, `success_prob` |
 | `shot_observations` | real shot (make/miss) | `ball`, `distance_m`, rpm/hood/battery..., `result` |
 | `pose_observations` | real localization check | true vs estimated pose, `distance_driven_m`, `elapsed_s` |
+| `disconnect_observations` | logged match or disconnect | `match`, `type` (none or a disconnect kind), `match_time_s`, `outage_s`, `humidity_pct`, `cause` |
 | `sources` | batch of values | `kind`, `name`, `detail` (command, sessions, assumptions), `created_utc` |
 
 Views: `v_parameters` (parameters with their source), `v_everything` (one row per entry of any type with
@@ -91,6 +92,8 @@ Whole-robot properties: mass, size, capacity.
 | parameter | `robot.max_pollen_held` | count | input | yes | POLLEN the robot can hold at once. |
 | parameter | `robot.max_nectar_held` | count | input | yes | NECTAR the robot can hold at once. |
 | parameter | `robot.electronics_current_a` | A | input |  | Current drawn by hubs, sensors and idle servos when nothing moves. |
+| parameter | `robot.contact_time_ms` | ms | input |  | How long a hit lasts (stiff aluminum about 5-15 ms, foam bumpers longer). Shorter = harder shock. |
+| parameter | `robot.wall_restitution` | fraction | input |  | Bounce off a wall: rebound speed / impact speed. |
 
 ### `battery`
 
@@ -201,6 +204,8 @@ Flywheel launcher: build, controller, per-ball behavior, and shot results.
 | parameter | `launcher.nectar.rpm_drop_per_shot_rpm` | rpm | derived |  | Flywheel speed lost firing one NECTAR at max_rpm. |
 | parameter | `launcher.nectar.recovery_time_s` | s | derived | yes | Time to win back 90% of the speed lost firing one NECTAR at max_rpm, full battery. |
 | parameter | `launcher.nectar.max_range_m` | m | derived |  | Farthest distance from which a NECTAR shot can still score in the HIVE CELL (searched up to the field diagonal). |
+| parameter | `launcher.velocity_on_hub` | flag | input |  | 1 = the flywheel velocity loop runs on the hub (setVelocity), 0 = your loop computes the power. |
+| parameter | `launcher.hub_velocity_hz` | Hz | input |  | How often the hub's own velocity loop updates (only with launcher.velocity_on_hub = 1). Not documented: estimate or measure. |
 | curve | `launcher.rpm_vs_time` | s -> rpm | derived |  | Spin-up from stopped to max_rpm, full battery. |
 | curve | `launcher.spinup_time_vs_battery_v` | V -> s | derived |  | Spin-up time to max_rpm vs battery. |
 | curve | `launcher.pollen.exit_speed_vs_rpm` | rpm -> m/s | derived |  | POLLEN exit speed vs flywheel speed. |
@@ -292,6 +297,9 @@ Field dimensions and coordinates.
 |---|---|---|---|---|---|
 | parameter | `field.size_m` | m | input | yes | **3.6575** (manual). Inside of the perimeter, 144 in square (9.2). |
 | parameter | `field.tile_size_m` | m | input | yes | **0.6095** (manual). Foam tile size, 24 in (Competition Manual section 9). |
+| parameter | `field.tile_thickness_m` | m | input |  | Foam tile thickness (measure one). |
+| parameter | `field.tile_permittivity` | ratio | input |  | Relative permittivity of the foam tiles (EVA foam is mostly air: about 1.2-2). |
+| parameter | `field.tile_surface_resistivity_ohm_at_40rh` | ohm/sq | input |  | Surface resistivity of the tiles at 40% RH: how fast rubbed-on charge creeps sideways over the foam (measure with a surface resistance meter). Empty = charge stays where it was left. |
 
 ### `match`
 
@@ -330,6 +338,9 @@ How the robot's believed position drifts from the truth.
 | parameter | `localization.vision_interval_s` | s | input |  | Typical time between vision relocalizations. |
 | parameter | `localization.position_error_after_match_m` | m | derived |  | RMS position error at the end of a full match of driving. |
 | parameter | `localization.heading_error_after_match_deg` | deg | derived |  | RMS heading error at the end of a full match. |
+| parameter | `localization.integrates_on_device` | flag | input |  | 1 = an odometry computer (goBILDA Pinpoint, SparkFun OTOS, ...) integrates the pose itself, so the loop only adds read delay; 0 = your loop integrates encoder changes. |
+| parameter | `localization.device_rate_hz` | Hz | input |  | Update rate of the odometry computer (with localization.integrates_on_device = 1). |
+| parameter | `localization.pose_exponential` | flag | input |  | When your loop integrates: 1 = arc (pose exponential) integration, 0 = straight-line steps. |
 | curve | `localization.position_error_vs_distance` | m -> m | derived | yes | How far off the believed position is after driving a distance (no vision fixes unless configured). |
 | curve | `localization.position_error_vs_time` | s -> m | derived | yes | Position error through a match of typical driving. |
 | curve | `localization.heading_error_vs_time` | s -> deg | derived | yes | Heading error through a match of typical driving. |
@@ -340,13 +351,58 @@ How the robot's believed position drifts from the truth.
 
 ### `control`
 
-Control loop timing.
+Control loop timing: what each loop spends on your code, hardware reads and writes, how random it is, and how that changes turning, driving, flywheel and localization accuracy.
 
 | type | name | unit | role | req | description |
 |---|---|---|---|---|---|
 | parameter | `control.loop_time_ms` | ms | measured | yes | Average control loop time (HardwareMonitor). |
 | parameter | `control.loop_time_p95_ms` | ms | measured |  | 95th percentile loop time (HardwareMonitor). |
+| parameter | `control.logic_time_ms` | ms | measured | yes | Time per loop spent in your own code (math, path following, telemetry), not counting hardware calls. HardwareMonitor: loop time minus hardware time. Or set by hand. |
+| parameter | `control.motor_read_ms` | ms | measured | yes | Average time of one uncached motor read (position, velocity, current). With bulk caching most reads are nearly free and the first read per hub pays for the bulk read, so this is an average. |
+| parameter | `control.motor_reads_per_loop` | count | measured | yes | Uncached motor reads per loop. |
+| parameter | `control.motor_write_ms` | ms | measured | yes | Time of one motor write (setPower, setVelocity, ...) that actually goes to the hub. |
+| parameter | `control.motor_writes_per_loop` | count | measured | yes | Motor writes per loop that reach the hub (skipping repeated identical writes lowers this). |
+| parameter | `control.servo_write_ms` | ms | measured |  | Time of one servo write that reaches the hub. |
+| parameter | `control.servo_writes_per_loop` | count | measured |  | Servo writes per loop that reach the hub. |
+| parameter | `control.sensor_read_ms` | ms | measured | yes | Time of one I2C sensor read (IMU, odometry computer, color, distance). |
+| parameter | `control.sensor_reads_per_loop` | count | measured | yes | I2C sensor reads per loop. |
+| parameter | `control.other_read_ms` | ms | measured |  | Time of one other read (digital, analog, touch, voltage sensor). |
+| parameter | `control.other_reads_per_loop` | count | measured |  | Other reads per loop. |
+| parameter | `control.io_latency_cv` | fraction | measured |  | Scatter of single hardware calls: standard deviation / mean of one call's time. |
+| parameter | `control.loop_spike_prob` | fraction | measured |  | Share of loops that take far longer than usual (garbage collection, USB hiccups, slow telemetry). HardwareMonitor: loops over 2x the median. |
+| parameter | `control.imu_rate_hz` | Hz | input |  | How often the IMU updates its heading internally. Readings in between repeat the last value. |
+| parameter | `control.heading_kp` | power/rad | input |  | Your turn-to-heading proportional gain (turn power per radian of error). Empty = the sim tunes one on a fast loop. |
+| parameter | `control.heading_kd` | power/(rad/s) | input |  | Your turn-to-heading derivative gain (power per rad/s of turn rate). |
+| parameter | `control.drive_kp` | power/m | input |  | Your drive-to-position proportional gain (power per meter of error). Empty = tuned by the sim. |
+| parameter | `control.drive_kd` | power/(m/s) | input |  | Your drive-to-position derivative gain (power per m/s). |
+| parameter | `control.turn_tolerance_deg` | deg | input |  | Heading error your code accepts as arrived. |
+| parameter | `control.drive_tolerance_m` | m | input |  | Position error your code accepts as arrived. |
+| parameter | `control.loop_time_model_ms` | ms | derived |  | Average loop time predicted from logic + reads + writes + randomness. |
+| parameter | `control.loop_time_model_p95_ms` | ms | derived |  | 95th percentile of the predicted loop time. |
+| parameter | `control.turn_settle_time_s` | s | derived | yes | Time for a 90 degree turn to settle within control.turn_tolerance_deg at this robot's loop timing. |
+| parameter | `control.turn_overshoot_deg` | deg | derived |  | Overshoot of that 90 degree turn. |
+| parameter | `control.drive_settle_time_s` | s | derived | yes | Time for a 1 m move to settle within control.drive_tolerance_m at this robot's loop timing. |
+| parameter | `control.drive_end_error_m` | m | derived |  | RMS position error over the last 0.5 s of a 3 s run of the 1 m move (steady error or a limit cycle). |
+| parameter | `control.pose_lag_ms` | ms | derived | yes | Average age of the pose when the motors act on it (read delay + loop + sensor update). Moving at v m/s, the robot is v * lag further along than it thinks. |
+| parameter | `control.flywheel_rpm_error_std_rpm` | rpm | derived |  | Flywheel speed scatter at the moment balls are fed, caused by loop timing alone. |
+| parameter | `control.timer_overshoot_ms` | ms | derived |  | How late a time-based action ends on average (a 'wait 300 ms' ends at the first loop after 300 ms): E[T^2] / (2 E[T]) for loop time T. |
+| parameter | `control.min_reliable_pulse_ms` | ms | derived |  | Shortest sensor pulse (beam break, limit switch, color change) read once per loop that is caught 99% of the time. |
+| curve | `control.loop_time_vs_sensor_reads` | count -> ms | derived |  | What-if: loop time if you read more or fewer I2C sensors per loop. |
+| curve | `control.loop_time_vs_motor_writes` | count -> ms | derived |  | What-if: loop time with more or fewer motor writes per loop. |
+| curve | `control.turn_settle_time_vs_loop_ms` | ms -> s | derived | yes | 90 degree turn settle time vs loop time (jitter scaled like this robot's). y_std = spread over runs. |
+| curve | `control.turn_overshoot_vs_loop_ms` | ms -> deg | derived |  | 90 degree turn overshoot vs loop time. |
+| curve | `control.drive_settle_time_vs_loop_ms` | ms -> s | derived | yes | 1 m move settle time vs loop time. |
+| curve | `control.drive_end_error_vs_loop_ms` | ms -> m | derived |  | RMS error over the last 0.5 s of a 3 s run of the 1 m move vs loop time. |
+| curve | `control.flywheel_rpm_error_vs_loop_ms` | ms -> rpm | derived |  | Flywheel speed scatter when balls are fed vs loop time. |
+| curve | `control.flywheel_burst_time_vs_loop_ms` | ms -> s | derived |  | Time from the first to the last ball of a full load vs loop time (the ready check runs once per loop). |
+| curve | `control.odometry_error_per_m_vs_loop_ms` | ms -> m/m | derived |  | Pose integration error from integrating once per loop while turning (only when your loop integrates odometry). |
+| curve | `control.missed_event_prob_vs_pulse_ms` | ms -> fraction | derived |  | Chance that a short sensor pulse falls between two reads, at this robot's loop timing: E[max(0, T - w)] / E[T]. |
+| curve | `control.pose_lag_vs_loop_ms` | ms -> ms | derived | yes | How old the pose is when the motors act on it. |
+| surface | `control.turn_settle_time_vs_loop_jitter` | ms, ms -> s | derived |  | 90 degree turn settle time by average loop time and loop-to-loop randomness. |
 | distribution | `control.loop_time_ms` | ms per loop | measured | yes | Loop time distribution from HardwareMonitor (empirical samples). |
+| distribution | `control.loop_jitter_ms` | ms per loop | measured |  | Random loop-to-loop variation on top of the logic time (OS scheduling, telemetry). HardwareMonitor: spread around the running median. |
+| distribution | `control.loop_spike_ms` | ms per spike | measured |  | Extra time of a spike loop (see control.loop_spike_prob). |
+| distribution | `control.flywheel_rpm_error_from_loop` | rpm per shot | derived |  | Flywheel speed error at the feed caused by loop timing (from the loop sim). Added to launcher.rpm_error unless that one is measured. |
 
 ### `driver`
 
@@ -354,6 +410,13 @@ Human driver behavior.
 
 | type | name | unit | role | req | description |
 |---|---|---|---|---|---|
+| parameter | `driver.wall_hits_per_match` | count | input | yes | Wall hits per match (deliberate squaring up, ramming, misses). |
+| parameter | `driver.wall_push_s` | s | input |  | How long the drive keeps pushing after hitting a wall or robot (stalled motors). |
+| parameter | `driver.robot_contacts_per_match` | count | input | yes | Contacts with other robots per match. |
+| parameter | `driver.intakes_per_match` | count | input |  | Game elements intaken per match. |
+| parameter | `driver.metal_element_contacts_per_match` | count | input |  | Touches of metal field structures per match. |
+| distribution | `driver.wall_hit_speed_mps` | m/s per hit | input |  | Speed into the wall on a hit. |
+| distribution | `driver.robot_contact_speed_mps` | m/s per contact | input |  | Closing speed when touching another robot. |
 | distribution | `driver.reaction_time_s` | s per decision | input |  | Driver reaction / decision delay in TELEOP. |
 
 ### `intake`
@@ -398,3 +461,154 @@ End-of-match parking.
 | type | name | unit | role | req | description |
 |---|---|---|---|---|---|
 | action | `park.loading_zone` | s | input |  | Final move into the LOADING ZONE (excluding the drive there). |
+
+### `env`
+
+Venue conditions. Humidity decides how much static builds up.
+
+| type | name | unit | role | req | description |
+|---|---|---|---|---|---|
+| parameter | `env.relative_humidity_pct` | % | input | yes | Relative humidity at the venue. Static build-up rises steeply below about 30%. Check the event's weather/HVAC or use a hygrometer. |
+
+### `esd`
+
+Static electricity (ESD): how the robot frame, its electronics, the field perimeter, the tiles and metal game elements charge up, leak and discharge.
+
+| type | name | unit | role | req | description |
+|---|---|---|---|---|---|
+| parameter | `esd.robot_capacitance_pf` | pF | measured |  | Capacitance of the robot frame to the floor. Empty = estimated from size and ground clearance (esd.robot_capacitance_estimate_pf). |
+| parameter | `esd.chassis_height_m` | m | input | yes | Height of the frame's underside above the tiles. |
+| parameter | `esd.frame_area_fraction` | fraction | input |  | Share of the robot's footprint that is metal facing the tiles (an open channel frame is about 0.3-0.6). |
+| parameter | `esd.electronics_coupling_pf` | pF | input | yes | Capacitance between the electronics (battery negative, hubs, wires) and the frame. Long wire runs along the frame raise it. |
+| parameter | `esd.electronics_capacitance_pf` | pF | input |  | Capacitance of the electronics to the floor, not through the frame. |
+| parameter | `esd.grounding_strap` | flag | input | yes | 1 = a resistive grounding strap ties the frame to the electronics (REV Resistive Grounding Strap or equivalent), 0 = none. |
+| parameter | `esd.grounding_strap_ohm` | ohm | input |  | Resistance of that strap. The REV Resistive Grounding Strap (REV-31-1269) is 470 ohm. |
+| parameter | `esd.isolation_ohm_at_40rh` | ohm | input |  | Leakage resistance frame-to-electronics without a strap, at 40% RH. |
+| parameter | `esd.wheel_leak_ohm_at_40rh` | ohm | input | yes | Leakage resistance from the frame through the wheels and tiles to the floor at 40% RH. Measure: charge the robot, watch it decay with a field meter, R = decay time / capacitance. |
+| parameter | `esd.leak_decades_per_10rh` | decades | input |  | How many tenfold steps leakage resistance drops per +10% humidity (surface resistivity of plastics and foam). |
+| parameter | `esd.drive_charge_nc_per_m_at_40rh` | nC/m | input | yes | Charge the frame gains per meter of driving at 40% RH (wheel rollers rubbing the tiles; FTC docs: wheels end up positive, tiles negative). Measure: drive a known distance, read the frame voltage with a field meter, Q = C * V. |
+| parameter | `esd.slide_charge_factor` | ratio | input |  | Extra charging when rollers slide (strafing, turning) compared with rolling straight. |
+| parameter | `esd.slip_charge_factor` | ratio | input |  | Charging per meter of wheel slip (wheels spinning or skidding on the tiles when the motors push harder than traction holds: pushing walls and robots, full-power starts and stops) compared with a meter rolled. This is how current draw feeds static. |
+| parameter | `esd.charge_humidity_scale_pct` | % | input |  | Charging falls by a factor e for every this many % of humidity above 40% (and rises below). |
+| parameter | `esd.antistatic_factor` | fraction | input |  | Field treated with anti-static spray: multiplies charging and tile charge lifetime (1 = untreated). |
+| parameter | `esd.intake_charge_nc_per_ball` | nC | input |  | Charge the robot gains per game element it intakes (rollers rubbing the ball). |
+| parameter | `esd.wall_hit_charge_nc` | nC | input |  | Charge from hitting a plastic wall panel at 1 m/s (contact charging, scales with speed). |
+| parameter | `esd.corona_onset_kv` | kV | input |  | Frame voltage where sharp edges start leaking charge into the air (corona), capping the voltage. |
+| parameter | `esd.corona_bleed_s` | s | input |  | How fast corona bleeds the excess above the onset voltage. |
+| parameter | `esd.internal_breakdown_v` | V | input | yes | Electronics-to-frame voltage that arcs inside the robot (motor cases, cable shields, screw heads near boards). |
+| parameter | `esd.coupling_fraction` | fraction | input | yes | Share of an outside discharge's energy that reaches the electronics (wiring layout, shielding). |
+| parameter | `esd.spark_impedance_ohm` | ohm | input |  | Discharge path impedance, for the peak current estimate. |
+| parameter | `esd.perimeter_capacitance_pf` | pF | input | yes | Capacitance of the field perimeter's metal to the floor. |
+| parameter | `esd.perimeter_leak_ohm_at_40rh` | ohm | input | yes | Leakage from the perimeter metal to the floor at 40% RH (feet, floor). |
+| parameter | `esd.tile_decay_s_at_40rh` | s | input | yes | Time for charge rubbed onto the tiles to fall to 37% at 40% RH. |
+| parameter | `esd.metal_contact_fraction` | fraction | input | yes | Share of wall hits where robot metal touches perimeter metal (the rest hit plastic panels). |
+| parameter | `esd.metal_element_capacitance_pf` | pF | input |  | Capacitance of metal field structures robots touch (lumped). Empty = none. |
+| parameter | `esd.metal_element_leak_ohm_at_40rh` | ohm | input |  | Leakage of those structures to the floor at 40% RH. |
+| parameter | `esd.other_robot_spread` | log-sigma | input |  | How much other robots' charging varies from yours (lognormal sigma). |
+| parameter | `esd.other_robot_strap_fraction` | fraction | input |  | Share of other robots with a grounding strap. |
+| parameter | `esd.robot_capacitance_estimate_pf` | pF | derived |  | Frame capacitance estimated from size, ground clearance and tiles. |
+| parameter | `esd.charge_generated_uc_per_match` | uC | derived |  | Charge this robot separates per match (rolling, sliding, wheel slip, intaking, wall contact), average. |
+| parameter | `esd.slip_charge_share` | fraction | derived |  | Share of that charge from wheel slip: high current pushing and launching. |
+| parameter | `esd.peak_robot_kv` | kV | derived | yes | Typical (median) highest frame voltage in a match at this humidity. |
+| parameter | `esd.discharges_per_match` | count | derived | yes | Discharges to/from the frame per match (perimeter metal, other robots, metal elements), above 1 microjoule. |
+| parameter | `esd.discharge_energy_p95_mj` | mJ | derived |  | 95th percentile energy of one discharge. |
+| parameter | `esd.internal_arcs_per_match` | count | derived |  | Arcs between electronics and frame per match. |
+| parameter | `esd.perimeter_kv_end_of_day` | kV | derived |  | Field perimeter voltage right after the last match of a competition day (median). |
+| curve | `esd.robot_kv_vs_match_time` | s -> kV | derived | yes | How the frame charges through a match at this humidity. y_std = spread between matches. |
+| curve | `esd.charging_rate_vs_battery_current` | A -> nC/s | derived |  | How fast the frame charges at each level of current draw: hard pushing and launching make the wheels slip. y_std = spread, n = 10 ms samples. |
+| curve | `esd.peak_robot_kv_vs_humidity` | % -> kV | derived | yes | Highest frame voltage per match vs humidity. |
+| curve | `esd.discharges_per_match_vs_humidity` | % -> count | derived |  | Discharges per match vs humidity. |
+| curve | `esd.perimeter_kv_vs_event_time` | h -> kV | derived |  | Field perimeter voltage through a competition day. |
+| curve | `esd.tile_charge_uc_vs_event_time` | h -> uC | derived |  | Net charge left on the tiles through a competition day. |
+| distribution | `esd.discharge_energy_mj` | mJ per discharge | derived |  | Energy of one discharge to/from the frame (lognormal fit). |
+
+### `electrical`
+
+Electrical stress on the power system during a match: brownouts, current surges and drops, impacts.
+
+| type | name | unit | role | req | description |
+|---|---|---|---|---|---|
+| parameter | `electrical.brownout_hold_ms` | ms | input |  | How long the voltage must stay under a reset threshold before a device resets. |
+| parameter | `electrical.didt_window_ms` | ms | input |  | Window for measuring how fast current changes (surge / drop). |
+| parameter | `electrical.min_bus_v` | V | derived | yes | Lowest battery voltage in a match (5th percentile over simulated matches). |
+| parameter | `electrical.peak_current_a` | A | derived |  | Highest total current in a match (median over matches). |
+| parameter | `electrical.peak_surge_a_per_ms` | A/ms | derived |  | Fastest current rise in a match (median over matches). |
+| parameter | `electrical.peak_drop_a_per_ms` | A/ms | derived |  | Fastest current drop in a match (median over matches). |
+| parameter | `electrical.peak_impact_g` | g | derived |  | Hardest impact in a match (median over matches). |
+| parameter | `electrical.brownouts_per_match` | count | derived |  | Dips below the highest reset threshold of any device per match. |
+| curve | `electrical.min_bus_v_vs_battery_v` | V -> V | derived | yes | How low the battery dips during a match vs its resting voltage. |
+
+### `disconnect`
+
+Disconnects and resets (Control Hub reboot, Expansion Hub drop, I2C lockup, USB camera, Wi-Fi): what triggers them and how long they last.
+
+| type | name | unit | role | req | description |
+|---|---|---|---|---|---|
+| parameter | `disconnect.fragility_spread` | log-sigma | input |  | Spread of every 'stress at which 50% fail' below: probability = Phi(ln(stress / stress50) / spread). |
+| parameter | `disconnect.control_hub_reboot.esd_energy_50_mj` | mJ | input |  | Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static. |
+| parameter | `disconnect.control_hub_reboot.brownout_v` | V | input |  | Battery voltage under which this resets. Empty = not affected by brownouts. REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it. |
+| parameter | `disconnect.control_hub_reboot.impact_g_50` | g | input |  | Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits. |
+| parameter | `disconnect.control_hub_reboot.surge_50_a_per_ms` | A/ms | input |  | Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected. |
+| parameter | `disconnect.control_hub_reboot.drop_50_a_per_ms` | A/ms | input |  | Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected. |
+| parameter | `disconnect.control_hub_reboot.emi_rate_per_min_at_40a` | 1/min | input |  | Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none. |
+| parameter | `disconnect.control_hub_reboot.random_rate_per_min` | 1/min | input |  | Unexplained failures per minute (radio interference, software). Empty = none. |
+| parameter | `disconnect.control_hub_reboot.per_match` | count | derived |  | Expected control hub reboot events per match. Control Hub resets: every motor and servo stops until it has rebooted and the OpMode is restarted. |
+| parameter | `disconnect.expansion_hub_drop.esd_energy_50_mj` | mJ | input |  | Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static. |
+| parameter | `disconnect.expansion_hub_drop.brownout_v` | V | input |  | Battery voltage under which this resets. Empty = not affected by brownouts. REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it. |
+| parameter | `disconnect.expansion_hub_drop.impact_g_50` | g | input |  | Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits. |
+| parameter | `disconnect.expansion_hub_drop.surge_50_a_per_ms` | A/ms | input |  | Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected. |
+| parameter | `disconnect.expansion_hub_drop.drop_50_a_per_ms` | A/ms | input |  | Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected. |
+| parameter | `disconnect.expansion_hub_drop.emi_rate_per_min_at_40a` | 1/min | input |  | Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none. |
+| parameter | `disconnect.expansion_hub_drop.random_rate_per_min` | 1/min | input |  | Unexplained failures per minute (radio interference, software). Empty = none. |
+| parameter | `disconnect.expansion_hub_drop.per_match` | count | derived |  | Expected expansion hub drop events per match. Expansion Hub loses its link (RS-485/USB): its motors, servos and sensors stop until it reconnects. |
+| parameter | `disconnect.i2c_lockup.esd_energy_50_mj` | mJ | input |  | Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static. |
+| parameter | `disconnect.i2c_lockup.brownout_v` | V | input |  | Battery voltage under which this resets. Empty = not affected by brownouts. REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it. |
+| parameter | `disconnect.i2c_lockup.impact_g_50` | g | input |  | Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits. |
+| parameter | `disconnect.i2c_lockup.surge_50_a_per_ms` | A/ms | input |  | Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected. |
+| parameter | `disconnect.i2c_lockup.drop_50_a_per_ms` | A/ms | input |  | Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected. |
+| parameter | `disconnect.i2c_lockup.emi_rate_per_min_at_40a` | 1/min | input |  | Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none. |
+| parameter | `disconnect.i2c_lockup.random_rate_per_min` | 1/min | input |  | Unexplained failures per minute (radio interference, software). Empty = none. |
+| parameter | `disconnect.i2c_lockup.per_match` | count | derived |  | Expected i2c lockup events per match. An I2C sensor (IMU, odometry computer, color/distance) stops answering: localization or sensing is lost until reset. |
+| parameter | `disconnect.usb_camera_drop.esd_energy_50_mj` | mJ | input |  | Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static. |
+| parameter | `disconnect.usb_camera_drop.brownout_v` | V | input |  | Battery voltage under which this resets. Empty = not affected by brownouts. REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it. |
+| parameter | `disconnect.usb_camera_drop.impact_g_50` | g | input |  | Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits. |
+| parameter | `disconnect.usb_camera_drop.surge_50_a_per_ms` | A/ms | input |  | Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected. |
+| parameter | `disconnect.usb_camera_drop.drop_50_a_per_ms` | A/ms | input |  | Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected. |
+| parameter | `disconnect.usb_camera_drop.emi_rate_per_min_at_40a` | 1/min | input |  | Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none. |
+| parameter | `disconnect.usb_camera_drop.random_rate_per_min` | 1/min | input |  | Unexplained failures per minute (radio interference, software). Empty = none. |
+| parameter | `disconnect.usb_camera_drop.per_match` | count | derived |  | Expected usb camera drop events per match. The USB webcam disconnects: vision (AprilTags, game-element detection) is lost until it re-enumerates. |
+| parameter | `disconnect.wifi_drop.esd_energy_50_mj` | mJ | input |  | Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static. |
+| parameter | `disconnect.wifi_drop.brownout_v` | V | input |  | Battery voltage under which this resets. Empty = not affected by brownouts. REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it. |
+| parameter | `disconnect.wifi_drop.impact_g_50` | g | input |  | Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits. |
+| parameter | `disconnect.wifi_drop.surge_50_a_per_ms` | A/ms | input |  | Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected. |
+| parameter | `disconnect.wifi_drop.drop_50_a_per_ms` | A/ms | input |  | Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected. |
+| parameter | `disconnect.wifi_drop.emi_rate_per_min_at_40a` | 1/min | input |  | Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none. |
+| parameter | `disconnect.wifi_drop.random_rate_per_min` | 1/min | input |  | Unexplained failures per minute (radio interference, software). Empty = none. |
+| parameter | `disconnect.wifi_drop.per_match` | count | derived |  | Expected wifi drop events per match. Driver Station link drops: the robot is disabled until the link is back. |
+| parameter | `disconnect.prob_per_match` | fraction | derived | yes | Chance of at least one disconnect of any kind in a match at this humidity. |
+| parameter | `disconnect.downtime_s_per_match` | s | derived | yes | Expected seconds per match the robot is fully stopped (Control Hub reboot or Wi-Fi drop). |
+| parameter | `disconnect.partial_downtime_s_per_match` | s | derived |  | Expected seconds per match with part of the robot down (Expansion Hub, I2C sensor or camera). |
+| parameter | `disconnect.measured_per_match` | count | measured |  | Disconnects per match from your log (profile import-disconnects). |
+| parameter | `disconnect.measured_prob_per_match` | fraction | measured |  | Share of logged matches with at least one disconnect. |
+| curve | `disconnect.prob_per_match_vs_humidity` | % -> fraction | derived | yes | Chance of at least one disconnect per match vs humidity, as built. |
+| curve | `disconnect.prob_per_match_vs_humidity_with_strap` | % -> fraction | derived |  | Same with a grounding strap installed. |
+| curve | `disconnect.prob_per_match_vs_humidity_no_strap` | % -> fraction | derived |  | Same without a grounding strap. |
+| curve | `disconnect.rate_vs_match_time` | s -> 1/min | derived |  | When in a match disconnects happen (static builds up, so later is worse). |
+| curve | `disconnect.prob_vs_event_match` | count -> fraction | derived |  | Chance per match through a competition day (field charge carries over). |
+| curve | `disconnect.measured_prob_vs_humidity` | % -> fraction | measured |  | From your disconnect log, 10% humidity bins (n = matches). |
+| distribution | `disconnect.control_hub_reboot.outage_s` | s per event | input |  | How long a control hub reboot lasts until everything works again. Control Hub resets: every motor and servo stops until it has rebooted and the OpMode is restarted. |
+| distribution | `disconnect.expansion_hub_drop.outage_s` | s per event | input |  | How long a expansion hub drop lasts until everything works again. Expansion Hub loses its link (RS-485/USB): its motors, servos and sensors stop until it reconnects. |
+| distribution | `disconnect.i2c_lockup.outage_s` | s per event | input |  | How long a i2c lockup lasts until everything works again. An I2C sensor (IMU, odometry computer, color/distance) stops answering: localization or sensing is lost until reset. |
+| distribution | `disconnect.usb_camera_drop.outage_s` | s per event | input |  | How long a usb camera drop lasts until everything works again. The USB webcam disconnects: vision (AprilTags, game-element detection) is lost until it re-enumerates. |
+| distribution | `disconnect.wifi_drop.outage_s` | s per event | input |  | How long a wifi drop lasts until everything works again. Driver Station link drops: the robot is disabled until the link is back. |
+| distribution | `disconnect.measured_outage_s` | s per event | measured |  | Outage lengths from your disconnect log. |
+
+### `event`
+
+A competition day on one field: how many matches it runs and how often (field charge carries over between matches).
+
+| type | name | unit | role | req | description |
+|---|---|---|---|---|---|
+| parameter | `event.matches_per_field` | count | input |  | Matches one field runs in a day. |
+| parameter | `event.match_cycle_min` | min | input |  | Time from one match start to the next on the same field. |
+| parameter | `event.field_grounded` | flag | input |  | 1 = the field perimeter is tied to building ground (its charge drains fast), 0 = floating. |

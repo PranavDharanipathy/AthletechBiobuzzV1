@@ -191,6 +191,10 @@ public final class MonitorImport {
         }
         if (amps.length > 0) log.printf("  total current: %.1f A average, %.1f A p95%n", Stats.mean(amps), Stats.percentile(amps, 95));
 
+        // what each loop is made of (system.csv + devices.csv + events.csv)
+        LoopParts parts = loopParts(sessions, log);
+        if (parts != null) parts.write(w, db, src, force, written, kept);
+
         // drive top speed from motor velocities
         double topSpeed = driveTopSpeed(db, sessions, log);
         if (Double.isFinite(topSpeed)) w.param("drive.measured_top_speed_mps", topSpeed, null);
@@ -267,6 +271,151 @@ public final class MonitorImport {
             (r == ProfileDb.Write.WRITTEN ? written : kept).add(name);
         }
     
+    }
+
+    /** Loop composition measured from HardwareMonitor sessions. */
+    static final class LoopParts {
+        double logicMs = Double.NaN, cv = Double.NaN, spikeProb = Double.NaN, jitterStd = Double.NaN, spikeMean = Double.NaN, spikeStd = Double.NaN;
+        final double[] ms = new double[CLASSES.length], perLoop = new double[CLASSES.length];
+        final boolean[] has = new boolean[CLASSES.length];
+
+        void write(Writer w, ProfileDb db, long src, boolean force, List<String> written, List<String> kept) throws SQLException {
+            w.param("control.logic_time_ms", logicMs, null);
+            for (int k = 0; k < CLASSES.length; k++) {
+                if (!has[k]) continue;
+                w.param("control." + CLASSES[k] + "_ms", ms[k], null);
+                w.param("control." + CLASSES[k] + "s_per_loop", perLoop[k], null);
+            }
+            w.param("control.io_latency_cv", cv, null);
+            w.param("control.loop_spike_prob", spikeProb, null);
+            if (Double.isFinite(jitterStd)) {
+                ProfileDb.Write r = db.setDist("control.loop_jitter_ms", "normal", 0.0, jitterStd, null, null, null, null, src, force);
+                (r == ProfileDb.Write.WRITTEN ? written : kept).add("control.loop_jitter_ms (distribution)");
+            }
+            if (Double.isFinite(spikeMean) && Double.isFinite(spikeStd)) {
+                ProfileDb.Write r = db.setDist("control.loop_spike_ms", "lognormal", spikeMean, spikeStd, null, null, null, null, src, force);
+                (r == ProfileDb.Write.WRITTEN ? written : kept).add("control.loop_spike_ms (distribution)");
+            }
+        }
+    }
+
+    /** Hardware call classes, matching the control.<class>_ms / control.<class>s_per_loop entries. */
+    static final String[] CLASSES = {"motor_read", "motor_write", "servo_write", "sensor_read", "other_read"};
+
+    /** Which class a call on a device of {@code type} falls in (-1 = not counted). */
+    static int classOf(String type, boolean read) {
+        if (type == null) return -1;
+        switch (type) {
+            case "DcMotor":
+            case "DcMotorEx":
+                return read ? 0 : 1;
+            case "Servo":
+            case "CRServo":
+                return read ? -1 : 2;
+            case "IMU":
+            case "ColorSensor":
+            case "DistanceSensor":
+                return read ? 3 : -1;
+            case "TouchSensor":
+            case "DigitalChannel":
+            case "AnalogInput":
+            case "VoltageSensor":
+                return read ? 4 : -1;
+            default:
+                return -1;
+        }
+    }
+
+    /**
+     * Logic time (loop minus hardware time), per-class call times and counts per loop (uncached
+     * reads, non-repeated writes), call-time scatter, loop jitter and spikes. Null if the sessions
+     * have no loop columns.
+     */
+    static LoopParts loopParts(List<Session> sessions, PrintStream log) throws IOException {
+        List<Double> logic = new ArrayList<>(), jitter = new ArrayList<>(), spikes = new ArrayList<>();
+        long loopSamples = 0, spikeCount = 0;
+        List<List<Double>> lat = new ArrayList<>();
+        for (int k = 0; k < CLASSES.length; k++) lat.add(new ArrayList<Double>());
+        double loopsWithEvents = 0;
+        for (Session s : sessions) {
+            Csv.Table sys = Csv.read(s.dir().resolve("system.csv"));
+            if (sys.has("loop_avg_ms") && sys.has("hw_ms_per_loop")) {
+                for (String[] row : sys.rows) {
+                    double l = sys.num(row, "loop_avg_ms"), h = sys.num(row, "hw_ms_per_loop");
+                    if (Double.isFinite(l) && Double.isFinite(h) && l > 0) logic.add(Math.max(0, l - h));
+                }
+            }
+            // jitter and spikes from the per-row last-loop samples, against a running median
+            double[] lm = s.loopMs();
+            int win = 10;
+            for (int i = 0; i < lm.length; i++) {
+                double[] around = Arrays.copyOfRange(lm, Math.max(0, i - win), Math.min(lm.length, i + win + 1));
+                double med = Stats.percentile(around, 50);
+                if (!(med > 0)) continue;
+                loopSamples++;
+                if (lm[i] > 2 * med) {
+                    spikeCount++;
+                    spikes.add(lm[i] - med);
+                } else {
+                    jitter.add(lm[i] - med);
+                }
+            }
+            Path dev = s.dir().resolve("devices.csv"), ev = s.dir().resolve("events.csv");
+            if (!Files.isRegularFile(dev) || !Files.isRegularFile(ev)) continue;
+            java.util.Map<String, String> types = new java.util.HashMap<>();
+            Csv.Table dt = Csv.read(dev);
+            for (String[] row : dt.rows) types.put(dt.str(row, "name"), dt.str(row, "type"));
+            Csv.Table et = Csv.read(ev);
+            double first = Double.NaN, last = Double.NaN;
+            for (String[] row : et.rows) {
+                double t = et.num(row, "t_s");
+                if (Double.isFinite(t)) {
+                    if (Double.isNaN(first)) first = t;
+                    last = t;
+                }
+                boolean read = "R".equals(et.str(row, "kind"));
+                boolean flagged = "1".equals(et.str(row, "flag")); // cache hit (read) or repeated value (write): no hub traffic
+                if (flagged) continue;
+                int k = classOf(types.get(et.str(row, "device")), read);
+                double us = et.num(row, "latency_us");
+                if (k >= 0 && Double.isFinite(us)) lat.get(k).add(us / 1000);
+            }
+            double meanLoop = sys.has("loop_avg_ms") ? Stats.mean(Arrays.stream(sys.column("loop_avg_ms")).filter(Double::isFinite).toArray()) : Stats.mean(lm);
+            if (Double.isFinite(first) && last > first && meanLoop > 0) loopsWithEvents += (last - first) * 1000 / meanLoop;
+        }
+        if (logic.isEmpty() && loopsWithEvents == 0) return null;
+        LoopParts p = new LoopParts();
+        if (!logic.isEmpty()) p.logicMs = Stats.mean(logic.stream().mapToDouble(Double::doubleValue).toArray());
+        double cvSum = 0, cvW = 0;
+        for (int k = 0; k < CLASSES.length; k++) {
+            double[] a = lat.get(k).stream().mapToDouble(Double::doubleValue).toArray();
+            if (a.length == 0 || loopsWithEvents <= 0) continue;
+            p.has[k] = true;
+            p.ms[k] = Stats.mean(a);
+            p.perLoop[k] = a.length / loopsWithEvents;
+            if (a.length > 1 && p.ms[k] > 0) {
+                cvSum += Stats.std(a) / p.ms[k] * a.length;
+                cvW += a.length;
+            }
+        }
+        if (cvW > 0) p.cv = cvSum / cvW;
+        if (loopSamples > 0) p.spikeProb = (double) spikeCount / loopSamples;
+        if (jitter.size() > 2) p.jitterStd = Stats.std(jitter.stream().mapToDouble(Double::doubleValue).toArray());
+        if (spikes.size() > 2) {
+            double[] a = spikes.stream().mapToDouble(Double::doubleValue).toArray();
+            p.spikeMean = Stats.mean(a);
+            p.spikeStd = Stats.std(a);
+        }
+        StringBuilder sb = new StringBuilder("  loop parts: logic " + fmt(p.logicMs) + " ms");
+        for (int k = 0; k < CLASSES.length; k++) {
+            if (p.has[k]) sb.append(", ").append(CLASSES[k].replace('_', ' ')).append(' ').append(fmt(p.perLoop[k])).append("/loop x ").append(fmt(p.ms[k])).append(" ms");
+        }
+        log.println(sb);
+        return p;
+    }
+
+    private static String fmt(double v) {
+        return Csv.fmt(round(v, 3));
     }
 
     static Session load(Path dir) throws IOException {

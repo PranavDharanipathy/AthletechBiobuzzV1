@@ -19,8 +19,11 @@ import org.athletech.sim.physics.MotorSpec;
  * </pre>
  * {@code eta} (strafe efficiency) lumps roller slip/friction: strafing needs 1/eta more wheel
  * speed and gives eta of the force. Each wheel's force is capped by traction, mu*N/sqrt(2) (the
- * 45-degree rollers push diagonally). Simplification: wheels never spin faster than the chassis
- * allows (no wheel-slip dynamics); a capped wheel just delivers less force.
+ * 45-degree rollers push diagonally). A wheel whose motor pushes harder than that slips: it spins
+ * (or skids) until the motor's torque falls to the traction limit (quasi-static: wheel and gearbox
+ * inertia are small), so a slipping motor draws the current of that faster or slower speed, not
+ * stall current, and {@link #slipSpeedMean()} says how fast the rollers rub the tiles (static
+ * charging).
  */
 public final class MecanumDrive {
     public static final int FL = 0, FR = 1, BL = 2, BR = 3;
@@ -121,6 +124,7 @@ public final class MecanumDrive {
     private double x, y, heading, vx, vy, omega;
     private final double[] wheelCurrent = new double[4];
     private final boolean[] slipping = new boolean[4];
+    private final double[] wheelSlip = new double[4];
     private double busVolts, batteryCurrent;
 
     public MecanumDrive(Params p) {
@@ -179,18 +183,22 @@ public final class MecanumDrive {
 
         busVolts = battery.solve(v -> {
             double total = otherBatteryCurrentA;
-            for (int i = 0; i < 4; i++) total += motors[i].batteryCurrent(motors[i].current(v, shaft[i]));
+            for (int i = 0; i < 4; i++) {
+                double w = shaftSpeed(i, v, shaft[i]);
+                total += motors[i].batteryCurrent(motors[i].current(v, w));
+            }
             return total;
         });
         batteryCurrent = battery.lastCurrent();
 
         double[] f = new double[4];
         for (int i = 0; i < 4; i++) {
-            double cur = motors[i].current(busVolts, shaft[i]);
+            double w = shaftSpeed(i, busVolts, shaft[i]);
+            double cur = motors[i].current(busVolts, w);
             wheelCurrent[i] = cur;
-            double wheelTorque = motors[i].torque(cur, shaft[i]) * p.gearRatio();
-            double force = wheelTorque / p.wheelRadiusM();
-            slipping[i] = Math.abs(force) > tractionLimit;
+            double force = motors[i].torque(cur, w) * p.gearRatio() / p.wheelRadiusM();
+            slipping[i] = w != shaft[i];
+            wheelSlip[i] = (w - shaft[i]) / p.gearRatio() * p.wheelRadiusM();
             f[i] = slipping[i] ? Math.copySign(tractionLimit, force) : force;
         }
         double fx = f[FL] + f[FR] + f[BL] + f[BR];
@@ -233,6 +241,43 @@ public final class MecanumDrive {
         battery.drain(dt);
     }
 
+    /**
+     * Output-shaft speed of wheel {@code i} at bus voltage {@code v}: the no-slip speed, or, when the
+     * motor would push harder than traction allows, the speed where its force equals the limit.
+     */
+    private double shaftSpeed(int i, double v, double noSlip) {
+        double f0 = motors[i].torque(motors[i].current(v, noSlip), noSlip) * p.gearRatio() / p.wheelRadiusM();
+        if (!(Math.abs(f0) > tractionLimit)) return noSlip;
+        double dir = Math.signum(f0);
+        return motors[i].speedForTorque(v, dir * tractionLimit * p.wheelRadiusM() / p.gearRatio(), noSlip, dir);
+    }
+
+    // ------------------------------------------------------------------ contacts
+
+    /** Moves the robot without changing its velocity (used to keep it inside the field walls). */
+    public void moveTo(double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    /**
+     * Hits a surface whose normal (nx, ny) points back into the field: the velocity component into
+     * the surface reverses and shrinks by {@code restitution}. Returns the change in speed along
+     * the normal (m/s, 0 if the robot was moving away).
+     */
+    public double collide(double nx, double ny, double restitution) {
+        double n = Math.hypot(nx, ny);
+        if (n == 0) return 0;
+        nx /= n;
+        ny /= n;
+        double vn = vx * nx + vy * ny;
+        if (vn >= 0) return 0;
+        double dv = -(1 + restitution) * vn;
+        vx += dv * nx;
+        vy += dv * ny;
+        return dv;
+    }
+
     // ------------------------------------------------------------------ state
 
     public double x() { return x; }
@@ -262,5 +307,15 @@ public final class MecanumDrive {
     public boolean anySlipping() {
         for (boolean b : slipping) if (b) return true;
         return false;
+    }
+
+    /** How fast wheel {@code i}'s surface slides over the tiles in the last step, m/s (0 = rolling). */
+    public double wheelSlip(int i) { return Math.abs(wheelSlip[i]); }
+
+    /** Average sliding speed of the four wheels against the tiles, m/s. */
+    public double slipSpeedMean() {
+        double t = 0;
+        for (double s : wheelSlip) t += Math.abs(s);
+        return t / 4;
     }
 }

@@ -161,6 +161,77 @@ public class ProfileDbTest {
     }
 
     @Test
+    public void monitorImportMeasuresLoopParts() throws Exception {
+        Path s = dir.resolve("HardwareMonitor/sessions/20261023-020000_Loop");
+        Files.createDirectories(s);
+        StringBuilder sys = new StringBuilder("t_s,loop_ms,loop_avg_ms,hw_ms_per_loop,battery_v,total_current_a\n");
+        for (int i = 0; i < 400; i++) {
+            double loop = i % 100 == 50 ? 40 : 10; // a few spikes
+            sys.append(i * 0.1).append(',').append(loop).append(",10,6,12.5,5\n");
+        }
+        Files.write(s.resolve("system.csv"), sys.toString().getBytes(StandardCharsets.UTF_8));
+        Files.write(s.resolve("devices.csv"), ("id,name,type,device_class,cache_reads,connection\n"
+                + "0,lf,DcMotorEx,X,1,hub\n1,imu,IMU,X,0,i2c\n2,claw,Servo,X,0,hub\n").getBytes(StandardCharsets.UTF_8));
+        StringBuilder ev = new StringBuilder("t_s,device_id,device,op,kind,flag,latency_us\n");
+        // 400 loops of 10 ms: 2 motor writes (1 repeated), 1 IMU read, 1 cached + 1 real motor read per loop
+        for (int i = 0; i < 400; i++) {
+            double t = i * 0.01;
+            ev.append(t).append(",0,lf,setPower,W,0,1500\n");
+            ev.append(t).append(",0,lf,setPower,W,1,2\n");
+            ev.append(t).append(",1,imu,getRobotYawPitchRollAngles,R,0,2500\n");
+            ev.append(t).append(",0,lf,getCurrentPosition,R,0,800\n");
+            ev.append(t).append(",0,lf,getVelocity,R,1,1\n");
+        }
+        Files.write(s.resolve("events.csv"), ev.toString().getBytes(StandardCharsets.UTF_8));
+        MonitorImport.run(db, dir.resolve("HardwareMonitor"), quiet, false, dir.resolve("out"));
+        assertEquals(4, db.value("control.logic_time_ms"), 1e-9);
+        assertEquals(1.5, db.value("control.motor_write_ms"), 1e-9);
+        assertEquals(2.5, db.value("control.sensor_read_ms"), 1e-9);
+        assertEquals(0.8, db.value("control.motor_read_ms"), 1e-9);
+        assertEquals(1.0, db.value("control.motor_writes_per_loop"), 0.03);
+        assertEquals(1.0, db.value("control.sensor_reads_per_loop"), 0.03);
+        assertEquals(0.01, db.value("control.loop_spike_prob"), 0.005);
+        assertEquals(SourceKind.MEASURED, db.param("control.motor_write_ms").sourceKind());
+    }
+
+    @Test
+    public void disconnectLogBecomesMeasuredRates() throws Exception {
+        Path f = dir.resolve("disconnects.csv");
+        Files.write(f, ("match,type,outage_s,humidity_pct\nQ1,none,,25\nQ2,i2c_lockup,4,25\nQ2,usb_camera_drop,3,25\nQ3,none,,55\nQ4,none,,55\n")
+                .getBytes(StandardCharsets.UTF_8));
+        ObservationImport.importDisconnects(db, f, quiet, false);
+        assertEquals(0.5, db.value("disconnect.measured_per_match"), 1e-12);
+        assertEquals(0.25, db.value("disconnect.measured_prob_per_match"), 1e-12);
+        ProfileDb.CurveRow c = db.curve("disconnect.measured_prob_vs_humidity");
+        assertEquals(2, c.points().size());
+        assertEquals(0.5, c.points().get(0)[1], 1e-12);
+        assertEquals(0, c.points().get(1)[1], 1e-12);
+        assertEquals(5, db.count("disconnect_observations"));
+        Files.write(f, "match,type\nQ9,coffee_spill\n".getBytes(StandardCharsets.UTF_8));
+        try {
+            ObservationImport.importDisconnects(db, f, quiet, false);
+            fail("unknown disconnect type must be rejected");
+        } catch (java.io.IOException e) {
+            assertTrue(e.getMessage().contains("row 2"));
+        }
+    }
+
+    @Test
+    public void schemaOneUpgradesToTwo() throws Exception {
+        Path p = dir.resolve("old.db");
+        ProfileDb.open(p).close();
+        try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + p.toAbsolutePath());
+             java.sql.Statement st = c.createStatement()) {
+            st.execute("DROP TABLE disconnect_observations");
+            st.execute("PRAGMA user_version = 1");
+        }
+        try (ProfileDb old = ProfileDb.open(p)) {
+            assertEquals(0, old.count("disconnect_observations"));
+            assertEquals("2", old.meta("schema_version"));
+        }
+    }
+
+    @Test
     public void shotLogBecomesMeasuredMakeProbability() throws Exception {
         StringBuilder csv = new StringBuilder("ball,distance_m,result,target_rpm,actual_rpm\n");
         for (int i = 0; i < 20; i++) csv.append("pollen,2.0,").append(i < 15 ? "make" : "miss_short").append(",3000,").append(2990 + i).append('\n');

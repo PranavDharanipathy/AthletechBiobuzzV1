@@ -52,7 +52,8 @@ public final class HtmlReport {
         for (List<String> r : rows) {
             body.append("<tr>");
             for (String c : r) {
-                boolean num = c != null && c.matches("-?[0-9.,eE+-]+( .*)?") && !c.isEmpty();
+                // a number, optionally followed by one short unit ("12.5", "3 V"); "90 deg turn" is a label
+                boolean num = c != null && !c.isEmpty() && c.matches("[-+<]?[0-9][0-9.,eE+-]*( [^ ]{1,8})?");
                 body.append(num ? "<td class=\"n\">" : "<td>").append(SvgChart.esc(c)).append("</td>");
             }
             body.append("</tr>");

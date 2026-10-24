@@ -17,7 +17,9 @@ import org.athletech.sim.robot.Launcher;
 import org.athletech.sim.robot.MecanumDrive;
 import org.athletech.sim.scenarios.DriveScenario;
 import org.athletech.sim.scenarios.LauncherScenario;
+import org.athletech.sim.scenarios.EsdScenario;
 import org.athletech.sim.scenarios.LocalizationScenario;
+import org.athletech.sim.scenarios.LoopTimingScenario;
 import org.athletech.sim.scenarios.SimContext;
 import org.athletech.sim.utility.Args;
 import org.athletech.sim.utility.Csv;
@@ -56,6 +58,8 @@ public final class Main {
             "  profile import-monitor <folder>   HardwareMonitor sessions (adb pull /sdcard/FIRST/data/HardwareMonitor)\n" +
             "  profile import-shots <file.csv>   real shot results  (template: data/templates/shots_template.csv)\n" +
             "  profile import-poses <file.csv>   real localization checks (template: data/templates/poses_template.csv)\n" +
+            "  profile import-disconnects <file.csv>   disconnect log, one row per match or disconnect\n" +
+            "                                    (template: data/templates/disconnects_template.csv)\n" +
             "  profile export [--format json|csv] [--file path]   for programs that do not read SQLite\n" +
             "  profile docs                      regenerate PROFILE.md (the data dictionary)\n" +
             "\n" +
@@ -63,12 +67,19 @@ public final class Main {
             "  sim drive          drivetrain: top speed, acceleration, current, move times, battery effect\n" +
             "  sim launcher       flywheel spin-up/recovery, shooting table, Monte Carlo make probability\n" +
             "  sim localization   odometry drift over a match\n" +
+            "  sim loop           loop timing: what reads/writes/your code cost per loop, and what slow or uneven\n" +
+            "                     loops cost in turn/move settle time, flywheel speed error and pose lag\n" +
+            "  sim esd            static charge on robot, field and tiles; discharges; brownouts, current surges/drops,\n" +
+            "                     impacts; disconnect chance per match vs humidity; a competition day on one field\n" +
             "  sim all            all of the above, in order\n" +
             "\n" +
             "PREDICTIONS (quick answers from the current profile)\n" +
             "  predict shot --distance D [--ball pollen|nectar] [--battery V] [--bearing DEG]\n" +
             "  predict drive --distance D [--strafe] [--battery V]\n" +
             "  predict turn --angle DEG [--battery V]\n" +
+            "  predict loop [--sensor-reads N --motor-writes N --motor-reads N --servo-writes N --logic MS | --loop-ms MS]\n" +
+            "                                    loop time and turn/move accuracy now and with those changes\n" +
+            "  predict disconnect [--humidity RH] [--strap 0|1]   chance of a disconnect per match\n" +
             "\n" +
             "OPTIONS\n" +
             "  --db PATH       profile database (default data/robot_profile.db)\n" +
@@ -240,6 +251,10 @@ public final class Main {
                     ObservationImport.importShots(db, Paths.get(need(a.pos(2), "profile import-shots <file.csv>")), out, force);
                     return 0;
                 }
+                case "import-disconnects": {
+                    ObservationImport.importDisconnects(db, Paths.get(need(a.pos(2), "profile import-disconnects <file.csv>")), out, force);
+                    return 0;
+                }
                 case "import-poses": {
                     ObservationImport.importPoses(db, Paths.get(need(a.pos(2), "profile import-poses <file.csv>")), out, force);
                     return 0;
@@ -339,16 +354,26 @@ public final class Main {
                 case "localization":
                     LocalizationScenario.run(ctx);
                     break;
+                case "loop":
+                    LoopTimingScenario.run(ctx);
+                    break;
+                case "esd":
+                    EsdScenario.run(ctx);
+                    break;
                 case "all": {
                     DriveScenario.run(ctx);
                     out.println();
                     LocalizationScenario.run(ctx); // before the launcher: it produces the pose error the shots use
                     out.println();
+                    LoopTimingScenario.run(ctx);   // before the launcher: it produces the loop-timing rpm error
+                    out.println();
                     LauncherScenario.run(ctx);
+                    out.println();
+                    EsdScenario.run(ctx);
                     break;
                 }
                 default: {
-                    out.println("Unknown sim '" + sub + "' (drive, launcher, localization, all).");
+                    out.println("Unknown sim '" + sub + "' (drive, launcher, localization, loop, esd, all).");
                     return 1;
                 }
             }
@@ -376,9 +401,7 @@ public final class Main {
                     Aperture cell = rp.cell();
                     Battery probe = Double.isNaN(volts) ? null : rp.battery(volts);
                     double held = Double.isNaN(volts) ? 1 : rp.req("robot.max_" + ball + "_held");
-                    ShotPredictor.Errors e = new ShotPredictor.Errors(rp.dist("launcher.rpm_error"), rp.dist("launcher.hood_error_deg"),
-                            rp.dist("launcher.exit_speed_variation"), rp.dist("launcher.exit_angle_variation_deg"), rp.dist("turret.aim_error_deg"),
-                            rp.dist("localization.pose_error_m"), rp.dist("localization.heading_error_deg"));
+                    ShotPredictor.Errors e = LauncherScenario.errors(rp);
                     rp.requireAll();
                     Launcher L = new Launcher(lp);
                     AimSolver.Solution s = AimSolver.solve(L, ball, cell, dist, bearing, e.speedSigma(L, ball), e.angleSigmaDeg());
@@ -425,8 +448,12 @@ public final class Main {
                     if (!rp.placeholderInputs().isEmpty()) out.println("  uses PLACEHOLDER inputs: " + String.join(", ", rp.placeholderInputs()));
                     return 0;
                 }
+                case "loop":
+                    return LoopTimingScenario.predict(db, a, out);
+                case "disconnect":
+                    return EsdScenario.predict(db, a, out);
                 default: {
-                    out.println("Unknown prediction '" + sub + "' (shot, drive, turn).");
+                    out.println("Unknown prediction '" + sub + "' (shot, drive, turn, loop, disconnect).");
                     return 1;
                 }
             }

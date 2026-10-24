@@ -114,9 +114,7 @@ public final class LauncherScenario {
         double other = rp.electronicsCurrent();
         int[] held = new int[Catalog.BALLS.size()];
         for (int i = 0; i < held.length; i++) held[i] = (int) Math.round(rp.req("robot.max_" + Catalog.BALLS.get(i) + "_held"));
-        ShotPredictor.Errors errors = new ShotPredictor.Errors(rp.dist("launcher.rpm_error"), rp.dist("launcher.hood_error_deg"),
-                rp.dist("launcher.exit_speed_variation"), rp.dist("launcher.exit_angle_variation_deg"), rp.dist("turret.aim_error_deg"),
-                rp.dist("localization.pose_error_m"), rp.dist("localization.heading_error_deg"));
+        ShotPredictor.Errors errors = errors(rp);
         Turret turret = rp.turret();
         double[] dists = distances(Math.sqrt(2) * rp.opt("field.size_m", 3.6575));
         rp.requireAll();
@@ -288,11 +286,28 @@ public final class LauncherScenario {
         r.bullets(Arrays.asList("flywheel speed error: " + errors.rpm().describe(), "hood error: " + errors.hoodDeg().describe(),
                 "exit speed variation: " + errors.exitSpeedFrac().describe(), "exit angle variation: " + errors.exitAngleDeg().describe(),
                 "turret aim error: " + errors.aimDeg().describe(), "robot position error (per axis): " + errors.poseAxisM().describe(),
-                "robot heading error: " + errors.headingDeg().describe()));
+                "robot heading error: " + errors.headingDeg().describe(),
+                "flywheel speed error from loop timing: " + (errors.loopRpm().isKnown() ? errors.loopRpm().describe()
+                        : "not added (run sim loop first, or launcher.rpm_error is measured and already includes it)")));
         r.write(ctx.outDir.resolve("launcher/report.html"));
         spin.write(ctx.outDir.resolve("launcher/spinup.csv"));
         ctx.log.println("  report: " + ctx.outDir.resolve("launcher/report.html"));
         save.report();
+    }
+
+    /**
+     * The shot error model from the profile. Loop-timing flywheel error (from the loop sim) is added
+     * unless launcher.rpm_error is measured, because real shot logs already include it.
+     */
+    public static ShotPredictor.Errors errors(RobotParams rp) throws java.sql.SQLException {
+        org.athletech.sim.config.ProfileDb.DistRow measured = rp.db().dist("launcher.rpm_error");
+        boolean rpmMeasured = measured != null && measured.hasData() && measured.sourceKind() == org.athletech.sim.config.SourceKind.MEASURED;
+        org.athletech.sim.config.ProfileDb.DistRow loop = rp.db().dist("control.flywheel_rpm_error_from_loop");
+        org.athletech.sim.undeterminables.Distribution loopRpm = !rpmMeasured && loop != null && loop.hasData()
+                ? rp.dist("control.flywheel_rpm_error_from_loop") : org.athletech.sim.undeterminables.Distribution.none("loop rpm", "rpm");
+        return new ShotPredictor.Errors(rp.dist("launcher.rpm_error"), rp.dist("launcher.hood_error_deg"),
+                rp.dist("launcher.exit_speed_variation"), rp.dist("launcher.exit_angle_variation_deg"), rp.dist("turret.aim_error_deg"),
+                rp.dist("localization.pose_error_m"), rp.dist("localization.heading_error_deg"), loopRpm);
     }
 
     /** 0.5 m up to the field diagonal (the farthest any shot on the field can be), every 0.2 m. */

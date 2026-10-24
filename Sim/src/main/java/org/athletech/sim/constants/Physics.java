@@ -9,6 +9,10 @@ public final class Physics {
     public static final double G = 9.80665;
     /** Air density at 20 C, sea level, kg/m^3. */
     public static final double AIR_DENSITY = 1.204;
+    /** Vacuum permittivity, F/m. */
+    public static final double EPSILON_0 = 8.8541878128e-12;
+    /** Smallest voltage that can spark across any air gap (Paschen minimum, air), V. */
+    public static final double PASCHEN_MIN_V = 327;
 
     public static final double INCH = 0.0254;
     public static final double KG_CM_TO_NM = 0.0980665;

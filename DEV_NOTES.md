@@ -3,6 +3,47 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-23 — Sim undeterminables: loop timing, static charge, disconnects
+
+- **Loop timing** (`LoopTimingModel`, `LoopControlSim`, `sim loop`): a loop = logic + uncached motor
+  reads + I2C sensor reads + other reads + motor/servo writes (each call lognormal around its mean),
+  plus jitter and rare spikes. Sensors are read at the end of the read phase, motors commanded mid
+  write phase; IMU / odometry computer are sample-and-hold at their own rates. PD turn and drive
+  moves and the flywheel's ready-check-and-feed run once per loop against the full physics. Also:
+  odometry integration error (straight vs arc steps), pose age, timer overshoot
+  (E[T^2] / 2E[T]) and the chance of missing a sensor pulse of length w (E[(T - w)+] / E[T]).
+  Loop-timing flywheel error feeds `ShotPredictor` unless `launcher.rpm_error` is measured.
+  `MonitorImport` fills the loop's parts from HardwareMonitor `system.csv` / `devices.csv` /
+  `events.csv` (cache hits and repeated writes do not count as hub calls).
+- **Static charge** (`RobotCharge`, `TileChargeGrid`, `ChargeSim`, `Electrostatics`, `sim esd`):
+  each robot is two conductors (frame, electronics) with a Maxwell capacitance matrix, leakage
+  integrated implicitly (stable for the 470 ohm strap's sub-microsecond time constant). Charging per
+  meter rolled, x factor when sliding, x factor per meter of wheel slip; humidity scales charging
+  (e-fold per `esd.charge_humidity_scale_pct`) and leakage (decades per 10% RH). Tile charge sits on
+  a 24x24 grid, leaks to the floor and creeps sideways (D = 1 / (rho_s * eps0 * eps_r / t)), and
+  induces charge on a robot above it. Discharges bring two conductors to one potential, releasing
+  1/2 dV dq. Field charge carries over between matches (competition day). Every coulomb is booked:
+  `ChargeSim.Ledger` for this robot and a whole-field balance per match; a test holds both to 1e-9.
+- **Wheel slip** in `MecanumDrive` (quasi-static): a wheel whose motor out-pushes traction spins or
+  skids to the speed where motor torque = traction limit and draws that current. This lowered the
+  example robot's peak drive current from 33 A to 17 A (it was overstated before; motion is
+  unchanged because the force was already capped). Slip feeds static charging, which is how current
+  draw reaches ESD.
+- **Disconnects** (`Disconnects`, `MatchDriver`): one full-physics match gives bus voltage and current
+  every 1 ms and every hit (wall rams with restitution, pushes with stalled motors, robot contacts).
+  Each mode (Control Hub reboot, Expansion Hub drop, I2C lockup, USB camera drop, Wi-Fi drop) has
+  lognormal fragility in discharge energy, impact g, current rise/drop rate; a dip under its reset
+  voltage for the hold time always resets it; motor noise ~ I^2 and random rates add Poisson events.
+  Exact P(at least one) per match plus a sampled timeline with outages.
+- Real numbers used as examples: the REV Resistive Grounding Strap is 470 ohm (REV-31-1269 product
+  page); REV specifies 8 V minimum operating input for the hubs (actual reset point unpublished).
+  FIRST's ESD guide: sliding wheels charge the frame faster, wheels end up positive and tiles negative,
+  ESD on the Control Hub's USB 2.0 port can drop Wi-Fi, I2C ports can be hit through sensor cables.
+  Every other ESD/disconnect coefficient is a placeholder until measured (field meter + disconnect
+  log, `profile import-disconnects`).
+- Profile schema is now version 2 (`disconnect_observations`); older files upgrade on open.
+- The `util` package was renamed `utility` (in Android Studio, before this work).
+
 ## 2026-10-23 — Sim module: robot physics sims + robot profile database
 
 **Decisions (asked the user):** `Sim` is now a plain JVM desktop module (was an empty Android
@@ -18,7 +59,7 @@ engine-neutral, with JSON/CSV export. The drivetrain is mecanum.
   the upward-facing HIVE CELL (20 x 14 in opening, 12 in deep). FLOWERS (4 in top opening, 21.5 in up)
   are scored by placing. These numbers are pre-filled in the profile as `game_manual`. Not in the manual
   text, so measure them: the CELL opening's height and tilt, ball masses, and how many balls tip a HIVE.
-- **Profile DB** (`Sim/data/robot_profile.db`, tracked): `Catalog.java` lists all 181 entries
+- **Profile DB** (`Sim/data/robot_profile.db`, tracked): `Catalog.java` lists every entry (181 at first, 359 since the undeterminables)
   (parameters, curves, 2-D surfaces, error distributions, timed actions) plus observation tables
   for real shots and pose checks. It started with only the manual values filled. Each value records
   its source. Priority is measured = game_manual > manual > sim > placeholder, enforced in

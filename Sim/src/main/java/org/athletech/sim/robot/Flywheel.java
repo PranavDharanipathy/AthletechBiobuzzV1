@@ -94,6 +94,7 @@ public final class Flywheel {
     private double targetOmega;
     private double busVolts;
     private double windingCurrent;
+    private double manualDuty = Double.NaN;
 
     public Flywheel(Params p) {
         this.p = p;
@@ -127,8 +128,22 @@ public final class Flywheel {
         return targetOmega <= 0 ? 0 : volts / ref;
     }
 
+    /** Feedforward duty for the current target at bus voltage {@code busV} (for controllers outside this class). */
+    public double feedforwardDuty(double busV) {
+        return feedforward(busV);
+    }
+
+    /**
+     * Sets the motor power directly, as your loop's controller would (held until the next call);
+     * NaN hands control back to the built-in controller that updates every physics step.
+     */
+    public void setManualDuty(double duty) {
+        this.manualDuty = duty;
+    }
+
     private void command(double busV) {
-        double duty = targetOmega <= 0 ? 0
+        double duty = !Double.isNaN(manualDuty) ? manualDuty
+                : targetOmega <= 0 ? 0
                 : feedforward(busV) + p.kpPerRpm() * (Physics.radPerSecToRpm(targetOmega - omega));
         duty = Math.max(0, Math.min(1, duty));
         for (DcMotor m : motors) m.setDuty(duty);

@@ -1,0 +1,9 @@
+# One row per match played (type none) and one row per disconnect in it. Import with:
+#   ./gradlew :Sim:run --args="profile import-disconnects path/to/disconnects.csv"
+# Required: match (any id, e.g. Q12), type.
+# type: none | control_hub_reboot | expansion_hub_drop | i2c_lockup | usb_camera_drop | wifi_drop | other
+# Optional: match_time_s (when it happened), outage_s (until working again), humidity_pct (venue), cause (esd, hit, brownout, unknown).
+# Lines starting with # are ignored; delete the example rows.
+recorded,match,match_time_s,type,outage_s,humidity_pct,cause,notes
+2026-11-14T10:05:00,Q3,,none,,28,,example row - delete
+2026-11-14T10:47:00,Q9,96,i2c_lockup,4.5,27,esd,example row - IMU stopped after touching the perimeter - delete

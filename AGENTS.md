@@ -47,19 +47,20 @@ Sim/
   README.md          how to run sims and fill the profile
   PROFILE.md         data dictionary of the profile DB (generated: profile docs)
   data/robot_profile.db   THE robot profile (SQLite), tracked in git
-  data/templates/    CSV templates for real shot / pose logs
+  data/templates/    CSV templates for real shot / pose / disconnect logs
   out/               reports + scratch profiles (git-ignored)
   src/main/java/org/athletech/sim/
     Main.java        CLI: profile ..., sim ..., predict ...
     config/          Catalog (every profile entry), ProfileDb, ProfileSchema, RobotParams
     physics/         motor, battery, projectile models
-    robot/           MecanumDrive, Flywheel, Launcher, Turret
+    robot/           MecanumDrive (with wheel slip), Flywheel, Launcher, Turret, MatchDriver (full physics match)
     field/           Aperture (scoring openings)
-    undeterminables/ error distributions, odometry drift
-    predict/         AimSolver, ShotPredictor (Monte Carlo), DriveTimePredictor
-    scenarios/       drive / launcher / localization sims that save results
-    input/           HardwareMonitor + shot/pose log importers
-    telemetry/ visualization/ util/
+    undeterminables/ error distributions, odometry drift, LoopTimingModel, static charge
+                     (RobotCharge, TileChargeGrid, ChargeSim, Electrostatics), Disconnects
+    predict/         AimSolver, ShotPredictor (Monte Carlo), DriveTimePredictor, LoopControlSim
+    scenarios/       drive / launcher / localization / loop / esd sims that save results
+    input/           HardwareMonitor + shot/pose/disconnect log importers
+    telemetry/ visualization/ utility/
 ```
 
 ## Toolchain & build config
@@ -163,6 +164,21 @@ pose logs) and the robot's build numbers all live in **one SQLite file**,
 `Sim/data/robot_profile.db`, which a separate game simulator reads. Every value records its source,
 and `profile report` shows what is still missing. Commands are in [AGENTOPS.md](./AGENTOPS.md);
 the data dictionary is [Sim/PROFILE.md](./Sim/PROFILE.md); model limits are in DEV_NOTES.
+
+Two "undeterminables" have their own sims and profile categories:
+
+- **Loop timing** (`sim loop`, `control.*`): a loop = your code + every hardware read/write + jitter
+  + rare spikes. Controllers run once per loop against the physics (sensor read early, motor
+  command late), so the profile gets turn/move settle times, overshoot, flywheel speed at the feed
+  (fed into the shot Monte Carlo), odometry integration error, pose age, how late timers end and
+  which short sensor pulses get missed. HardwareMonitor sessions fill the loop's parts.
+- **Static electricity and disconnects** (`sim esd`, `env.*`, `esd.*`, `electrical.*`,
+  `disconnect.*`, `event.*`): charge on four robots (frame + electronics each), the perimeter, metal
+  structures and a tile-charge grid, from rolling, sliding, wheel slip, intaking and hits;
+  humidity-dependent leakage and sideways creep; every discharge; brownouts, current surges/drops,
+  impacts and motor noise; all turned into Control Hub / Expansion Hub / I2C / camera / Wi-Fi
+  failures with outage times. The charge books must balance (a test checks it): keep it that way
+  when changing `ChargeSim`.
 
 ## Version control
 

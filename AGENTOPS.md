@@ -61,8 +61,13 @@ Paths given to the commands are relative to the `Sim/` folder. Full list:
 ./gradlew :Sim:run --args="profile set robot.mass_kg 13.4 --source measured"
 ./gradlew :Sim:run --args="profile import-monitor C:/path/to/HardwareMonitor"   # after adb pull
 ./gradlew :Sim:run --args="profile import-shots data/my_shots.csv"
-./gradlew :Sim:run --args="sim all --save"              # drive, localization, launcher -> profile
+./gradlew :Sim:run --args="profile import-disconnects data/my_disconnects.csv"   # one row per match / disconnect
+./gradlew :Sim:run --args="sim all --save"              # drive, localization, loop, launcher, esd -> profile
+./gradlew :Sim:run --args="sim loop"                    # loop timing only
+./gradlew :Sim:run --args="sim esd"                     # static charge + disconnects only
 ./gradlew :Sim:run --args="predict shot --distance 2.0 --ball pollen"
+./gradlew :Sim:run --args="predict loop --sensor-reads 3 --motor-writes 6"   # what-if on the loop
+./gradlew :Sim:run --args="predict disconnect --humidity 20 --strap 0"
 ./gradlew :Sim:run --args="profile export --format json" # for engines without SQLite
 ./gradlew :Sim:test                                     # unit tests
 ```
@@ -74,7 +79,8 @@ Paths given to the commands are relative to the `Sim/` folder. Full list:
   Never run `--example` against `data/robot_profile.db`.
 - After changing `Catalog.java`: `profile init` (adds new rows, keeps values) and
   `profile docs` (regenerates `Sim/PROFILE.md`). Commit both the code and the updated DB.
-- Sims take about 20 s (`--trials` sets Monte Carlo trials per point, default 1000).
+- `sim all` takes about 1-2 min; `sim esd` is most of it (`--trials` sets Monte Carlo trials per
+  point, default 1000, and scales how many matches `sim esd` plays).
 - Missing inputs stop a sim with a list of keys and how to set them. That is expected
   until the profile is filled in.
 

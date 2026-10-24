@@ -350,6 +350,23 @@ public final class Catalog {
     /** Game elements that can be launched (BIOBUZZ). */
     public static final List<String> BALLS = Arrays.asList("pollen", "nectar");
 
+    /**
+     * Ways the robot can lose control or part of itself mid-match, in the order the disconnect sim
+     * reports them: {id, what stops}.
+     */
+    public static final List<String[]> DISCONNECT_MODES = Arrays.asList(
+            new String[]{"control_hub_reboot", "Control Hub resets: every motor and servo stops until it has rebooted and the OpMode is restarted."},
+            new String[]{"expansion_hub_drop", "Expansion Hub loses its link (RS-485/USB): its motors, servos and sensors stop until it reconnects."},
+            new String[]{"i2c_lockup", "An I2C sensor (IMU, odometry computer, color/distance) stops answering: localization or sensing is lost until reset."},
+            new String[]{"usb_camera_drop", "The USB webcam disconnects: vision (AprilTags, game-element detection) is lost until it re-enumerates."},
+            new String[]{"wifi_drop", "Driver Station link drops: the robot is disabled until the link is back."});
+
+    public static List<String> disconnectModeIds() {
+        List<String> ids = new ArrayList<>();
+        for (String[] m : DISCONNECT_MODES) ids.add(m[0]);
+        return ids;
+    }
+
     public static final List<Param> PARAMS;
     public static final List<Curve> CURVES;
     public static final List<Surface> SURFACES;
@@ -371,13 +388,18 @@ public final class Catalog {
             new String[]{"match", "Match timing."},
             new String[]{"game", "Game element counts."},
             new String[]{"localization", "How the robot's believed position drifts from the truth."},
-            new String[]{"control", "Control loop timing."},
+            new String[]{"control", "Control loop timing: what each loop spends on your code, hardware reads and writes, how random it is, and how that changes turning, driving, flywheel and localization accuracy."},
             new String[]{"driver", "Human driver behavior."},
             new String[]{"intake", "Collecting game elements."},
             new String[]{"flower", "Placing elements in FLOWERS."},
             new String[]{"garden", "Placing elements in GARDENS."},
             new String[]{"auto", "Autonomous-period actions."},
-            new String[]{"park", "End-of-match parking."});
+            new String[]{"park", "End-of-match parking."},
+            new String[]{"env", "Venue conditions. Humidity decides how much static builds up."},
+            new String[]{"esd", "Static electricity (ESD): how the robot frame, its electronics, the field perimeter, the tiles and metal game elements charge up, leak and discharge."},
+            new String[]{"electrical", "Electrical stress on the power system during a match: brownouts, current surges and drops, impacts."},
+            new String[]{"disconnect", "Disconnects and resets (Control Hub reboot, Expansion Hub drop, I2C lockup, USB camera, Wi-Fi): what triggers them and how long they last."},
+            new String[]{"event", "A competition day on one field: how many matches it runs and how often (field charge carries over between matches)."});
 
     private static final double NA = Double.NaN;
 
@@ -395,6 +417,12 @@ public final class Catalog {
 
     private static Param meas(String key, String unit, boolean required, String desc, double min, double max, Double example) {
         return new Param(key, unit, Role.MEASURED, required, desc, min, max, example, SourceKind.PLACEHOLDER);
+    }
+
+    /** Picks the example value for a disconnect mode (arguments in DISCONNECT_MODES order). */
+    private static Double pick(String modeId, Double... perMode) {
+        for (int i = 0; i < DISCONNECT_MODES.size(); i++) if (DISCONNECT_MODES.get(i)[0].equals(modeId)) return perMode[i];
+        return null;
     }
 
     private static Curve curve(String name, String x, String xu, String y, String yu, Role role, boolean req, String desc) {
@@ -539,9 +567,148 @@ public final class Catalog {
         p.add(in("localization.vision_interval_s", "s", false, "Typical time between vision relocalizations.", 0.1, 200, null));
         p.add(der("localization.position_error_after_match_m", "m", false, "RMS position error at the end of a full match of driving."));
         p.add(der("localization.heading_error_after_match_deg", "deg", false, "RMS heading error at the end of a full match."));
-        // ---------------------------------------------------------------- control
+        // ---------------------------------------------------------------- control: loop timing
         p.add(meas("control.loop_time_ms", "ms", true, "Average control loop time (HardwareMonitor).", 0.5, 200, null));
         p.add(meas("control.loop_time_p95_ms", "ms", false, "95th percentile loop time (HardwareMonitor).", 0.5, 500, null));
+        p.add(meas("control.logic_time_ms", "ms", true, "Time per loop spent in your own code (math, path following, telemetry), not counting hardware calls. "
+                + "HardwareMonitor: loop time minus hardware time. Or set by hand.", 0, 100, 3.0));
+        p.add(meas("control.motor_read_ms", "ms", true, "Average time of one uncached motor read (position, velocity, current). With bulk caching most reads are "
+                + "nearly free and the first read per hub pays for the bulk read, so this is an average.", 0, 20, 0.6));
+        p.add(meas("control.motor_reads_per_loop", "count", true, "Uncached motor reads per loop.", 0, 100, 4.0));
+        p.add(meas("control.motor_write_ms", "ms", true, "Time of one motor write (setPower, setVelocity, ...) that actually goes to the hub.", 0, 20, 1.2));
+        p.add(meas("control.motor_writes_per_loop", "count", true, "Motor writes per loop that reach the hub (skipping repeated identical writes lowers this).", 0, 100, 4.0));
+        p.add(meas("control.servo_write_ms", "ms", false, "Time of one servo write that reaches the hub.", 0, 20, 1.0));
+        p.add(meas("control.servo_writes_per_loop", "count", false, "Servo writes per loop that reach the hub.", 0, 100, 2.0));
+        p.add(meas("control.sensor_read_ms", "ms", true, "Time of one I2C sensor read (IMU, odometry computer, color, distance).", 0, 50, 2.5));
+        p.add(meas("control.sensor_reads_per_loop", "count", true, "I2C sensor reads per loop.", 0, 50, 1.0));
+        p.add(meas("control.other_read_ms", "ms", false, "Time of one other read (digital, analog, touch, voltage sensor).", 0, 20, 0.5));
+        p.add(meas("control.other_reads_per_loop", "count", false, "Other reads per loop.", 0, 50, 1.0));
+        p.add(meas("control.io_latency_cv", "fraction", false, "Scatter of single hardware calls: standard deviation / mean of one call's time.", 0, 3, 0.3));
+        p.add(meas("control.loop_spike_prob", "fraction", false, "Share of loops that take far longer than usual (garbage collection, USB hiccups, slow telemetry). "
+                + "HardwareMonitor: loops over 2x the median.", 0, 0.5, 0.005));
+        p.add(in("control.imu_rate_hz", "Hz", false, "How often the IMU updates its heading internally. Readings in between repeat the last value.", 1, 2000, 100.0));
+        p.add(in("control.heading_kp", "power/rad", false, "Your turn-to-heading proportional gain (turn power per radian of error). Empty = the sim tunes one on a fast loop.", 0, 50, null));
+        p.add(in("control.heading_kd", "power/(rad/s)", false, "Your turn-to-heading derivative gain (power per rad/s of turn rate).", 0, 10, null));
+        p.add(in("control.drive_kp", "power/m", false, "Your drive-to-position proportional gain (power per meter of error). Empty = tuned by the sim.", 0, 100, null));
+        p.add(in("control.drive_kd", "power/(m/s)", false, "Your drive-to-position derivative gain (power per m/s).", 0, 20, null));
+        p.add(in("control.turn_tolerance_deg", "deg", false, "Heading error your code accepts as arrived.", 0.05, 20, 1.0));
+        p.add(in("control.drive_tolerance_m", "m", false, "Position error your code accepts as arrived.", 0.001, 0.5, 0.02));
+        p.add(der("control.loop_time_model_ms", "ms", false, "Average loop time predicted from logic + reads + writes + randomness."));
+        p.add(der("control.loop_time_model_p95_ms", "ms", false, "95th percentile of the predicted loop time."));
+        p.add(der("control.turn_settle_time_s", "s", true, "Time for a 90 degree turn to settle within control.turn_tolerance_deg at this robot's loop timing."));
+        p.add(der("control.turn_overshoot_deg", "deg", false, "Overshoot of that 90 degree turn."));
+        p.add(der("control.drive_settle_time_s", "s", true, "Time for a 1 m move to settle within control.drive_tolerance_m at this robot's loop timing."));
+        p.add(der("control.drive_end_error_m", "m", false, "RMS position error over the last 0.5 s of a 3 s run of the 1 m move (steady error or a limit cycle)."));
+        p.add(der("control.pose_lag_ms", "ms", true, "Average age of the pose when the motors act on it (read delay + loop + sensor update). "
+                + "Moving at v m/s, the robot is v * lag further along than it thinks."));
+        p.add(der("control.flywheel_rpm_error_std_rpm", "rpm", false, "Flywheel speed scatter at the moment balls are fed, caused by loop timing alone."));
+        p.add(der("control.timer_overshoot_ms", "ms", false, "How late a time-based action ends on average (a 'wait 300 ms' ends at the first loop after 300 ms): "
+                + "E[T^2] / (2 E[T]) for loop time T."));
+        p.add(der("control.min_reliable_pulse_ms", "ms", false, "Shortest sensor pulse (beam break, limit switch, color change) read once per loop that is caught 99% of the time."));
+        p.add(in("launcher.velocity_on_hub", "flag", false, "1 = the flywheel velocity loop runs on the hub (setVelocity), 0 = your loop computes the power.", 0, 1, 0.0));
+        p.add(in("launcher.hub_velocity_hz", "Hz", false, "How often the hub's own velocity loop updates (only with launcher.velocity_on_hub = 1). Not documented: estimate or measure.", 1, 2000, 50.0));
+        p.add(in("localization.integrates_on_device", "flag", false, "1 = an odometry computer (goBILDA Pinpoint, SparkFun OTOS, ...) integrates the pose itself, "
+                + "so the loop only adds read delay; 0 = your loop integrates encoder changes.", 0, 1, 1.0));
+        p.add(in("localization.device_rate_hz", "Hz", false, "Update rate of the odometry computer (with localization.integrates_on_device = 1).", 1, 5000, 1000.0));
+        p.add(in("localization.pose_exponential", "flag", false, "When your loop integrates: 1 = arc (pose exponential) integration, 0 = straight-line steps.", 0, 1, 1.0));
+        // ---------------------------------------------------------------- environment / field (static)
+        p.add(in("env.relative_humidity_pct", "%", true, "Relative humidity at the venue. Static build-up rises steeply below about 30%. Check the event's weather/HVAC or use a hygrometer.", 1, 100, 30.0));
+        p.add(in("field.tile_thickness_m", "m", false, "Foam tile thickness (measure one).", 0.003, 0.05, 0.016));
+        p.add(in("field.tile_permittivity", "ratio", false, "Relative permittivity of the foam tiles (EVA foam is mostly air: about 1.2-2).", 1, 5, 1.4));
+        p.add(in("field.tile_surface_resistivity_ohm_at_40rh", "ohm/sq", false, "Surface resistivity of the tiles at 40% RH: how fast rubbed-on charge creeps sideways "
+                + "over the foam (measure with a surface resistance meter). Empty = charge stays where it was left.", 1e6, 1e18, 1e13));
+        // ---------------------------------------------------------------- esd: robot
+        p.add(meas("esd.robot_capacitance_pf", "pF", false, "Capacitance of the robot frame to the floor. Empty = estimated from size and ground clearance (esd.robot_capacitance_estimate_pf).", 5, 2000, null));
+        p.add(in("esd.chassis_height_m", "m", true, "Height of the frame's underside above the tiles.", 0.002, 0.3, 0.03));
+        p.add(in("esd.frame_area_fraction", "fraction", false, "Share of the robot's footprint that is metal facing the tiles (an open channel frame is about 0.3-0.6).", 0.05, 1, 0.5));
+        p.add(in("esd.electronics_coupling_pf", "pF", true, "Capacitance between the electronics (battery negative, hubs, wires) and the frame. Long wire runs along the frame raise it.", 1, 10000, 300.0));
+        p.add(in("esd.electronics_capacitance_pf", "pF", false, "Capacitance of the electronics to the floor, not through the frame.", 0.1, 1000, 30.0));
+        p.add(in("esd.grounding_strap", "flag", true, "1 = a resistive grounding strap ties the frame to the electronics (REV Resistive Grounding Strap or equivalent), 0 = none.", 0, 1, 1.0));
+        p.add(in("esd.grounding_strap_ohm", "ohm", false, "Resistance of that strap. The REV Resistive Grounding Strap (REV-31-1269) is 470 ohm.", 1, 1e9, 470.0));
+        p.add(in("esd.isolation_ohm_at_40rh", "ohm", false, "Leakage resistance frame-to-electronics without a strap, at 40% RH.", 1e6, 1e16, 1e12));
+        p.add(in("esd.wheel_leak_ohm_at_40rh", "ohm", true, "Leakage resistance from the frame through the wheels and tiles to the floor at 40% RH. "
+                + "Measure: charge the robot, watch it decay with a field meter, R = decay time / capacitance.", 1e6, 1e16, 1e11));
+        p.add(in("esd.leak_decades_per_10rh", "decades", false, "How many tenfold steps leakage resistance drops per +10% humidity (surface resistivity of plastics and foam).", 0, 3, 1.0));
+        p.add(in("esd.drive_charge_nc_per_m_at_40rh", "nC/m", true, "Charge the frame gains per meter of driving at 40% RH (wheel rollers rubbing the tiles; "
+                + "FTC docs: wheels end up positive, tiles negative). "
+                + "Measure: drive a known distance, read the frame voltage with a field meter, Q = C * V.", 0, 1000, 8.0));
+        p.add(in("esd.slide_charge_factor", "ratio", false, "Extra charging when rollers slide (strafing, turning) compared with rolling straight.", 0, 10, 2.0));
+        p.add(in("esd.slip_charge_factor", "ratio", false, "Charging per meter of wheel slip (wheels spinning or skidding on the tiles when the motors push harder than "
+                + "traction holds: pushing walls and robots, full-power starts and stops) compared with a meter rolled. This is how current draw feeds static.", 0, 30, 3.0));
+        p.add(in("esd.charge_humidity_scale_pct", "%", false, "Charging falls by a factor e for every this many % of humidity above 40% (and rises below).", 1, 100, 15.0));
+        p.add(in("esd.antistatic_factor", "fraction", false, "Field treated with anti-static spray: multiplies charging and tile charge lifetime (1 = untreated).", 0.01, 1, 1.0));
+        p.add(in("esd.intake_charge_nc_per_ball", "nC", false, "Charge the robot gains per game element it intakes (rollers rubbing the ball).", 0, 1000, 2.0));
+        p.add(in("esd.wall_hit_charge_nc", "nC", false, "Charge from hitting a plastic wall panel at 1 m/s (contact charging, scales with speed).", 0, 1000, 5.0));
+        p.add(in("esd.corona_onset_kv", "kV", false, "Frame voltage where sharp edges start leaking charge into the air (corona), capping the voltage.", 1, 100, 15.0));
+        p.add(in("esd.corona_bleed_s", "s", false, "How fast corona bleeds the excess above the onset voltage.", 0.001, 100, 0.1));
+        p.add(in("esd.internal_breakdown_v", "V", true, "Electronics-to-frame voltage that arcs inside the robot (motor cases, cable shields, screw heads near boards).", 50, 50000, 1500.0));
+        p.add(in("esd.coupling_fraction", "fraction", true, "Share of an outside discharge's energy that reaches the electronics (wiring layout, shielding).", 0, 1, 0.02));
+        p.add(in("esd.spark_impedance_ohm", "ohm", false, "Discharge path impedance, for the peak current estimate.", 1, 10000, 100.0));
+        // ---------------------------------------------------------------- esd: field and other robots
+        p.add(in("esd.perimeter_capacitance_pf", "pF", true, "Capacitance of the field perimeter's metal to the floor.", 10, 100000, 400.0));
+        p.add(in("esd.perimeter_leak_ohm_at_40rh", "ohm", true, "Leakage from the perimeter metal to the floor at 40% RH (feet, floor).", 1e6, 1e16, 2e10));
+        p.add(in("esd.tile_decay_s_at_40rh", "s", true, "Time for charge rubbed onto the tiles to fall to 37% at 40% RH.", 0.1, 1e6, 300.0));
+        p.add(in("esd.metal_contact_fraction", "fraction", true, "Share of wall hits where robot metal touches perimeter metal (the rest hit plastic panels).", 0, 1, 0.3));
+        p.add(in("esd.metal_element_capacitance_pf", "pF", false, "Capacitance of metal field structures robots touch (lumped). Empty = none.", 1, 100000, 100.0));
+        p.add(in("esd.metal_element_leak_ohm_at_40rh", "ohm", false, "Leakage of those structures to the floor at 40% RH.", 1e6, 1e16, 1e11));
+        p.add(in("esd.other_robot_spread", "log-sigma", false, "How much other robots' charging varies from yours (lognormal sigma).", 0, 3, 0.5));
+        p.add(in("esd.other_robot_strap_fraction", "fraction", false, "Share of other robots with a grounding strap.", 0, 1, 0.5));
+        p.add(der("esd.robot_capacitance_estimate_pf", "pF", false, "Frame capacitance estimated from size, ground clearance and tiles."));
+        p.add(der("esd.charge_generated_uc_per_match", "uC", false, "Charge this robot separates per match (rolling, sliding, wheel slip, intaking, wall contact), average."));
+        p.add(der("esd.slip_charge_share", "fraction", false, "Share of that charge from wheel slip: high current pushing and launching."));
+        p.add(der("esd.peak_robot_kv", "kV", true, "Typical (median) highest frame voltage in a match at this humidity."));
+        p.add(der("esd.discharges_per_match", "count", true, "Discharges to/from the frame per match (perimeter metal, other robots, metal elements), above 1 microjoule."));
+        p.add(der("esd.discharge_energy_p95_mj", "mJ", false, "95th percentile energy of one discharge."));
+        p.add(der("esd.internal_arcs_per_match", "count", false, "Arcs between electronics and frame per match."));
+        p.add(der("esd.perimeter_kv_end_of_day", "kV", false, "Field perimeter voltage right after the last match of a competition day (median)."));
+        // ---------------------------------------------------------------- impacts and driver behaviour
+        p.add(in("robot.contact_time_ms", "ms", false, "How long a hit lasts (stiff aluminum about 5-15 ms, foam bumpers longer). Shorter = harder shock.", 0.5, 200, 12.0));
+        p.add(in("robot.wall_restitution", "fraction", false, "Bounce off a wall: rebound speed / impact speed.", 0, 1, 0.2));
+        p.add(in("driver.wall_hits_per_match", "count", true, "Wall hits per match (deliberate squaring up, ramming, misses).", 0, 200, 6.0));
+        p.add(in("driver.wall_push_s", "s", false, "How long the drive keeps pushing after hitting a wall or robot (stalled motors).", 0, 10, 0.6));
+        p.add(in("driver.robot_contacts_per_match", "count", true, "Contacts with other robots per match.", 0, 200, 4.0));
+        p.add(in("driver.intakes_per_match", "count", false, "Game elements intaken per match.", 0, 200, 20.0));
+        p.add(in("driver.metal_element_contacts_per_match", "count", false, "Touches of metal field structures per match.", 0, 200, 2.0));
+        // ---------------------------------------------------------------- electrical stress
+        p.add(in("electrical.brownout_hold_ms", "ms", false, "How long the voltage must stay under a reset threshold before a device resets.", 0.1, 1000, 2.0));
+        p.add(in("electrical.didt_window_ms", "ms", false, "Window for measuring how fast current changes (surge / drop).", 1, 100, 4.0));
+        p.add(der("electrical.min_bus_v", "V", true, "Lowest battery voltage in a match (5th percentile over simulated matches)."));
+        p.add(der("electrical.peak_current_a", "A", false, "Highest total current in a match (median over matches)."));
+        p.add(der("electrical.peak_surge_a_per_ms", "A/ms", false, "Fastest current rise in a match (median over matches)."));
+        p.add(der("electrical.peak_drop_a_per_ms", "A/ms", false, "Fastest current drop in a match (median over matches)."));
+        p.add(der("electrical.peak_impact_g", "g", false, "Hardest impact in a match (median over matches)."));
+        p.add(der("electrical.brownouts_per_match", "count", false, "Dips below the highest reset threshold of any device per match."));
+        // ---------------------------------------------------------------- disconnects
+        p.add(in("disconnect.fragility_spread", "log-sigma", false, "Spread of every 'stress at which 50% fail' below: probability = Phi(ln(stress / stress50) / spread).", 0.05, 5, 0.6));
+        for (String[] m : DISCONNECT_MODES) {
+            String id = m[0], pre = "disconnect." + id + ".";
+            // example values (placeholders for --example) per mode, in DISCONNECT_MODES order; null = not affected
+            p.add(in(pre + "esd_energy_50_mj", "mJ", false, "Discharge energy reaching the electronics at which this fails half the time. Empty = not affected by static.", 1e-6, 1e4,
+                    pick(id, 1.0, 0.5, 0.25, 0.4, 3.0)));
+            p.add(in(pre + "brownout_v", "V", false, "Battery voltage under which this resets. Empty = not affected by brownouts. "
+                    + "REV specifies 8 V as the hubs' minimum operating input; the actual reset point is lower and not published, so measure it.", 1, 15,
+                    pick(id, 7.0, 7.0, null, 7.5, null)));
+            p.add(in(pre + "impact_g_50", "g", false, "Impact at which a connector/cable for this lets go half the time. Empty = not affected by hits.", 1, 1000,
+                    pick(id, 400.0, 250.0, 300.0, 150.0, null)));
+            p.add(in(pre + "surge_50_a_per_ms", "A/ms", false, "Current rise rate at which this glitches half the time (ground bounce, EMI). Empty = not affected.", 0.01, 1000,
+                    pick(id, 120.0, 120.0, 120.0, null, null)));
+            p.add(in(pre + "drop_50_a_per_ms", "A/ms", false, "Current drop rate (motors cut off, braking) at which this glitches half the time. Empty = not affected.", 0.01, 1000,
+                    pick(id, 150.0, 150.0, 150.0, null, null)));
+            p.add(in(pre + "emi_rate_per_min_at_40a", "1/min", false, "Glitches per minute while the robot draws 40 A (motor noise; scales with current squared). Empty = none.", 0, 100,
+                    pick(id, null, null, 0.02, null, null)));
+            p.add(in(pre + "random_rate_per_min", "1/min", false, "Unexplained failures per minute (radio interference, software). Empty = none.", 0, 100,
+                    pick(id, null, null, null, null, 0.004)));
+            p.add(der(pre + "per_match", "count", false, "Expected " + id.replace('_', ' ') + " events per match. " + m[1]));
+        }
+        p.add(der("disconnect.prob_per_match", "fraction", true, "Chance of at least one disconnect of any kind in a match at this humidity."));
+        p.add(der("disconnect.downtime_s_per_match", "s", true, "Expected seconds per match the robot is fully stopped (Control Hub reboot or Wi-Fi drop)."));
+        p.add(der("disconnect.partial_downtime_s_per_match", "s", false, "Expected seconds per match with part of the robot down (Expansion Hub, I2C sensor or camera)."));
+        p.add(meas("disconnect.measured_per_match", "count", false, "Disconnects per match from your log (profile import-disconnects).", 0, 100, null));
+        p.add(meas("disconnect.measured_prob_per_match", "fraction", false, "Share of logged matches with at least one disconnect.", 0, 1, null));
+        // ---------------------------------------------------------------- event day
+        p.add(in("event.matches_per_field", "count", false, "Matches one field runs in a day.", 1, 500, 40.0));
+        p.add(in("event.match_cycle_min", "min", false, "Time from one match start to the next on the same field.", 2.7, 60, 7.0));
+        p.add(in("event.field_grounded", "flag", false, "1 = the field perimeter is tied to building ground (its charge drains fast), 0 = floating.", 0, 1, 0.0));
         PARAMS = Collections.unmodifiableList(p);
 
         List<Curve> c = new ArrayList<>();
@@ -577,6 +744,34 @@ public final class Catalog {
         c.add(curve("localization.heading_error_vs_time", "time", "s", "heading error (RMS)", "deg", Role.DERIVED, true, "Heading error through a match of typical driving."));
         c.add(curve("localization.measured_position_error_vs_distance", "distance driven", "m", "position error (RMS)", "m", Role.MEASURED, false, "From logged real pose checks (profile import-poses), 0.5 m bins."));
         c.add(curve("localization.measured_position_error_vs_time", "time", "s", "position error (RMS)", "m", Role.MEASURED, false, "From logged real pose checks, 10 s bins."));
+        c.add(curve("control.loop_time_vs_sensor_reads", "I2C sensor reads per loop", "count", "average loop time", "ms", Role.DERIVED, false, "What-if: loop time if you read more or fewer I2C sensors per loop."));
+        c.add(curve("control.loop_time_vs_motor_writes", "motor writes per loop", "count", "average loop time", "ms", Role.DERIVED, false, "What-if: loop time with more or fewer motor writes per loop."));
+        c.add(curve("control.turn_settle_time_vs_loop_ms", "average loop time", "ms", "settle time", "s", Role.DERIVED, true, "90 degree turn settle time vs loop time (jitter scaled like this robot's). y_std = spread over runs."));
+        c.add(curve("control.turn_overshoot_vs_loop_ms", "average loop time", "ms", "overshoot", "deg", Role.DERIVED, false, "90 degree turn overshoot vs loop time."));
+        c.add(curve("control.drive_settle_time_vs_loop_ms", "average loop time", "ms", "settle time", "s", Role.DERIVED, true, "1 m move settle time vs loop time."));
+        c.add(curve("control.drive_end_error_vs_loop_ms", "average loop time", "ms", "position error", "m", Role.DERIVED, false, "RMS error over the last 0.5 s of a 3 s run of the 1 m move vs loop time."));
+        c.add(curve("control.flywheel_rpm_error_vs_loop_ms", "average loop time", "ms", "rpm error (std)", "rpm", Role.DERIVED, false, "Flywheel speed scatter when balls are fed vs loop time."));
+        c.add(curve("control.flywheel_burst_time_vs_loop_ms", "average loop time", "ms", "burst time", "s", Role.DERIVED, false,
+                "Time from the first to the last ball of a full load vs loop time (the ready check runs once per loop)."));
+        c.add(curve("control.odometry_error_per_m_vs_loop_ms", "average loop time", "ms", "position error per meter", "m/m", Role.DERIVED, false,
+                "Pose integration error from integrating once per loop while turning (only when your loop integrates odometry)."));
+        c.add(curve("control.missed_event_prob_vs_pulse_ms", "pulse length", "ms", "chance of missing it", "fraction", Role.DERIVED, false,
+                "Chance that a short sensor pulse falls between two reads, at this robot's loop timing: E[max(0, T - w)] / E[T]."));
+        c.add(curve("control.pose_lag_vs_loop_ms", "average loop time", "ms", "pose age when used", "ms", Role.DERIVED, true, "How old the pose is when the motors act on it."));
+        c.add(curve("esd.robot_kv_vs_match_time", "match time", "s", "frame voltage (median |V|)", "kV", Role.DERIVED, true, "How the frame charges through a match at this humidity. y_std = spread between matches."));
+        c.add(curve("esd.charging_rate_vs_battery_current", "total battery current", "A", "charging rate", "nC/s", Role.DERIVED, false,
+                "How fast the frame charges at each level of current draw: hard pushing and launching make the wheels slip. y_std = spread, n = 10 ms samples."));
+        c.add(curve("esd.peak_robot_kv_vs_humidity", "relative humidity", "%", "peak frame voltage (median)", "kV", Role.DERIVED, true, "Highest frame voltage per match vs humidity."));
+        c.add(curve("esd.discharges_per_match_vs_humidity", "relative humidity", "%", "discharges per match", "count", Role.DERIVED, false, "Discharges per match vs humidity."));
+        c.add(curve("esd.perimeter_kv_vs_event_time", "time since the first match", "h", "perimeter voltage", "kV", Role.DERIVED, false, "Field perimeter voltage through a competition day."));
+        c.add(curve("esd.tile_charge_uc_vs_event_time", "time since the first match", "h", "net tile charge", "uC", Role.DERIVED, false, "Net charge left on the tiles through a competition day."));
+        c.add(curve("electrical.min_bus_v_vs_battery_v", "battery resting voltage", "V", "lowest voltage in a match", "V", Role.DERIVED, true, "How low the battery dips during a match vs its resting voltage."));
+        c.add(curve("disconnect.prob_per_match_vs_humidity", "relative humidity", "%", "chance of a disconnect", "fraction", Role.DERIVED, true, "Chance of at least one disconnect per match vs humidity, as built."));
+        c.add(curve("disconnect.prob_per_match_vs_humidity_with_strap", "relative humidity", "%", "chance of a disconnect", "fraction", Role.DERIVED, false, "Same with a grounding strap installed."));
+        c.add(curve("disconnect.prob_per_match_vs_humidity_no_strap", "relative humidity", "%", "chance of a disconnect", "fraction", Role.DERIVED, false, "Same without a grounding strap."));
+        c.add(curve("disconnect.rate_vs_match_time", "match time", "s", "disconnects per minute", "1/min", Role.DERIVED, false, "When in a match disconnects happen (static builds up, so later is worse)."));
+        c.add(curve("disconnect.prob_vs_event_match", "match number on the field that day", "count", "chance of a disconnect", "fraction", Role.DERIVED, false, "Chance per match through a competition day (field charge carries over)."));
+        c.add(curve("disconnect.measured_prob_vs_humidity", "relative humidity", "%", "share of matches with a disconnect", "fraction", Role.MEASURED, false, "From your disconnect log, 10% humidity bins (n = matches)."));
         CURVES = Collections.unmodifiableList(c);
 
         List<Surface> s = new ArrayList<>();
@@ -586,6 +781,8 @@ public final class Catalog {
             s.add(new Surface("launcher." + b + ".burst_make_prob_vs_distance_battery", "distance to CELL", "m", "battery resting voltage", "V",
                     "make probability", "fraction", Role.DERIVED, true, "Average chance per " + B + " in a full burst, by distance and battery (low battery = slower recovery = weaker later shots)."));
         }
+        s.add(new Surface("control.turn_settle_time_vs_loop_jitter", "average loop time", "ms", "loop time jitter (std)", "ms", "settle time", "s", Role.DERIVED, false,
+                "90 degree turn settle time by average loop time and loop-to-loop randomness."));
         SURFACES = Collections.unmodifiableList(s);
 
         List<Dist> d = new ArrayList<>();
@@ -598,6 +795,19 @@ public final class Catalog {
         d.add(new Dist("localization.heading_error_deg", "deg", "shot", Role.DERIVED, false, "Error of the robot's believed heading when it shoots (from the localization sim); turns into aim error.", null, null, null));
         d.add(new Dist("drive.path_end_error_m", "m", "move", Role.INPUT, false, "Distance between where a path should end and where the robot stops.", "normal", 0.0, 0.03));
         d.add(new Dist("control.loop_time_ms", "ms", "loop", Role.MEASURED, true, "Loop time distribution from HardwareMonitor (empirical samples).", null, null, null));
+        d.add(new Dist("control.loop_jitter_ms", "ms", "loop", Role.MEASURED, false, "Random loop-to-loop variation on top of the logic time (OS scheduling, telemetry). HardwareMonitor: spread around the running median.", "normal", 0.0, 1.0));
+        d.add(new Dist("control.loop_spike_ms", "ms", "spike", Role.MEASURED, false, "Extra time of a spike loop (see control.loop_spike_prob).", "lognormal", 25.0, 15.0));
+        d.add(new Dist("control.flywheel_rpm_error_from_loop", "rpm", "shot", Role.DERIVED, false, "Flywheel speed error at the feed caused by loop timing (from the loop sim). Added to launcher.rpm_error unless that one is measured.", null, null, null));
+        d.add(new Dist("driver.wall_hit_speed_mps", "m/s", "hit", Role.INPUT, false, "Speed into the wall on a hit.", "lognormal", 0.8, 0.4));
+        d.add(new Dist("driver.robot_contact_speed_mps", "m/s", "contact", Role.INPUT, false, "Closing speed when touching another robot.", "lognormal", 0.7, 0.4));
+        d.add(new Dist("esd.discharge_energy_mj", "mJ", "discharge", Role.DERIVED, false, "Energy of one discharge to/from the frame (lognormal fit).", null, null, null));
+        for (String[] m : DISCONNECT_MODES) {
+            String id = m[0];
+            double mean = id.equals("control_hub_reboot") ? 25 : id.equals("expansion_hub_drop") ? 2 : id.equals("i2c_lockup") ? 5 : id.equals("usb_camera_drop") ? 4 : 6;
+            d.add(new Dist("disconnect." + id + ".outage_s", "s", "event", Role.INPUT, false, "How long a " + id.replace('_', ' ') + " lasts until everything works again. " + m[1],
+                    "lognormal", mean, mean * 0.5));
+        }
+        d.add(new Dist("disconnect.measured_outage_s", "s", "event", Role.MEASURED, false, "Outage lengths from your disconnect log.", null, null, null));
         d.add(new Dist("driver.reaction_time_s", "s", "decision", Role.INPUT, false, "Driver reaction / decision delay in TELEOP.", "lognormal", 0.35, 0.15));
         DISTS = Collections.unmodifiableList(d);
 

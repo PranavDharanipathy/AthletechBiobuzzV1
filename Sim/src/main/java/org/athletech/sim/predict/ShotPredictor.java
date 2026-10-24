@@ -31,8 +31,15 @@ public final class ShotPredictor {
         private final Distribution aimDeg;
         private final Distribution poseAxisM;
         private final Distribution headingDeg;
+        private final Distribution loopRpm;
 
         public Errors(Distribution rpm, Distribution hoodDeg, Distribution exitSpeedFrac, Distribution exitAngleDeg, Distribution aimDeg, Distribution poseAxisM, Distribution headingDeg) {
+            this(rpm, hoodDeg, exitSpeedFrac, exitAngleDeg, aimDeg, poseAxisM, headingDeg, Distribution.none("loop rpm", "rpm"));
+        }
+
+        /** @param loopRpm extra flywheel speed error from loop timing (control.flywheel_rpm_error_from_loop) */
+        public Errors(Distribution rpm, Distribution hoodDeg, Distribution exitSpeedFrac, Distribution exitAngleDeg, Distribution aimDeg, Distribution poseAxisM,
+                      Distribution headingDeg, Distribution loopRpm) {
             this.rpm = rpm;
             this.hoodDeg = hoodDeg;
             this.exitSpeedFrac = exitSpeedFrac;
@@ -40,6 +47,7 @@ public final class ShotPredictor {
             this.aimDeg = aimDeg;
             this.poseAxisM = poseAxisM;
             this.headingDeg = headingDeg;
+            this.loopRpm = loopRpm;
         }
 
         public Distribution rpm() { return rpm; }
@@ -49,6 +57,7 @@ public final class ShotPredictor {
         public Distribution aimDeg() { return aimDeg; }
         public Distribution poseAxisM() { return poseAxisM; }
         public Distribution headingDeg() { return headingDeg; }
+        public Distribution loopRpm() { return loopRpm; }
 
         @Override
         public boolean equals(Object other) {
@@ -61,17 +70,18 @@ public final class ShotPredictor {
                     && java.util.Objects.equals(exitAngleDeg, o.exitAngleDeg)
                     && java.util.Objects.equals(aimDeg, o.aimDeg)
                     && java.util.Objects.equals(poseAxisM, o.poseAxisM)
-                    && java.util.Objects.equals(headingDeg, o.headingDeg);
+                    && java.util.Objects.equals(headingDeg, o.headingDeg)
+                    && java.util.Objects.equals(loopRpm, o.loopRpm);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(rpm, hoodDeg, exitSpeedFrac, exitAngleDeg, aimDeg, poseAxisM, headingDeg);
+            return java.util.Objects.hash(rpm, hoodDeg, exitSpeedFrac, exitAngleDeg, aimDeg, poseAxisM, headingDeg, loopRpm);
         }
 
         @Override
         public String toString() {
-            return "Errors[rpm=" + rpm + ", hoodDeg=" + hoodDeg + ", exitSpeedFrac=" + exitSpeedFrac + ", exitAngleDeg=" + exitAngleDeg + ", aimDeg=" + aimDeg + ", poseAxisM=" + poseAxisM + ", headingDeg=" + headingDeg + "]";
+            return "Errors[rpm=" + rpm + ", hoodDeg=" + hoodDeg + ", exitSpeedFrac=" + exitSpeedFrac + ", exitAngleDeg=" + exitAngleDeg + ", aimDeg=" + aimDeg + ", poseAxisM=" + poseAxisM + ", headingDeg=" + headingDeg + ", loopRpm=" + loopRpm + "]";
         }
 
         /** Combined 1-sigma launch angle error (hood + ball-to-ball), degrees. */
@@ -83,7 +93,7 @@ public final class ShotPredictor {
         public java.util.function.DoubleUnaryOperator speedSigma(Launcher launcher, String ball) {
             return v -> {
                 double rpm = launcher.rpmForExitSpeed(ball, v);
-                double rpmFrac = rpm > 0 && Double.isFinite(rpm) ? sd(this.rpm) / rpm : 0;
+                double rpmFrac = rpm > 0 && Double.isFinite(rpm) ? Math.hypot(sd(this.rpm), sd(loopRpm)) / rpm : 0;
                 return v * Math.hypot(sd(exitSpeedFrac), rpmFrac);
             };
         }
@@ -182,7 +192,7 @@ public final class ShotPredictor {
             // where the robot really is: believed spot plus localization error; it still aims from the believed spot
             double dx = e.poseAxisM().sample(rng), dy = e.poseAxisM().sample(rng);
             Vec3 launch = believed.launchPoint().plus(new Vec3(dx, dy, 0));
-            double rpm = baseRpm + e.rpm().sample(rng);
+            double rpm = baseRpm + e.rpm().sample(rng) + e.loopRpm().sample(rng);
             double speed = launcher.exitSpeed(ball, rpm) * (1 + e.exitSpeedFrac().sample(rng));
             // the hood cannot go past its stops; ball-to-ball angle scatter is on top of that
             double hood = Math.max(lp.hoodMinDeg(), Math.min(lp.hoodMaxDeg(), aim.hoodDeg() + e.hoodDeg().sample(rng)));

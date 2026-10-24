@@ -12,7 +12,8 @@ public final class ProfileSchema {
     private ProfileSchema() {
     }
 
-    public static final int VERSION = 1;
+    /** 2: adds disconnect_observations. */
+    public static final int VERSION = 2;
     public static final String FORMAT = "athletech-robot-profile";
 
     private static final String KINDS = "'measured','game_manual','manual','sim','placeholder'";
@@ -126,6 +127,18 @@ public final class ProfileSchema {
                     "  distance_driven_m REAL,\n" +
                     "  true_x_m REAL NOT NULL, true_y_m REAL NOT NULL, true_heading_deg REAL,\n" +
                     "  est_x_m REAL NOT NULL, est_y_m REAL NOT NULL, est_heading_deg REAL,\n" +
+                    "  notes TEXT\n" +
+                    ")",
+            "CREATE TABLE IF NOT EXISTS disconnect_observations (\n" +
+                    "  id INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+                    "  source_id INTEGER REFERENCES sources(id),\n" +
+                    "  recorded TEXT,\n" +
+                    "  match TEXT NOT NULL,\n" +
+                    "  match_time_s REAL,\n" +
+                    "  type TEXT NOT NULL,\n" +
+                    "  outage_s REAL,\n" +
+                    "  humidity_pct REAL,\n" +
+                    "  cause TEXT,\n" +
                     "  notes TEXT\n" +
                     ")",
             // ------------------------------------------------------------ convenience views

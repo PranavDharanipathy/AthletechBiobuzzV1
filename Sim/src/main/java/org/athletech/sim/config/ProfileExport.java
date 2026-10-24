@@ -108,6 +108,7 @@ public final class ProfileExport {
         Map<String, Object> obs = new LinkedHashMap<>();
         obs.put("shots", db.count("shot_observations"));
         obs.put("poses", db.count("pose_observations"));
+        obs.put("disconnect_log_rows", db.count("disconnect_observations"));
         root.put("observations", obs);
         return root;
     }
@@ -184,6 +185,7 @@ public final class ProfileExport {
                 "| `actions` | timed game action | `mean_time_s`, `std_time_s`, `min_time_s`, `success_prob` |\n" +
                 "| `shot_observations` | real shot (make/miss) | `ball`, `distance_m`, rpm/hood/battery..., `result` |\n" +
                 "| `pose_observations` | real localization check | true vs estimated pose, `distance_driven_m`, `elapsed_s` |\n" +
+                "| `disconnect_observations` | logged match or disconnect | `match`, `type` (none or a disconnect kind), `match_time_s`, `outage_s`, `humidity_pct`, `cause` |\n" +
                 "| `sources` | batch of values | `kind`, `name`, `detail` (command, sessions, assumptions), `created_utc` |\n" +
                 "\n" +
                 "Views: `v_parameters` (parameters with their source), `v_everything` (one row per entry of any type with\n" +

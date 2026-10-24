@@ -103,7 +103,8 @@ public final class ProfileReport {
         }
         out.printf("%n  %d of %d entries have data; %d of %d required entries have real (non-placeholder) data%s.%n",
                 filled, all.size(), reqOk, req, ph > 0 ? "; " + ph + " placeholders" : "");
-        out.println("  Observations: " + db.count("shot_observations") + " shots, " + db.count("pose_observations") + " pose checks.");
+        out.println("  Observations: " + db.count("shot_observations") + " shots, " + db.count("pose_observations") + " pose checks, "
+                + db.count("disconnect_observations") + " disconnect-log rows.");
         List<ProfileDb.Status> missingInputs = all.stream().filter(s -> s.required() && !s.hasData() && !"derived".equals(s.role())).collect(Collectors.toList());
         List<ProfileDb.Status> missingDerived = all.stream().filter(s -> s.required() && !s.hasData() && "derived".equals(s.role())).collect(Collectors.toList());
         if (!missingInputs.isEmpty()) {
