@@ -3,6 +3,79 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-31 — Shooter/turret hardware from CAD + team decisions
+
+Source: Onshape doc `231d0d2ccd57c7da2e3d018d`, read-only via API on 10-21 and again on 10-31.
+**Frames:** CAD −Y = robot forward, +X = robot left, +Z = up; floor at CAD z = −0.37 in; drive
+center = CAD (−4.82, 1.14). The Shooter Assy sits unrotated in Main at offset (−5.6, 2.03, 13.53) in.
+The CAD changed between 10-22 and 10-29. On 10-21 the turret drive read as 3:1 with 3 servos.
+
+**Team decisions (Pranav, 10-31):**
+- Pranav's `Flywheel` / `TurretBase` / `Hood` are the baseline. PID and third-party libraries are fine.
+- The turret runs CR servos in **continuous mode**, because loop dt is too long for positional control.
+- The turret encoder is **quadrature through a motor port** (`turretEncoder`).
+- Turret travel has **no hard stop**; it is limited in software.
+- **Two hood servos, mirrored**, matching the CAD (see the hood note below).
+- Keep the 10-21 `teamcode/shooter/` v1 package for now; reconcile it with `main`'s subsystems later.
+- **Accept a longer minimum shot distance** instead of redesigning the hood.
+- **4 balls held**; fire them as fast and as accurately as possible.
+- Use `Sim/` and the robot profile, not the 10-21 standalone shooter test suite.
+
+**Game pieces:**
+- POLLEN ≈ 2.80 in (manual 71 mm; a real ball may be ~2.86–2.9 in, like a 3 in wiffle ball).
+- NECTAR ≈ 3.6 in (manual 91 mm).
+
+**Turret:**
+- Axis at CAD (−4.82, 3.96): 2.82 in behind drive center, centered left/right.
+- Drive: 2× Axon Max. Each goes servo → 60T → **20T** pinion (3× up), then that shaft's **24T → 72T**
+  turret gear (3× down). **Net servo : turret = 1 : 1.** The CAD gear relation only models the 24T→72T
+  stage.
+- Encoder: REV Absolute Encoder on its own **24T meshing the 72T**, so it is **geared 3:1**.
+  - Quadrature at 8192 CPR → **`TURRET_TICKS_PER_DEGREE = 8192·3/360 ≈ 68.27`**. The current
+    `ShooterConstants` value, 65.738, is last season's.
+  - The absolute output repeats every 120° of turret.
+- No motion limits are modelled on any turret mate.
+
+**Flywheel:**
+- 1× goBILDA 6000 rpm bare motor, 20T→20T GT2 belt (1:1).
+- 72 mm Rhino + 2× 72 mm SWYFT wheels, r = 1.42 in.
+- Axle **9.30 in above the floor**.
+
+**Hood: it rotates about the flywheel axle.**
+- The inner shooter plates pivot on bearings concentric with the flywheel shaft, and the hood is fixed
+  to them. The hood surface is an arc at r = 4.14 in.
+- **Gap = 2.72 in**, so POLLEN squeezes about 2–5 mm. **NECTAR (3.6 in) can't pass: the shooter is
+  POLLEN-only.**
+- Linkage: servo → Part 6 crank (1.185 in) → Part 7 coupler (1.345 in) → plate (4.608 in from the axle).
+  The ground link is 6.348 in.
+- It is non-Grashof, so the servo has toggle ends.
+- **Launch elevation ≈ 31°–54° usable** (60° at toggle). That is about 0.26° of launch per servo degree
+  near the current 39.4° pose.
+  - This is a geometric estimate: tangent exit at the hood tip, collisions ignored.
+  - Re-run with `python3 tools/hood_fourbar.py`.
+- **Two hood servos (confirmed 10-31), mirrored and rigidly locked to one hood.** Their axes face −X
+  and +X. They must always get mirror-image commands or they will fight, stall and heat up.
+  `HoodAngler` currently drives only one (`hood`), so it needs a second servo with the opposite
+  direction.
+- **Exit point** (current hood pose, turret 0): ball center ≈ 11.5 in above the floor, 0.78 in ahead of
+  the turret axis, ≈ 0.6 in right of it. It moves on an r = 2.82 in arc about the axle with the hood.
+
+**Limelight 3A:**
+- Chassis-mounted, on the Inner Transfer Plate, so it does **not** turn with the turret.
+- Lens 3.78 in forward of drive center, centered, 9.18 in above the floor.
+- **Pitched 50° up**, with 0° yaw and 0° roll.
+- With an ≈42° vertical FOV it sees only 29°–71° of elevation: a target Δh above the lens is visible
+  only within ≈ 1.8·Δh. The team says to ignore this for now (10-31).
+
+**Open:**
+- `HoodAngler`: add the second, mirrored hood servo.
+- Software turret travel limits (the wiring range).
+- Fill the `launcher.*` / `robot.*` inputs in the robot profile from these numbers through
+  `Catalog`/`ProfileDb`, as source `manual`.
+- Reconcile the 10-21 `teamcode/shooter/` v1 package (ESO/ADRC controllers, ballistics/aim solver,
+  plain-javac tests via `tools/run_tests.sh`) with `main`'s subsystems. It still assumes 3:1
+  servo:turret and ±200° travel, so update its constants or retire it.
+
 ## 2026-10-23 — Sim undeterminables: loop timing, static charge, disconnects
 
 - **Loop timing** (`LoopTimingModel`, `LoopControlSim`, `sim loop`): a loop = logic + uncached motor
