@@ -14,7 +14,8 @@ public class DeviceConstants {
 
     public static String blockerServoDeviceName = "blocker";
 
-    public static String hoodAnglerServoDeviceName = "hood";
+    public static String leftHoodAnglerServoDeviceName = "lhood";
+    public static String rightHoodAnglerServoDeviceName = "rhood";
 
     public static String leftTurretCRServoDeviceName = "lturret";
     public static String rightTurretCRServoDeviceName = "rturret";
