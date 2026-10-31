@@ -29,4 +29,11 @@ dependencies {
     // revhub (pulls core) + tuning. Do NOT re-add ftc:2.x — it mixes core 2.x/3.x.
     implementation 'com.pedropathing:revhub:3.0.2'
     implementation 'com.pedropathing:tuning:1.0.1'
+
+    // Sloth's FTC Dashboard fork. The stock acmerobotics dashboard can't see classes Sloth
+    // hot-reloads, so @Config edits don't apply and its OpModes don't register. The version
+    // prefix must match the Sloth version pedropathing:tuning pulls (0.3.2).
+    implementation('com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0') {
+        exclude group: 'org.firstinspires.ftc'
+    }
 }

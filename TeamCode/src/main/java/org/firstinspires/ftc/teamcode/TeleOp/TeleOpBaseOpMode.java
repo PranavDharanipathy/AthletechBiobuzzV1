@@ -86,7 +86,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         turret = new TurretBase(hardwareMap);
 
-        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.hoodAnglerServoDeviceName);
+        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.leftHoodAnglerServoDeviceName, DeviceConstants.rightHoodAnglerServoDeviceName);
         hood = new Hood(hoodAngler);
 
         controller1 = new BetterGamepad(gamepad1);

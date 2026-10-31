@@ -358,7 +358,12 @@ Java/Kotlin JVM-target mismatch is a **hard build error**, not a warning.
 In `build.dependencies.gradle`, which is applied by both `FtcRobotController` and
 `TeamCode`:
 
-- **FTC Dashboard** `com.acmerobotics.dashboard:dashboard:0.6.0`, from
+- **FTC Dashboard** is now `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0` from
+  the Dairy repo. A stock `dashboard:0.5.1` had been added to `TeamCode/build.gradle`;
+  with Sloth on the classpath its Enable/Disable OpMode was missing and `@Config` edits
+  had no effect, because Sloth runs TeamCode from its own classloader. The slothboard
+  version prefix must equal the Sloth version (`tuning` 1.0.1 pulls Sloth 0.3.2).
+  *(historical)* It was originally `com.acmerobotics.dashboard:dashboard:0.6.0`, from
   `https://maven.brott.dev/` (that repo was added here; it 302-redirects to Azure
   blob storage, which Gradle follows fine). Declared with
   `exclude group: 'org.firstinspires.ftc'` because **its POM depends on the FTC SDK

@@ -101,15 +101,18 @@ with `=`. Genuine AGP DSL methods (`keyAlias`, `pickFirst`, `abiFilters`,
 | Library | Coordinate | Repo |
 |---------|-----------|------|
 | FTC SDK | `org.firstinspires.ftc:*:12.0.0` | Maven Central |
-| FTC Dashboard | `com.acmerobotics.dashboard:dashboard:0.6.0` | `https://maven.brott.dev/` |
+| FTC Dashboard (Sloth fork) | `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0` | `https://repo.dairy.foundation/releases/` |
 | Pedro Pathing 3 | `com.pedropathing:revhub:3.0.2` (pulls `core`) | Maven Central |
 | Pedro tuning | `com.pedropathing:tuning:1.0.1` (pulls Sloth) | Maven Central + `https://repo.dairy.foundation/releases/` |
 | Apache Commons Math | `org.apache.commons:commons-math3:3.6.1` | Maven Central |
 | Kotlin stdlib | `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` | Maven Central |
 
-FTC Dashboard is declared with `exclude group: 'org.firstinspires.ftc'` because its
-POM pulls the FTC SDK at **10.0.0**, which would clash with the pinned 12.0.0.
-Everything it needs from the SDK is already declared in `build.dependencies.gradle`.
+FTC Dashboard must be **slothboard**, Sloth's fork, never the stock
+`com.acmerobotics.dashboard:dashboard`. Pedro's `tuning` pulls Sloth, which hot-reloads
+TeamCode into its own classloader; the stock dashboard can't see those classes, so its
+Enable/Disable OpMode never registers and `@Config` edits don't reach the running OpMode.
+The `0.3.2` prefix must match the Sloth version `tuning` pulls; bump them together. It is
+declared with `exclude group: 'org.firstinspires.ftc'` so it can't drag in an older SDK.
 
 `com.pedropathing:ftc` is **Pedro 2 only** (last release 2.1.2). Never add it alongside
 `revhub`/`tuning` — it silently mixes `core` 2.x and 3.x on the classpath.
