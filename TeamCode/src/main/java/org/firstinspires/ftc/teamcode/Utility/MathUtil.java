@@ -235,4 +235,35 @@ public strictfp class MathUtil {
 
         return sum / values.size();
     }
+
+    public static double approach(double current, double target, double maxStep) {
+        double d = target - current;
+        if (d > maxStep) return current + maxStep;
+        if (d < -maxStep) return current - maxStep;
+        return target;
+    }
+
+    /// Smooth sign: tanh(x / width). Avoids the discontinuity of sgn() at zero, which otherwise
+    /// makes friction feedforward chatter when the velocity estimate hovers around 0.
+    public static double smoothSign(double x, double width) {
+        if (width <= 0) return Math.signum(x);
+        double r = x / width;
+        if (r > 4) return 1;
+        if (r < -4) return -1;
+        double e = Math.exp(2 * r);
+        return (e - 1) / (e + 1);
+    }
+
+    public static boolean isFinite(double x) {
+        return !Double.isNaN(x) && !Double.isInfinite(x);
+    }
+
+    public static double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
+    }
+
+    public static double lowPassAlpha(double dt, double tau) {
+        if (tau <= 0) return 1;
+        return 1.0 - Math.exp(-dt / tau);
+    }
 }
