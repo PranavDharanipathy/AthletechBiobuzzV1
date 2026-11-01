@@ -2,21 +2,21 @@ package org.firstinspires.ftc.teamcode.Testing.ShotExperiment;
 
 /** Stationary experiment sequencer. Seconds, RPM, RPM/s. No queued shots or hardware dependencies. */
 public final class ShotGate {
-    public enum State { BLOCKED, SETTLING, READY, OPENING, FEEDING, RECOVERING }
+    public enum State { BLOCKED, SETTLING, READY, FEEDING, RECOVERING }
     public static final class Settings {
         public final double rpmTolerance, accelerationLimit, stableSeconds, maxLoopSeconds;
-        public final double minVoltage, openSeconds, feedSeconds, recoverySeconds;
+        public final double minVoltage, feedSeconds, recoverySeconds;
         public Settings(double tolerance, double acceleration, double stable, double maxLoop,
-                        double minVoltage, double open, double feed, double recovery) {
+                        double minVoltage, double feed, double recovery) {
             if (!positive(tolerance) || !positive(acceleration) || !positive(stable)
-                    || !positive(maxLoop) || !positive(minVoltage) || !positive(open)
+                    || !positive(maxLoop) || !positive(minVoltage)
                     || !positive(feed) || !positive(recovery) || stable < maxLoop
-                    || recovery < maxLoop || feed < maxLoop || maxLoop > .1 || feed > .5 || open > 1
+                    || recovery < maxLoop || feed < maxLoop || maxLoop > .1 || feed > .5
                     || stable > 5 || recovery > 10 || tolerance > 250 || acceleration > 2000
                     || minVoltage < 10 || minVoltage > 14)
                 throw new IllegalArgumentException("Invalid experiment timing/readiness settings");
             rpmTolerance=tolerance; accelerationLimit=acceleration; stableSeconds=stable;
-            maxLoopSeconds=maxLoop; this.minVoltage=minVoltage; openSeconds=open;
+            maxLoopSeconds=maxLoop; this.minVoltage=minVoltage;
             feedSeconds=feed; recoverySeconds=recovery;
         }
     }
@@ -32,11 +32,10 @@ public final class ShotGate {
     public State state() { return state; }
     public String reason() { return reason; }
     public int attempts() { return attempts; }
-    public boolean open() { return state==State.OPENING || state==State.FEEDING; }
     public boolean feed() { return state==State.FEEDING; }
 
     public void update(double now, double target, double rpm, double volts,
-                       boolean armed, boolean hoodSettled, boolean stationary, boolean trigger) {
+                       boolean armed, boolean geometryFixed, boolean stationary, boolean trigger) {
         boolean edge=trigger && !lastTrigger;
         lastTrigger=trigger; // Even blocked edges are consumed: never fire later from a stale press.
         double dt=now-lastTime;
@@ -45,10 +44,10 @@ public final class ShotGate {
                 && volts<=14.5 && positive(target) && Double.isFinite(dt) && dt>0 && dt<=settings.maxLoopSeconds;
         boolean targetChanged=target!=lastTarget;
         lastTime=Double.isFinite(now) ? now : Double.NaN; lastRpm=rpm; lastTarget=target;
-        if (!sample || targetChanged || !armed || !hoodSettled || !stationary || volts<settings.minVoltage) {
+        if (!sample || targetChanged || !armed || !geometryFixed || !stationary || volts<settings.minVoltage) {
             state=State.BLOCKED; stableSince=Double.NaN;
             reason=!sample ? "Invalid sample / loop gap" : targetChanged ? "Target changed"
-                    : !armed ? "Hold RB to arm" : !hoodSettled ? "Hood settling"
+                    : !armed ? "Hold RB to arm" : !geometryFixed ? "Secure fixed geometry"
                     : !stationary ? "Robot/turret moving" : "Low voltage";
             return;
         }
@@ -62,22 +61,15 @@ public final class ShotGate {
         }
         boolean stable=Math.abs(target-rpm)<=settings.rpmTolerance
                 && Double.isFinite(acceleration) && Math.abs(acceleration)<=settings.accelerationLimit;
-        if (state==State.OPENING) {
-            if (!stable) { state=State.BLOCKED; stableSince=Double.NaN; reason="Speed changed before feed"; }
-            else if (now-stageSince>=settings.openSeconds) {
-                state=State.FEEDING; stageSince=now; recoverUntil=now+settings.feedSeconds+settings.recoverySeconds; reason="Timed feed; ball passage unmeasured";
-            }
-            return;
-        }
         if (!stable) { stableSince=Double.NaN; state=State.SETTLING; reason="RPM error / acceleration"; return; }
         if (!Double.isFinite(stableSince)) stableSince=now;
         if (now<recoverUntil) { state=State.RECOVERING; reason="Minimum shot spacing"; return; }
         if (now-stableSince<settings.stableSeconds) { state=State.SETTLING; reason="Continuous stability dwell"; return; }
         state=State.READY; reason="Ready: fresh A press";
         if (edge) {
-            state=State.OPENING; stageSince=now; attempts++;
-            recoverUntil=now+settings.openSeconds+settings.feedSeconds+settings.recoverySeconds;
-            reason="Opening blocker; physical release unmeasured";
+            state=State.FEEDING; stageSince=now; attempts++;
+            recoverUntil=now+settings.feedSeconds+settings.recoverySeconds;
+            reason="Timed intake feed; physical release unmeasured";
         }
     }
 }

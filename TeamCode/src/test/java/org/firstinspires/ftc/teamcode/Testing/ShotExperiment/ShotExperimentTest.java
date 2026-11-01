@@ -5,17 +5,16 @@ import static org.junit.Assert.*;
 
 public class ShotExperimentTest {
     private static ShotGate gate() {
-        return new ShotGate(new ShotGate.Settings(75,400,.35,.1,10.5,.15,.12,.8));
+        return new ShotGate(new ShotGate.Settings(75,400,.35,.1,10.5,.12,.8));
     }
     private static final class Rig {
         final ShotGate gate=gate(); double now;
         void tick(boolean trigger) { tick(trigger,3700,12,true,true,true,.02); }
-        void tick(boolean trigger,double rpm,double volts,boolean armed,boolean hood,boolean still,double dt) {
-            now+=dt; gate.update(now,3700,rpm,volts,armed,hood,still,trigger);
+        void tick(boolean trigger,double rpm,double volts,boolean armed,boolean geometry,boolean still,double dt) {
+            now+=dt; gate.update(now,3700,rpm,volts,armed,geometry,still,trigger);
         }
         void ready() { for(int i=0;i<30;i++) tick(false); assertEquals(ShotGate.State.READY,gate.state()); }
-        void feed() { ready(); tick(true); assertEquals(ShotGate.State.OPENING,gate.state());
-            for(int i=0;i<9;i++) tick(false); assertTrue(gate.feed()); }
+        void feed() { ready(); tick(true); assertEquals(ShotGate.State.FEEDING,gate.state()); assertTrue(gate.feed()); }
     }
     @Test public void vacuumMatchesIndependentEndpoint() {
         double v=PollenPhysics.vacuumSpeed(6*.3048,54),theta=Math.toRadians(54);
@@ -34,41 +33,42 @@ public class ShotExperimentTest {
     }
     @Test public void earlyPressIsNotQueued() {
         Rig r=new Rig(); for(int i=0;i<30;i++) r.tick(true);
-        assertEquals(ShotGate.State.READY,r.gate.state()); assertFalse(r.gate.open());
-        r.tick(false); r.tick(true); assertTrue(r.gate.open());
+        assertEquals(ShotGate.State.READY,r.gate.state()); assertFalse(r.gate.feed());
+        r.tick(false); r.tick(true); assertTrue(r.gate.feed());
     }
-    @Test public void freshReadyPressOpensBeforeFeeding() {
-        Rig r=new Rig(); r.ready(); r.tick(true); assertTrue(r.gate.open()); assertFalse(r.gate.feed()); assertEquals(1,r.gate.attempts());
-        for(int i=0;i<6;i++) r.tick(false); assertFalse(r.gate.feed());
-        for(int i=0;i<3;i++) r.tick(false); assertTrue(r.gate.feed()); assertEquals(1,r.gate.attempts());
+    @Test public void freshReadyPressFeedsDirectlyWithoutServoDelay() {
+        Rig r=new Rig(); r.ready(); r.tick(true);
+        assertTrue(r.gate.feed()); assertEquals(1,r.gate.attempts());
+        for(int i=0;i<5;i++) r.tick(false); assertTrue(r.gate.feed());
+        for(int i=0;i<3;i++) r.tick(false); assertFalse(r.gate.feed());
     }
-    @Test public void rpmDropBeforeFeedClosesBlocker() {
-        Rig r=new Rig(); r.ready(); r.tick(true);r.tick(false,3400,12,true,true,true,.02);
-        assertFalse(r.gate.open()); assertEquals(1,r.gate.attempts());
+    @Test public void unstableSpeedPreventsMotorFeed() {
+        Rig r=new Rig();r.ready();r.tick(true,3400,12,true,true,true,.02);
+        assertFalse(r.gate.feed());assertEquals(0,r.gate.attempts());
     }
     @Test public void normalShotDipDoesNotCutPulseButRecoveryRequiresSpeed() {
         Rig r=new Rig();r.feed();r.tick(false,3000,12,true,true,true,.02);assertTrue(r.gate.feed());
         for(int i=0;i<10;i++) r.tick(false,3000,12,true,true,true,.02);
-        assertFalse(r.gate.open());
+        assertFalse(r.gate.feed());
         for(int i=0;i<60;i++) r.tick(false,3000,12,true,true,true,.02);
         assertNotEquals(ShotGate.State.READY,r.gate.state());
         for(int i=0;i<30;i++) r.tick(false);assertEquals(ShotGate.State.READY,r.gate.state());
     }
     @Test public void loopGapClosesFeedAndConsumesButton() {
         Rig r=new Rig();r.feed();r.tick(true,3700,12,true,true,true,.2);
-        assertFalse(r.gate.open());for(int i=0;i<100;i++)r.tick(true);
-        assertFalse(r.gate.open());assertEquals(1,r.gate.attempts());
+        assertFalse(r.gate.feed());for(int i=0;i<100;i++)r.tick(true);
+        assertFalse(r.gate.feed());assertEquals(1,r.gate.attempts());
     }
     @Test public void globalInterlocksAbortAnActiveFeed() {
         for(int fault=0;fault<6;fault++) {
             Rig r=new Rig();r.feed();
             r.tick(false,fault==0?Double.NaN:3700,fault==1?10:12,fault!=2,fault!=3,fault!=4,fault==5?0:.02);
-            assertFalse("fault "+fault,r.gate.open());
+            assertFalse("fault "+fault,r.gate.feed());
         }
     }
     @Test public void targetChangeNeedsNewDwell() {
         Rig r=new Rig();r.ready();r.gate.update(r.now+.02,3800,3800,12,true,true,true,true);
-        assertFalse(r.gate.open());assertEquals(ShotGate.State.BLOCKED,r.gate.state());
+        assertFalse(r.gate.feed());assertEquals(ShotGate.State.BLOCKED,r.gate.state());
     }
     @Test public void highAccelerationPreventsReadinessEvenInsideBand() {
         Rig r=new Rig();for(int i=0;i<50;i++)r.tick(false,i%2==0?3670:3730,12,true,true,true,.02);
@@ -76,12 +76,12 @@ public class ShotExperimentTest {
     }
     @Test public void feedCancellationRetainsShotSpacing() {
         Rig r=new Rig();r.feed();r.tick(false,3700,12,false,true,true,.02);
-        for(int i=0;i<25;i++)r.tick(false);assertFalse(r.gate.open());assertNotEquals(ShotGate.State.READY,r.gate.state());
+        for(int i=0;i<25;i++)r.tick(false);assertFalse(r.gate.feed());assertNotEquals(ShotGate.State.READY,r.gate.state());
     }
     @Test public void invalidConfigurationRejected() {
-        try { new ShotGate.Settings(75,400,.35,.2,10.5,.15,.12,.8);fail(); }
+        try { new ShotGate.Settings(75,400,.35,.2,10.5,.12,.8);fail(); }
         catch(IllegalArgumentException expected) { }
-        try { new ShotGate.Settings(Double.NaN,400,.35,.1,10.5,.15,.12,.8);fail(); }
+        try { new ShotGate.Settings(Double.NaN,400,.35,.1,10.5,.12,.8);fail(); }
         catch(IllegalArgumentException expected) { }
     }
     @Test public void motorPowerIsVoltageBasedBoundedAndSlewLimited() {
@@ -115,7 +115,7 @@ public class ShotExperimentTest {
     }
     @Test public void excessiveVoltageBlocksRelease() {
         Rig r=new Rig();r.ready();r.tick(true,3700,15,true,true,true,.02);
-        assertFalse(r.gate.open());assertEquals(0,r.gate.attempts());
+        assertFalse(r.gate.feed());assertEquals(0,r.gate.attempts());
     }
     @Test public void unreachableMotorTargetNeverBecomesReady() {
         ExperimentFlywheel motor=new ExperimentFlywheel();ShotGate gate=gate();double rpm=0,now=0;
@@ -124,7 +124,7 @@ public class ShotExperimentTest {
             double p=motor.update(5000,rpm,10.5,.02);
             rpm+=(4800*p*10.5/12-rpm)*(-Math.expm1(-.02/.4));
             gate.update(now,5000,rpm,10.5,true,true,true,i%2==0);
-            assertFalse(gate.open());assertTrue(p<=.9);
+            assertFalse(gate.feed());assertTrue(p<=.9);
         }
         assertEquals(0,gate.attempts());
     }

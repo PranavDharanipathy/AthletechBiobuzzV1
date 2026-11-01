@@ -11,11 +11,7 @@ import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
-import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Hood.HoodAngler;
-import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredCRServo;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
-import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredServo;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,30 +23,27 @@ import java.util.List;
 @Config
 @TeleOp(name="Pollen Shot Experiment", group="testing")
 public final class PollenShotExperiment extends OpMode {
-    // Dashboard edits become active only on X with RB released. No guessed angle-to-servo mapping.
+    // Dashboard edits apply on X with RB released. Hood and turret are mechanically fixed; no servo access.
     public static boolean HARDWARE_CONFIRMED=false;
-    public static double HOOD_POSITION=-1, MEASURED_LAUNCH_DEG=-1;
+    public static double MEASURED_LAUNCH_DEG=-1;
     public static double TARGET_RPM=0, RELEASE_DISTANCE_FT=6, FLYWHEEL_TICKS_PER_REV=28;
     public static double FEED_POWER=0;
     public static double RPM_TOLERANCE=75, MAX_RPM_PER_SECOND=400, STABLE_SECONDS=.35;
-    public static double HOOD_SETTLE_SECONDS=.75, BLOCKER_OPEN_SECONDS=.15, FEED_SECONDS=.12;
+    public static double FEED_SECONDS=.12;
     public static double RECOVERY_SECONDS=.8, MAX_LOOP_SECONDS=.1, MIN_VOLTS=10.5;
     public static double MAX_DRIVE_TICKS_PER_SECOND=20, MAX_TURRET_TICKS_PER_SECOND=100;
 
     private final ExperimentFlywheel controller=new ExperimentFlywheel();
     private DcMotorEx motor, intake, turretEncoder;
     private DcMotorEx[] drive;
-    private MonitoredCRServo leftTurret, rightTurret;
-    private HoodAngler hood;
-    private Blocker blocker;
     private VoltageSensor battery;
     private List<LynxModule> hubs;
     private ShotGate gate;
-    private double targetRpm, ticksPerRev, hoodPosition, angle, distanceFt, feedPower;
-    private double hoodReadyAt, maxDrive, maxTurret, lastLoop=Double.NaN, lastLog=-1;
+    private double targetRpm, ticksPerRev, angle, distanceFt, feedPower;
+    private double maxDrive, maxTurret, lastLoop=Double.NaN, lastLog=-1;
     private boolean lastX, lastUp, lastDown, lastLeft, lastRight, lastA, lastY;
     private int labeledAttempt, stays, exits, misses, rims, rowCount, batch;
-    private String configCsv=",,,,,,,,,,,";
+    private String configCsv=",,,,,,,,,";
     private String status="Set verified Dashboard values; START; release RB and press X", outcome="NONE";
     private String lastState="", motorFault="";
     private double armStarted=Double.NaN;
@@ -58,7 +51,7 @@ public final class PollenShotExperiment extends OpMode {
     private final StringBuilder log=new StringBuilder(32768);
 
     @Override public void init() {
-        // No hood command during INIT. Existing directions/endpoints are reused unchanged.
+        // No servo lookup or command in INIT, loop, apply, or STOP.
         motor=new MonitoredDcMotorEx(hardwareMap,DeviceConstants.flywheelMotorDeviceName,false);
         motor.setPower(0);
         motor.setDirection(FlywheelConstants.FLYWHEEL_MOTOR_DIRECTION);
@@ -66,12 +59,7 @@ public final class PollenShotExperiment extends OpMode {
         intake=new MonitoredDcMotorEx(hardwareMap,DeviceConstants.intakeMotorDeviceName,false);
         intake.setPower(0); intake.setDirection(IntakeConstants.INTAKE_MOTOR_DIRECTION);
         intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        hood=new HoodAngler(hardwareMap,DeviceConstants.leftHoodAnglerServoDeviceName,DeviceConstants.rightHoodAnglerServoDeviceName);
-        blocker=new Blocker(new MonitoredServo(hardwareMap,DeviceConstants.blockerServoDeviceName,false));
-        blocker.setState(Blocker.BlockerState.BLOCK);
         turretEncoder=new MonitoredDcMotorEx(hardwareMap,DeviceConstants.turretEncoderDeviceName,false);
-        leftTurret=new MonitoredCRServo(hardwareMap,DeviceConstants.leftTurretCRServoDeviceName,false);
-        rightTurret=new MonitoredCRServo(hardwareMap,DeviceConstants.rightTurretCRServoDeviceName,false);
         drive=new DcMotorEx[] {
             new MonitoredDcMotorEx(hardwareMap,DeviceConstants.leftFrontMotorDeviceName,false),
             new MonitoredDcMotorEx(hardwareMap,DeviceConstants.rightFrontMotorDeviceName,false),
@@ -80,33 +68,32 @@ public final class PollenShotExperiment extends OpMode {
         battery=hardwareMap.voltageSensor.iterator().next();
         hubs=hardwareMap.getAll(LynxModule.class);
         stopActuators();
-        log.append("time_s,dt_s,batch,attempt,state,target_rpm,measured_rpm,volts,flywheel_power,drive_tps,turret_tps,hood_position,launch_deg,distance_ft,ticks_per_rev,feed_power,outcome,rpm_tolerance,max_rpm_per_s,stable_s,hood_settle_s,open_s,feed_s,recovery_s,maxloop_s,min_volts,max_drive_tps,max_turret_tps\n");
+        log.append("time_s,dt_s,batch,attempt,state,target_rpm,measured_rpm,volts,flywheel_power,drive_tps,turret_tps,launch_deg,distance_ft,ticks_per_rev,feed_power,outcome,rpm_tolerance,max_rpm_per_s,stable_s,feed_s,recovery_s,maxloop_s,min_volts,max_drive_tps,max_turret_tps\n");
         logFile=new File(new File(AppUtil.FIRST_FOLDER,"data/ShotExperiments"),"pollen-"+System.currentTimeMillis()+".csv");
-        telemetry.addLine(status); telemetry.addLine("Position/aim manually before start. This mode never drives or aims.");
+        telemetry.addLine(status); telemetry.addLine("Secure hood/turret manually. Intake alone must prevent early ball release.");
     }
     private static boolean between(double v,double low,double high) {
         return Double.isFinite(v) && v>=low && v<=high;
     }
-    private void apply(double now) {
+    private void apply() {
         stopActuators(); gate=null; motorFault=""; armStarted=Double.NaN;
-        // Verified position is an individual measured setpoint, never an inferred servo endpoint.
-        if (!HARDWARE_CONFIRMED || !between(HOOD_POSITION,0,1) || !between(MEASURED_LAUNCH_DEG,31,54)
+        // Confirm hood/turret are physically secured and intake alone prevents uncommanded release.
+        if (!HARDWARE_CONFIRMED || !between(MEASURED_LAUNCH_DEG,31,54)
                 || !between(TARGET_RPM,500,5000) || !between(FLYWHEEL_TICKS_PER_REV,1,1000)
                 || !between(FEED_POWER,.01,1) || !between(RELEASE_DISTANCE_FT,4,12)
-                || !between(HOOD_SETTLE_SECONDS,.5,5) || !between(MAX_DRIVE_TICKS_PER_SECOND,0,100)
+                || !between(MAX_DRIVE_TICKS_PER_SECOND,0,100)
                 || !between(MAX_TURRET_TICKS_PER_SECOND,0,200)) {
             status="Invalid/unverified setup: see docs/POLLEN_SHOT_EXPERIMENT.md"; return;
         }
         try {
             ShotGate.Settings settings=new ShotGate.Settings(RPM_TOLERANCE,MAX_RPM_PER_SECOND,
-                    STABLE_SECONDS,MAX_LOOP_SECONDS,MIN_VOLTS,BLOCKER_OPEN_SECONDS,FEED_SECONDS,RECOVERY_SECONDS);
-            targetRpm=TARGET_RPM; ticksPerRev=FLYWHEEL_TICKS_PER_REV; hoodPosition=HOOD_POSITION;
+                    STABLE_SECONDS,MAX_LOOP_SECONDS,MIN_VOLTS,FEED_SECONDS,RECOVERY_SECONDS);
+            targetRpm=TARGET_RPM; ticksPerRev=FLYWHEEL_TICKS_PER_REV;
             angle=MEASURED_LAUNCH_DEG; distanceFt=RELEASE_DISTANCE_FT; feedPower=FEED_POWER;
             maxDrive=MAX_DRIVE_TICKS_PER_SECOND; maxTurret=MAX_TURRET_TICKS_PER_SECOND;
-            hood.setPosition(hoodPosition); hoodReadyAt=now+HOOD_SETTLE_SECONDS;
             gate=new ShotGate(settings); batch++;
             configCsv=","+settings.rpmTolerance+","+settings.accelerationLimit+","+settings.stableSeconds
-                    +","+HOOD_SETTLE_SECONDS+","+settings.openSeconds+","+settings.feedSeconds
+                    +","+settings.feedSeconds
                     +","+settings.recoverySeconds+","+settings.maxLoopSeconds+","+settings.minVoltage
                     +","+maxDrive+","+maxTurret;
             status="Applied; hold RB; wait READY; fresh A press. Label each attempt with D-pad.";
@@ -121,7 +108,7 @@ public final class PollenShotExperiment extends OpMode {
         boolean up=gamepad1.dpad_up, down=gamepad1.dpad_down, left=gamepad1.dpad_left, right=gamepad1.dpad_right;
         int attempts=gate==null ? 0 : gate.attempts();
         boolean changed=false;
-        if (attempts>labeledAttempt && gate!=null && !gate.open()) {
+        if (attempts>labeledAttempt && gate!=null && !gate.feed()) {
             if (y&&!lastY) { outcome="INVALID"; changed=true; }
             else if (up&&!lastUp) { outcome="STAY"; stays++; changed=true; }
             else if (down&&!lastDown) { outcome="EXIT"; exits++; changed=true; }
@@ -131,7 +118,7 @@ public final class PollenShotExperiment extends OpMode {
         }
         if (x&&!lastX && !changed && !gamepad1.right_bumper && attempts==labeledAttempt) {
             // Prior counts remain in CSV; next applied batch uses fresh per-batch attempt IDs.
-            apply(now); labeledAttempt=0; outcome="NONE"; changed=true;
+            apply(); labeledAttempt=0; outcome="NONE"; changed=true;
         }
         double measured=gate==null ? 0 : motor.getVelocity()*60/ticksPerRev;
         double volts=battery.getVoltage(), driveSpeed=0;
@@ -140,12 +127,11 @@ public final class PollenShotExperiment extends OpMode {
             driveSpeed=Double.isFinite(speed) ? Math.max(driveSpeed,speed) : Double.NaN;
         }
         double turretSpeed=Math.abs(turretEncoder.getVelocity());
-        leftTurret.setPower(0); rightTurret.setPower(0);
         boolean armed=gate!=null && HARDWARE_CONFIRMED && gamepad1.right_bumper && !gamepad1.b && rowCount<6000;
         if (!gamepad1.right_bumper || gamepad1.b) { motorFault=""; armStarted=Double.NaN; }
         if (armed && motorFault.isEmpty()) {
             if (!Double.isFinite(armStarted)) armStarted=now;
-            if (gate.state()==ShotGate.State.READY || gate.open() || gate.state()==ShotGate.State.RECOVERING) armStarted=now;
+            if (gate.state()==ShotGate.State.READY || gate.feed() || gate.state()==ShotGate.State.RECOVERING) armStarted=now;
             if (!Double.isFinite(measured) || !between(volts,10.5,14.5)) motorFault="Invalid RPM/voltage";
             else if (measured>5500 || measured< -150) motorFault="Overspeed or encoder sign mismatch";
             else if (now-armStarted>5) motorFault="No stable speed within 5 seconds";
@@ -157,18 +143,17 @@ public final class PollenShotExperiment extends OpMode {
             // Consume A even while another attempt awaits a label; no delayed/held-button shot.
             boolean request=a&&!lastA && !changed && gate.attempts()==labeledAttempt;
             int before=gate.attempts();
-            gate.update(now,targetRpm,measured,volts,armed,now>=hoodReadyAt,stationary,request);
+            gate.update(now,targetRpm,measured,volts,armed,HARDWARE_CONFIRMED,stationary,request);
             if (gate.attempts()!=before) { outcome="UNLABELED"; changed=true; }
             motor.setPower(controller.update(armed ? targetRpm : 0,measured,volts,dt));
-            blocker.setState(gate.open() ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
             intake.setPower(gate.feed() ? feedPower : 0);
         } else stopActuators();
         String state=gate==null ? "UNCONFIGURED" : gate.state().name();
-        if (rowCount<6000 && (changed || !state.equals(lastState) || now-lastLog>=(gate!=null && (gate.open() || gate.state()==ShotGate.State.RECOVERING) ? .02 : .1))) {
+        if (rowCount<6000 && (changed || !state.equals(lastState) || now-lastLog>=(gate!=null && (gate.feed() || gate.state()==ShotGate.State.RECOVERING) ? .02 : .1))) {
             log.append(now).append(',').append(dt).append(',').append(batch).append(',').append(gate==null?0:gate.attempts()).append(',').append(state)
                 .append(',').append(targetRpm).append(',').append(measured).append(',').append(volts)
                 .append(',').append(motor.getPower()).append(',').append(driveSpeed).append(',').append(turretSpeed)
-                .append(',').append(hoodPosition).append(',').append(angle).append(',').append(distanceFt)
+                .append(',').append(angle).append(',').append(distanceFt)
                 .append(',').append(ticksPerRev).append(',').append(feedPower).append(',').append(outcome).append(configCsv).append('\n');
             rowCount++; lastLog=now; lastState=state;
         }
@@ -188,11 +173,8 @@ public final class PollenShotExperiment extends OpMode {
     }
     private void stopActuators() {
         if (intake!=null) intake.setPower(0);
-        if (blocker!=null) blocker.setState(Blocker.BlockerState.BLOCK);
         controller.reset();
         if (motor!=null) motor.setPower(0);
-        if (leftTurret!=null) leftTurret.setPower(0);
-        if (rightTurret!=null) rightTurret.setPower(0);
         if (drive!=null) for (DcMotorEx wheel:drive) wheel.setPower(0);
     }
     @Override public void stop() {
