@@ -4,13 +4,15 @@ public class DynamicTrapezoidalSum {
 
     private double sum = 0d;
 
-    private Double lastY = null;
+    private double lastY;
+    private boolean hasLastY;
 
     public void updateSum(double dx, double y) {
 
-        if (lastY == null) {
+        if (!hasLastY) {
 
             lastY = y;
+            hasLastY = true;
             return;
         }
 
@@ -23,11 +25,10 @@ public class DynamicTrapezoidalSum {
     }
 
     public void setSum(double value) {
-
-        if (sum == value) return;
-
+        // A reset also starts a new integration interval, even if the total is unchanged.
+        // Otherwise the next update integrates against a sample from before the reset.
         sum = value;
-        lastY = null;
+        hasLastY = false;
     }
 
     public void setRawSum(double value) {

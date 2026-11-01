@@ -204,16 +204,34 @@ public final class RobotParams {
         double hMin = req("launcher.hood_min_deg"), hMax = req("launcher.hood_max_deg");
         boolean turret = flag("launcher.has_turret", true);
         Map<String, Launcher.BallFit> balls = new LinkedHashMap<>();
-        for (String b : Catalog.BALLS) {
+        List<String> enabled = launcherBallTypes();
+        for (String b : enabled) {
             Projectile.Ball ball = ball(b);
             double ratio = req("launcher." + b + ".exit_speed_ratio");
             double loss = opt("launcher." + b + ".energy_loss_factor", 1.6);
             if (ball != null && !Double.isNaN(ratio)) balls.put(b, new Launcher.BallFit(ball, ratio, loss));
         }
-        if (anyNaN(t, is, w, i0, dia, moi, count, gear, kp, maxRpm, tol, feed, h, hMin, hMax) || balls.size() < Catalog.BALLS.size()) return null;
+        if (anyNaN(t, is, w, i0, dia, moi, count, gear, kp, maxRpm, tol, feed, h, hMin, hMax)
+                || enabled.isEmpty() || balls.size() < enabled.size()) return null;
         MotorSpec motor = MotorSpec.fromRpm(t, is, w, i0, v);
         Flywheel.Params fp = new Flywheel.Params(moi, dia / 2, gear, (int) Math.round(count), motor, friction, kp, comp);
         return new Launcher.Params(fp, h, fwd, left, hMin, hMax, maxRpm, tol, feed, waitReady, turret, balls);
+    }
+
+    /** Explicit capabilities prevent requiring or predicting shots for pieces that do not fit. */
+    public List<String> launcherBallTypes() {
+        List<String> enabled = new ArrayList<>();
+        boolean incomplete = false;
+        for (String b : Catalog.BALLS) {
+            double value = req("launcher." + b + ".enabled");
+            if (Double.isNaN(value)) incomplete = true;
+            else if (value == 1) enabled.add(b);
+            else if (value != 0) throw new IllegalArgumentException("launcher." + b + ".enabled must be 0 or 1");
+        }
+        if (!incomplete && enabled.isEmpty()) {
+            throw new IllegalArgumentException("Enable at least one launcher ball type (launcher.<ball>.enabled)");
+        }
+        return enabled;
     }
 
     public Turret turret() {

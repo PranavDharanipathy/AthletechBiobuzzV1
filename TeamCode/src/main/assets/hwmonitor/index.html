@@ -1215,6 +1215,7 @@ function findings(sess) {
   if (top && top.totalIoMs > 0 && lp.count > 0) add('info', `Biggest hardware cost: ${top.name}, ${fmt(top.ioSharePct, 0)}% of all hardware time (${fmt(top.totalIoMs / lp.count, 2)} ms per loop).`);
   if (mon.eventLogLimitReached) add('info', 'events.csv reached its size limit, so later individual events were not logged (counts and statistics are still complete).');
   if (mon.eventsDropped > 0) add('info', `${fmtInt(mon.eventsDropped)} events were dropped because the logger fell behind.`);
+  if (mon.queuedRowsDropped > 0) add('info', `${fmtInt(mon.queuedRowsDropped)} telemetry rows were dropped because the storage writer fell behind.`);
   if (mon.sampleErrors > 0) add('info', `${fmtInt(mon.sampleErrors)} monitor sample reads failed.`);
   if (se.lifecycleHook === false) add('info', 'The OpMode lifecycle hook was not active, so this session relied on start()/stop() calls.');
   return out;

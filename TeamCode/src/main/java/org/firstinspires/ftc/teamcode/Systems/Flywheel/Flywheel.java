@@ -151,8 +151,6 @@ public final class Flywheel {
             voltageCompensator.addSample(batteryVoltageSensor.getVoltage(), now);
         }
 
-        chooseCoefficientsInternal();
-
         double lastPosition = position;
         position = encoder.getCurrentPosition();
         prevTime = currentTime;
@@ -163,13 +161,15 @@ public final class Flywheel {
         velocityEstimate = wasFirstTick || dt <= 0 ? 0 : (position - lastPosition) / dt;
         currentVelocity = velocityEstimate;
 
+        chooseCoefficientsInternal();
+
         error = targetVelocity - currentVelocity;
 
         //proportional
         p = kp * error;
         p = MathUtil.clamp(p, minP, maxP);
 
-        if (!Double.isNaN(error * dt) && targetVelocity != 0) errorSum.updateSum(dt, error);
+        if (ki != 0 && MathUtil.isFinite(error * dt) && targetVelocity != 0) errorSum.updateSum(dt, error);
         else errorSum.setSum(0); //integral is reset if it's NaN or if targetVelocity is equal to 0
 
         // i smashing
@@ -178,9 +178,16 @@ public final class Flywheel {
         }
 
         // i is prevented from getting too high or too low
-        errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(), (minI / ki) /* integrated error min*/, (maxI / ki) /*integrated error max*/));
-        i = ki * errorSum.getSum();
-        //i = MathUtil.clamp(ki * errorSum.getSum(), minI, maxI);
+        if (ki == 0) {
+            errorSum.setSum(0);
+            i = 0;
+        } else {
+            double bound0 = minI / ki;
+            double bound1 = maxI / ki;
+            errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(),
+                    Math.min(bound0, bound1), Math.max(bound0, bound1)));
+            i = ki * errorSum.getSum();
+        }
 
         //derivative
         d = dt > 0 ? kd * (error - prevError) / dt : 0;
@@ -224,7 +231,8 @@ public final class Flywheel {
 
         if (isPIDEnabled) throw new IllegalArgumentException("Must disable PID mode!");
 
-        flywheelMotor.setPower(power);
+        this.power = MathUtil.isFinite(power) ? MathUtil.clamp(power, -1, 1) : 0;
+        flywheelMotor.setPower(this.power);
     }
 
     // default mode is enabled
@@ -262,18 +270,25 @@ public final class Flywheel {
     /// @param velocityMarginOfError Acceptable variation in velocity.
     /// @param stabilityMarginOfError Acceptable variation in stability.
     public boolean isAtVelocityAndStable(double velocityMarginOfError, double stabilityMarginOfError) {
+        if (firstTick || !isPIDEnabled || targetVelocity == 0
+                || !MathUtil.isFinite(targetVelocity) || !MathUtil.isFinite(currentVelocity)
+                || !MathUtil.isFinite(lastCurrentVelocity)
+                || !MathUtil.isFinite(velocityMarginOfError) || velocityMarginOfError < 0
+                || !MathUtil.isFinite(stabilityMarginOfError) || stabilityMarginOfError < 0) return false;
 
-        double currentSpeed = Math.abs(currentVelocity);
-        double lastSpeed = Math.abs(lastCurrentVelocity);
+        boolean isAtVelocity = Math.abs(targetVelocity - currentVelocity) <= velocityMarginOfError;
 
-        boolean isAtVelocity = Math.abs(targetVelocity - currentSpeed) <= velocityMarginOfError;
-
-        boolean isStable = Math.abs(currentSpeed - lastSpeed) <= stabilityMarginOfError;
+        boolean isStable = Math.abs(currentVelocity - lastCurrentVelocity) <= stabilityMarginOfError;
 
         return isAtVelocity && isStable;
     }
 
     public void reset() {
+
+        flywheelMotor.setPower(0);
+        power = 0;
+        p = d = v = s = 0;
+        error = velocityEstimate = dt = 0;
 
         firstTick = true;
         currentTime = 0;

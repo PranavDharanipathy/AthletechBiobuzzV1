@@ -22,7 +22,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -62,6 +63,7 @@ public final class MonitorStore {
     private static final String TAG = HardwareMonitor.TAG;
     private static final Object FS_LOCK = new Object();
     private static final long FLUSH_PERIOD_MS = 250;
+    static final int MAX_PENDING_ROWS = 4096;
 
     public static File rootDir() {
         return new File(AppUtil.ROBOT_DATA_DIR, ROOT_NAME);
@@ -93,9 +95,11 @@ public final class MonitorStore {
     private final ScheduledExecutorService exec;
     private final AtomicBoolean finishing = new AtomicBoolean();
 
-    private final ConcurrentLinkedQueue<String> deviceRows = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<String> systemRows = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<String> motorRows = new ConcurrentLinkedQueue<>();
+    private final Queue<String> deviceRows = new ArrayBlockingQueue<>(MAX_PENDING_ROWS);
+    private final Queue<String> systemRows = new ArrayBlockingQueue<>(MAX_PENDING_ROWS);
+    private final Queue<String> motorRows = new ArrayBlockingQueue<>(MAX_PENDING_ROWS);
+    private final Object admissionLock = new Object();
+    private volatile long droppedRows;
     private volatile String systemHeader;
     private final ArrayList<String> deviceNames = new ArrayList<>();
     private final StringBuilder line = new StringBuilder(128);
@@ -113,6 +117,12 @@ public final class MonitorStore {
     private volatile String lastError;
 
     MonitorStore(File dir, EventBuffer events, long maxEventBytes, long summaryPeriodMs, Provider provider) {
+        this(dir, events, maxEventBytes, summaryPeriodMs, provider, newWriterExecutor());
+    }
+
+    /** Package-level scheduler injection for deterministic storage/lifecycle tests. */
+    MonitorStore(File dir, EventBuffer events, long maxEventBytes, long summaryPeriodMs,
+                 Provider provider, ScheduledExecutorService executor) {
         this.dir = dir;
         this.events = events;
         this.spare = events == null ? null : new EventBuffer.Batch(events.capacity());
@@ -120,15 +130,7 @@ public final class MonitorStore {
         this.summaryPeriodNs = summaryPeriodMs * 1_000_000L;
         this.provider = provider;
         this.lastSummaryNs = System.nanoTime();
-        this.exec = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "HardwareMonitor-writer");
-                t.setDaemon(true);
-                t.setPriority(Thread.MIN_PRIORITY);
-                return t;
-            }
-        });
+        this.exec = executor;
         exec.scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
@@ -137,16 +139,31 @@ public final class MonitorStore {
         }, FLUSH_PERIOD_MS, FLUSH_PERIOD_MS, TimeUnit.MILLISECONDS);
     }
 
+    private static ScheduledExecutorService newWriterExecutor() {
+        return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r, "HardwareMonitor-writer");
+                t.setDaemon(true);
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            }
+        });
+    }
+
     File dir() {
         return dir;
     }
 
     void addDevice(int id, String name, String csvRow) {
-        synchronized (deviceNames) {
-            while (deviceNames.size() <= id) deviceNames.add("?");
-            deviceNames.set(id, csv(name));
+        synchronized (admissionLock) {
+            if (finishing.get() || closed) return;
+            synchronized (deviceNames) {
+                while (deviceNames.size() <= id) deviceNames.add("?");
+                deviceNames.set(id, csv(name));
+            }
+            enqueue(deviceRows, csvRow);
         }
-        deviceRows.add(csvRow);
     }
 
     /** Sets the system.csv header (first call wins - columns depend on the hubs present). */
@@ -159,11 +176,23 @@ public final class MonitorStore {
     }
 
     void addSystemRow(String row) {
-        if (!closed) systemRows.add(row);
+        enqueue(systemRows, row);
     }
 
     void addMotorRow(String row) {
-        if (!closed) motorRows.add(row);
+        enqueue(motorRows, row);
+    }
+
+    private void enqueue(Queue<String> rows, String row) {
+        synchronized (admissionLock) {
+            if (finishing.get() || closed) return;
+            // Monitoring must shed data rather than block a loop or grow without bound.
+            if (!rows.offer(row)) droppedRows++;
+        }
+    }
+
+    long droppedRows() {
+        return droppedRows;
     }
 
     long eventBytes() {
@@ -184,7 +213,9 @@ public final class MonitorStore {
 
     /** Writes everything still queued plus the final summary, then stops the writer thread. */
     void finish() {
-        if (!finishing.compareAndSet(false, true)) return;
+        synchronized (admissionLock) {
+            if (!finishing.compareAndSet(false, true)) return;
+        }
         Runnable last = new Runnable() {
             @Override
             public void run() {
@@ -262,27 +293,44 @@ public final class MonitorStore {
     private void openIfNeeded() throws IOException {
         if (devicesOut != null) return;
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
-        devicesOut = open("devices.csv", "id,name,type,device_class,cache_reads,connection");
-        systemOut = open("system.csv", null);
-        motorsOut = open("motors.csv", "t_s,motor,commanded_power,current_a,velocity_tps,"
-                + "bemf_v,bemf_electrical_v,bemf_to_battery,input_power_w,energy_wh");
-        if (events != null) {
-            eventsOut = open("events.csv", "t_s,device_id,device,op,kind,flag,latency_us");
+        Writer devices = null, system = null, motors = null, eventLog = null;
+        try {
+            devices = open("devices.csv", "id,name,type,device_class,cache_reads,connection");
+            system = open("system.csv", null);
+            motors = open("motors.csv", "t_s,motor,commanded_power,current_a,velocity_tps,"
+                    + "bemf_v,bemf_electrical_v,bemf_to_battery,input_power_w,energy_wh");
+            if (events != null) eventLog = open("events.csv", "t_s,device_id,device,op,kind,flag,latency_us");
+        } catch (IOException | RuntimeException e) {
+            closeQuietly(devices);
+            closeQuietly(system);
+            closeQuietly(motors);
+            closeQuietly(eventLog);
+            throw e;
         }
+        // Publish only a complete set. A later flush can retry after any partial failure.
+        devicesOut = devices;
+        systemOut = system;
+        motorsOut = motors;
+        eventsOut = eventLog;
     }
 
     private Writer open(String name, String header) throws IOException {
         File f = new File(dir, name);
         boolean fresh = !f.exists() || f.length() == 0;
         Writer w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f, true), "UTF-8"), 1 << 16);
-        if (fresh && header != null) {
-            w.write(header);
-            w.write('\n');
+        try {
+            if (fresh && header != null) {
+                w.write(header);
+                w.write('\n');
+            }
+        } catch (IOException | RuntimeException e) {
+            closeQuietly(w);
+            throw e;
         }
         return w;
     }
 
-    private static void drain(ConcurrentLinkedQueue<String> q, Writer out) throws IOException {
+    private static void drain(Queue<String> q, Writer out) throws IOException {
         String row;
         while ((row = q.poll()) != null) {
             out.write(row);

@@ -114,6 +114,52 @@ public class ProfileDbTest {
         assertEquals(SourceKind.PLACEHOLDER, rp.outputKind());
     }
 
+    @Test public void pollenOnlyLauncherDoesNotRequireNectarShotInputs() throws Exception {
+        db.fillExamples();
+        long source = db.addSource(SourceKind.MANUAL, "current pollen-only hardware", null);
+        db.setParam("launcher.nectar.enabled", 0.0, null, null, source, false);
+        db.clear("ball.nectar.mass_kg");
+        db.clear("launcher.nectar.exit_speed_ratio");
+        RobotParams rp = new RobotParams(db);
+        org.athletech.sim.robot.Launcher.Params launcher = rp.launcher();
+        rp.requireAll();
+        assertNotNull(launcher);
+        assertEquals(Collections.singletonList("pollen"), rp.launcherBallTypes());
+        assertEquals(Collections.singleton("pollen"), launcher.balls().keySet());
+        try {
+            new org.athletech.sim.robot.Launcher(launcher).maxExitSpeed("nectar");
+            fail("unsupported ball cannot produce a shot prediction");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("nectar"));
+        }
+        ByteArrayOutputStream report = new ByteArrayOutputStream();
+        org.athletech.sim.config.ProfileReport.text(db, new PrintStream(report));
+        String text = report.toString("UTF-8");
+        assertTrue(text.contains("Unsupported launcher ball types: nectar"));
+        assertTrue(!text.contains("parameter  launcher.nectar.exit_speed_ratio"));
+    }
+
+    @Test public void launcherCapabilitiesMustBeExplicitAndBinary() throws Exception {
+        db.fillExamples();
+        db.clear("launcher.nectar.enabled");
+        RobotParams rp = new RobotParams(db);
+        rp.launcher();
+        try {
+            rp.requireAll();
+            fail("missing capability must not silently enable nectar");
+        } catch (RobotParams.MissingInputsException expected) {
+            assertTrue(expected.keys.contains("launcher.nectar.enabled"));
+        }
+        long source = db.addSource(SourceKind.MANUAL, "invalid flag", null);
+        db.setParam("launcher.nectar.enabled", 0.2, null, null, source, false);
+        try {
+            new RobotParams(db).launcherBallTypes();
+            fail("fractional capability accepted");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("must be 0 or 1"));
+        }
+    }
+
     @Test
     public void missingInputsAreListed() throws Exception {
         RobotParams rp = new RobotParams(db);

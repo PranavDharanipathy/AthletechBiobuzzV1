@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** "How complete is the profile?" as text (console) and as an HTML page with every curve charted. */
@@ -64,15 +65,15 @@ public final class ProfileReport {
         }
     }
 
-    static Map<String, CategoryCount> counts(List<ProfileDb.Status> all) {
+    static Map<String, CategoryCount> counts(List<ProfileDb.Status> all, Set<String> disabled) {
         Map<String, int[]> m = new LinkedHashMap<>();
         for (String[] c : Catalog.CATEGORIES) m.put(c[0], new int[5]);
         for (ProfileDb.Status s : all) {
             int[] c = m.computeIfAbsent(s.category(), k -> new int[5]);
             c[0]++;
             if (s.hasData()) c[1]++;
-            if (s.required()) c[2]++;
-            if (s.required() && s.hasData() && s.sourceKind() != SourceKind.PLACEHOLDER) c[3]++;
+            if (required(s.name(), s.required(), disabled)) c[2]++;
+            if (required(s.name(), s.required(), disabled) && s.hasData() && s.sourceKind() != SourceKind.PLACEHOLDER) c[3]++;
             if (s.hasData() && s.sourceKind() == SourceKind.PLACEHOLDER) c[4]++;
         }
         Map<String, CategoryCount> out = new LinkedHashMap<>();
@@ -82,9 +83,28 @@ public final class ProfileReport {
         return out;
     }
 
+    private static Set<String> disabledLaunchers(ProfileDb db) throws SQLException {
+        Set<String> disabled = new java.util.LinkedHashSet<>();
+        for (String ball : Catalog.BALLS) {
+            Double enabled = db.value("launcher." + ball + ".enabled");
+            if (enabled != null && enabled == 0) disabled.add(ball);
+        }
+        return disabled;
+    }
+
+    private static boolean required(String name, boolean required, Set<String> disabled) {
+        if (!required) return false;
+        for (String ball : disabled) {
+            String prefix = "launcher." + ball + ".";
+            if (name.startsWith(prefix) && !name.equals(prefix + "enabled")) return false;
+        }
+        return true;
+    }
+
     public static void text(ProfileDb db, PrintStream out) throws SQLException {
         List<ProfileDb.Status> all = db.everything();
-        Map<String, CategoryCount> counts = counts(all);
+        Set<String> disabled = disabledLaunchers(db);
+        Map<String, CategoryCount> counts = counts(all, disabled);
         int req = 0, reqOk = 0, ph = 0, filled = 0;
         out.println("Robot profile: " + db.path().toAbsolutePath());
         String name = db.meta("robot_name");
@@ -105,8 +125,9 @@ public final class ProfileReport {
                 filled, all.size(), reqOk, req, ph > 0 ? "; " + ph + " placeholders" : "");
         out.println("  Observations: " + db.count("shot_observations") + " shots, " + db.count("pose_observations") + " pose checks, "
                 + db.count("disconnect_observations") + " disconnect-log rows.");
-        List<ProfileDb.Status> missingInputs = all.stream().filter(s -> s.required() && !s.hasData() && !"derived".equals(s.role())).collect(Collectors.toList());
-        List<ProfileDb.Status> missingDerived = all.stream().filter(s -> s.required() && !s.hasData() && "derived".equals(s.role())).collect(Collectors.toList());
+        if (!disabled.isEmpty()) out.println("  Unsupported launcher ball types: " + String.join(", ", disabled) + " (shot entries not required).");
+        List<ProfileDb.Status> missingInputs = all.stream().filter(s -> required(s.name(), s.required(), disabled) && !s.hasData() && !"derived".equals(s.role())).collect(Collectors.toList());
+        List<ProfileDb.Status> missingDerived = all.stream().filter(s -> required(s.name(), s.required(), disabled) && !s.hasData() && "derived".equals(s.role())).collect(Collectors.toList());
         if (!missingInputs.isEmpty()) {
             out.println("\n  Still needed from you (inputs and measurements):");
             for (ProfileDb.Status s : missingInputs) out.println("    " + s.type() + "  " + s.name());
@@ -118,7 +139,8 @@ public final class ProfileReport {
 
     public static void html(ProfileDb db, Path file) throws SQLException, IOException {
         List<ProfileDb.Status> all = db.everything();
-        Map<String, CategoryCount> counts = counts(all);
+        Set<String> disabled = disabledLaunchers(db);
+        Map<String, CategoryCount> counts = counts(all, disabled);
         HtmlReport r = new HtmlReport("Robot profile");
         r.paragraph(db.path().toAbsolutePath() + " | season " + db.meta("season") + " | "
                 + (db.meta("updated_utc") == null ? "created " + db.meta("created_utc") : "updated " + db.meta("updated_utc")));
@@ -127,7 +149,8 @@ public final class ProfileReport {
                 c.requiredFilled() + " / " + c.required(), Integer.toString(c.placeholders()), Catalog.categoryDescription(k))));
         r.heading("Completeness");
         r.table(Arrays.asList("category", "entries", "filled", "required with real data", "placeholders", "what it is"), rows);
-        List<ProfileDb.Status> missing = all.stream().filter(s -> s.required() && !s.hasData()).collect(Collectors.toList());
+        if (!disabled.isEmpty()) r.note("info", "Unsupported launcher ball types: " + String.join(", ", disabled) + ". Their shot entries are not required; historical data remains visible.");
+        List<ProfileDb.Status> missing = all.stream().filter(s -> required(s.name(), s.required(), disabled) && !s.hasData()).collect(Collectors.toList());
         if (!missing.isEmpty()) {
             r.note("warn", missing.size() + " required entries are still empty: "
                     + String.join(", ", missing.stream().map(ProfileDb.Status::name).collect(Collectors.toList())));
@@ -136,7 +159,7 @@ public final class ProfileReport {
         List<List<String>> prow = new ArrayList<>();
         for (ProfileDb.ParamRow p : db.params("")) {
             prow.add(Arrays.asList(p.key(), p.text() != null ? p.text() : p.value() == null ? "" : Csv.fmt(p.value()), p.unit(),
-                    p.std() == null ? "" : Csv.fmt(p.std()), p.sourceKind() == null ? "" : p.sourceKind().id(), p.role(), p.required() ? "yes" : ""));
+                    p.std() == null ? "" : Csv.fmt(p.std()), p.sourceKind() == null ? "" : p.sourceKind().id(), p.role(), required(p.key(), p.required(), disabled) ? "yes" : ""));
         }
         r.table(Arrays.asList("key", "value", "unit", "std", "source", "role", "required"), prow);
         r.heading("Curves");
