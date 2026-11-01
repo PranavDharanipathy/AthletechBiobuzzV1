@@ -15,7 +15,7 @@ def summarize(stream):
             continue
         key=(batch,attempt)
         data=attempts.setdefault(key,dict(outcome='UNLABELED',rpm=row['target_rpm'],
-                                        hood=row['hood_position'],angle=row['launch_deg'],distance=row['distance_ft']))
+                                        angle=row['launch_deg'],distance=row['distance_ft']))
         if row['outcome'] in VALID:
             data['outcome']=row['outcome']
     batches=[]
@@ -24,7 +24,7 @@ def summarize(stream):
         counts=Counter(r['outcome'] for r in rows)
         clean=counts['STAY']+counts['EXIT']
         labeled=clean+counts['MISS']+counts['RIM']
-        batches.append(dict(batch=batch,rpm=rows[0]['rpm'],hood_position=rows[0]['hood'],
+        batches.append(dict(batch=batch,rpm=rows[0]['rpm'],
                             launch_deg=rows[0]['angle'],distance_ft=rows[0]['distance'],
                             observed_attempts=len(rows),outcomes=dict(counts),
                             clean_entry_fraction=clean/labeled if labeled else None,
