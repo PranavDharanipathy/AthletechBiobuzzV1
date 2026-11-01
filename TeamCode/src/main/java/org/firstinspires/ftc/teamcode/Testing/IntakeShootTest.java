@@ -6,6 +6,8 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
+import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
+import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
 
 @Config
 @TeleOp(group = "testing")
@@ -21,6 +23,9 @@ public class IntakeShootTest extends OpMode {
 
         flywheel = hardwareMap.dcMotor.get(DeviceConstants.flywheelMotorDeviceName);
         intake = hardwareMap.dcMotor.get(DeviceConstants.intakeMotorDeviceName);
+
+        flywheel.setDirection(FlywheelConstants.FLYWHEEL_MOTOR_DIRECTION);
+        intake.setDirection(IntakeConstants.INTAKE_MOTOR_DIRECTION);
     }
 
     @Override

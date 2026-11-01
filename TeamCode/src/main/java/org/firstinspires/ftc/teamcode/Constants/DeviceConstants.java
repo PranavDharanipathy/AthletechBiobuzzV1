@@ -9,7 +9,7 @@ public class DeviceConstants {
 
     public static String pinpointDeviceName = "pinpoint";
 
-    public static String flywheelMotorDeviceName = "flywheel";
+    public static String flywheelMotorDeviceName = "shooter";
     public static String intakeMotorDeviceName = "intake";
 
     public static String blockerServoDeviceName = "blocker";

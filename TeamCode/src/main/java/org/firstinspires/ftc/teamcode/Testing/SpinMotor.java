@@ -12,7 +12,7 @@ public class SpinMotor extends OpMode {
 
     public static double MOTOR_POWER = 1;
 
-    public static String motorName = "intake";
+    public static String motorName = "";
 
     public static DcMotorSimple.Direction motorDirection = DcMotorSimple.Direction.FORWARD;
 
