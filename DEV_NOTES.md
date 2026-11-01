@@ -3,6 +3,38 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-31 — Turret diagnostic and characterization OpMode
+
+- New OpMode **Turret Diagnostic** (`Testing/TurretDiagnostics/`). It collects data and diagnoses
+  the turret shake/overshoot; it is not a controller replacement. Procedure and interpretation:
+  `docs/TURRET_DIAGNOSTIC.md`.
+- **Modes** are operator-selected and labeled in every file and row:
+  - passive observation;
+  - the unmodified baseline `TurretBase`, with its P/I/D/hold terms, gains and own dt recorded;
+  - bounded open-loop pulses and holds (`+,+,-,-` per level, neutral between), or a jog.
+  - A per-step summary separates friction (breakaway, dead time), play (reversal minus restart
+    dead time), inertia (coast decel) and loop timing.
+- **Safety:**
+  - Starts passive. Init never writes the servos, and arming is only possible after START.
+  - Arming needs: operator-confirmed scale, reference, bounds, margin, command limit, assumed
+    decel and max speed (all NaN by default); deadman released; still turret inside the safe zone.
+  - Commands flow only while RB is held. Both servos go neutral on any of: deadman release,
+    cancel, stale/failed/implausible feedback, out-of-bounds, predicted stop beyond the margin,
+    overspeed, frozen encoder under command, command opposing motion, settings edit, full buffer,
+    OpMode stop, exception.
+  - Every command passes through `GuardedCRServo` (clamp + gate), including the baseline
+    controller's, via its device-injection constructor.
+  - Software bounds are operator inputs and do not guarantee wiring safety.
+- **Changes nothing:** no constants, servo/encoder directions, gearing values or travel limits.
+  `ShooterConstants.TURRET_TICKS_PER_DEGREE` stays 65.738; the diagnostic's own confirmed scale is
+  used only for its targets and recordings.
+- **No chassis drive** in this OpMode: `DrivetrainConstants` (lf/lb REVERSE) and
+  `TeleOpBaseOpMode` (rf/rb REVERSE) disagree on drive directions. Driving-induced shake needs
+  TeleOp integration after the directions are verified.
+- **Verified off-robot only:** 45 new JUnit tests (every stop path, schedules, guard clamping of
+  the real `TurretBase`, step analysis, file output). `:TeamCode:testDebugUnitTest`,
+  `:TeamCode:assembleDebug` and `:Sim:build` pass; lint adds no warnings. Not yet run on the robot.
+
 ## 2026-10-31 — Ongoing code audit and pollen-only simulation support
 
 - Andrew requested a checkpoint before a larger issue. Cross-agent handoff:
