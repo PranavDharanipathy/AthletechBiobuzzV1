@@ -75,7 +75,7 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
         flywheel.setVelocity(FLYWHEEL_VELOCITY, true);
 
         intakeMotor.update();
-        flywheel.update();
+        flywheel.update(getBulkReadNanos());
 
         if (controller1.dpad_upHasJustBeenPressed) {
             distances.add(DISTANCE_TO_GOAL);

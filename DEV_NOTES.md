@@ -3,6 +3,39 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-31 — Physics fixes, Phase 0 (code only, not yet run on the robot)
+
+The status table in [docs/PHYSICS_ERROR_BUDGET.md](./docs/PHYSICS_ERROR_BUDGET.md) lists every change
+and its test.
+- **Flywheel gains are now volts.** `FlywheelConstants` multiplies the old power-unit numbers by 12,
+  so the behaviour at 12 V is what they were tuned for. In the tuner, divide by 12 to compare with
+  old values. Pranav to confirm.
+- **Timing.** Pass `getBulkReadNanos()` to `flywheel.update(...)` / `turret.update(...)` in TeleOps;
+  `clearCacheOfLynxModule()` now does an explicit bulk read per hub after `HardwareMonitor.update()`.
+  The no-arg `update()` still works; it stamps time right after the encoder read.
+- **Fire gate.** Use `flywheel.isReady()`: 100 ms window, within 1 %.
+- **Turret.** The CR servo command is no longer battery-scaled
+  (`TurretConstants.TURRET_BATTERY_COMPENSATION`), and `getVelocity()` corrects the hub's 16-bit wrap.
+- **Hood.** `HoodConstants.LEFT/RIGHT_HOOD_TRIM` (Dashboard) take out the mirrored-servo fight.
+- **Sim profile.** CAD launch geometry entered (exit height 0.292 m, offsets, has_turret).
+
+## 2026-10-31 — Physics audit and error budget (read-only, no code changed)
+
+Full write-up: [docs/PHYSICS_ERROR_BUDGET.md](./docs/PHYSICS_ERROR_BUDGET.md). Model:
+`python3 tools/shot_error_budget.py`. Headline issues, unverified on hardware:
+- **Flywheel gains are in power units, but `Flywheel.update()` divides them by battery volts**
+  (`toPower`). The feedforward is ~1/12 of what's needed. Confirm with Pranav before rescaling.
+- Velocity is Δcounts / Δt, with Δt stamped *after* a blocking battery read but the counts latched
+  at the bulk read. That gives up to ±8–13 % velocity error. Use one timestamp at the bulk read.
+- At 3 m, 1 % exit speed ≈ 1.8 in at the target (window ±5.6 in). The flywheel ready gate (±50
+  ticks/s ≈ ±2.9 %) alone spends that window.
+- The target model differs between the envelope tool (opening 60° from horizontal), v1
+  `ShotTable` (descent ≥ 25°) and the Sim profile (empty). The "longer minimum shot distance"
+  decision rests on the descent rule, so get the opening geometry from TU07 or a real field.
+- Turret: 65.738 vs 68.27 ticks/° (3.7 %, ≈ 7 in at 90°/3 m). Integral + `kHold` relay on an
+  integrating plant with ~60 ms delay predicts overshoot and a ~4 Hz limit cycle. Feedforward the
+  robot motion instead.
+
 ## 2026-10-31 — Turret diagnostic and characterization OpMode
 
 - New OpMode **Turret Diagnostic** (`Testing/TurretDiagnostics/`). It collects data and diagnoses

@@ -107,6 +107,9 @@ Data is written to `/sdcard/FIRST/data/TurretDiagnostics/<yyyyMMdd_HHmmss>/`. Ge
   deceleration, encoder slip or a mis-entered bound defeats it.
 - Detection thresholds (`MAX_LOOP_GAP_MS`, `IMPLAUSIBLE_SPEED_DEG_PER_S`, frozen-encoder and
   command-opposes-motion windows) are heuristics, not physical limits.
+- Since 10-31 (Phase 0 physics fixes), `TurretBase` divides by the nominal 12 V instead of the
+  measured battery voltage (`TurretConstants.TURRET_BATTERY_COMPENSATION`). To test whether the
+  servos depend on the battery, compare open-loop `late_speed_deg_s` at two battery levels.
 - Baseline `TurretBase` notes:
   - On its first update, `prevError` is 0 and `dt` is measured from construction, so any
     nonzero initial error produces a derivative kick. The diagnostic holds the start position

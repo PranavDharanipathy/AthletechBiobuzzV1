@@ -4,7 +4,6 @@ import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
-import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
@@ -244,20 +243,44 @@ public class TurretBase {
     private Double initialError = null;
     private double prevTime, currTime, dt;
 
-    private final ElapsedTime timer = new ElapsedTime();
+    /** Clock origin (System.nanoTime) so times are ms since construction, as with the old ElapsedTime. */
+    private final long clockOriginNanos = System.nanoTime();
 
+    /**
+     * Runs the controller, timing the encoder sample right after it is read. Prefer
+     * {@link #update(long)} when the caller knows when this loop's bulk read happened.
+     */
     public void update() {
+        updateInternal(Double.NaN);
+    }
 
-        currTime = timer.milliseconds();
-        dt = currTime - prevTime;
+    /**
+     * @param sampleNanos {@link System#nanoTime()} taken right after this loop's bulk read, i.e. the
+     *                    moment the encoder count was latched (see TeleOpBaseOpMode#getBulkReadNanos)
+     */
+    public void update(long sampleNanos) {
+        updateInternal((sampleNanos - clockOriginNanos) / 1e6);
+    }
 
-        double now = MathUtil.millisecondsToSeconds(currTime);
-        if (voltageCompensator.shouldSample(now)) {
-            voltageCompensator.addSample(batteryVoltageSensor.getVoltage(), now);
-        }
+    private void updateInternal(double sampleMillis) {
 
+        // Read the encoder (which may trigger the bulk read), then stamp the time: dt must be the
+        // time between samples, with no blocking call (e.g. a battery read) in between.
         lastCurrentPosition = currentPosition;
         currentPosition = getCurrentPosition();
+
+        currTime = Double.isNaN(sampleMillis) ? (System.nanoTime() - clockOriginNanos) / 1e6 : sampleMillis;
+        dt = currTime - prevTime;
+
+        // CR servos run off the hub's regulated servo rail, not the battery, so battery-scaling their
+        // command changes the loop gain (±8–9 % over 11–13 V) for no physical reason. The battery
+        // read is also a blocking hub transaction. Only done if explicitly re-enabled.
+        if (TurretConstants.TURRET_BATTERY_COMPENSATION) {
+            double now = MathUtil.millisecondsToSeconds(currTime);
+            if (voltageCompensator.shouldSample(now)) {
+                voltageCompensator.addSample(batteryVoltageSensor.getVoltage(), now);
+            }
+        }
 
         error = targetPosition - currentPosition;
 
@@ -303,7 +326,14 @@ public class TurretBase {
             f = kHold * Math.signum(error) * activation;
         }
 
-        power = voltageCompensator.toPower(p + i + d + f);
+        // Gains stay in "volts at the nominal 12 V" so existing tuning keeps its meaning.
+        double command = p + i + d + f;
+        if (TurretConstants.TURRET_BATTERY_COMPENSATION) {
+            power = voltageCompensator.toPower(command);
+        } else {
+            power = MathUtil.isFinite(command)
+                    ? MathUtil.clamp(command / TurretConstants.TURRET_NOMINAL_VOLTS, -1, 1) : 0;
+        }
 
         leftTurretBase.setPower(power);
         rightTurretBase.setPower(power);
@@ -325,8 +355,14 @@ public class TurretBase {
         return initialError;
     }
 
+    /**
+     * Hub velocity, ticks/s, with its 16-bit wrap removed. At 68.27 ticks/° the raw value wraps
+     * above ≈ 480 °/s of turret, which the 1:1 Axon Max drive can approach.
+     */
     public double getVelocity() {
-        return encoder.getInternalVelocity();
+        double estimate = dt > 0 ? (currentPosition - lastCurrentPosition) / MathUtil.millisecondsToSeconds(dt)
+                : Double.NaN;
+        return encoder.getInternalVelocity(estimate);
     }
 
     public double getPower() {

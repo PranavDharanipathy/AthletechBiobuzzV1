@@ -14,6 +14,7 @@ public class ShooterConstants {
 
     public static double MIN_TURRET_POSITION_IN_DEGREES = -90, MAX_TURRET_POSITION_IN_DEGREES = 90;
 
+    /// Unused, last season's hood. The active hood range is HoodConstants.HOOD_ANGLER_MIN/MAX_POSITION.
     public static double HOOD_ANGLER_MIN_POSITION = 0.78;
     public static double HOOD_ANGLER_MAX_POSITION = 0;
 

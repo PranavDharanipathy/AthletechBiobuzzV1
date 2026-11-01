@@ -25,6 +25,13 @@ public class TurretConstants {
     public static double TURRET_VOLTAGE_FILTER_TAU = 0.1;
     public static double TURRET_NOMINAL_VOLTS = 12.0;
 
+    /**
+     * false (default): the controller output (volts at nominal) is divided by TURRET_NOMINAL_VOLTS,
+     * because the CR servos run off the hub's regulated servo rail, not the battery. Set true only if
+     * the Turret Diagnostic shows open-loop turret speed changing with battery voltage.
+     */
+    public static boolean TURRET_BATTERY_COMPENSATION = false;
+
     public static List<Double> TURRET_PD_POSITIONS = new ArrayList<>(Arrays.asList(-1.0, 1.0));
     public static List<Double> TURRET_KPS = new ArrayList<>(Arrays.asList(0.0, 0.0));
     public static List<Double> TURRET_KDS = new ArrayList<>(Arrays.asList(0.0, 0.0));

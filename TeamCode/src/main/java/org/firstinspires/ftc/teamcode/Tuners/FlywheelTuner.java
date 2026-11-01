@@ -105,6 +105,8 @@ public class FlywheelTuner extends LinearOpMode {
             telemetry.addData("Target Velocity", flywheel.getTargetVelocity());
             telemetry.addData("Current Velocity", flywheel.getCurrentVelocity());
             telemetry.addData("Velocity Estimate", flywheel.getVelocityEstimate());
+            telemetry.addData("Window Velocity (100 ms)", flywheel.getWindowVelocity());
+            telemetry.addData("Ready (within 1 %)", flywheel.isReady());
             telemetry.addData("Error", flywheel.getError());
             telemetry.addData("ki", flywheel.ki);
             telemetry.addData("p", flywheel.getPIDVS()[0]);

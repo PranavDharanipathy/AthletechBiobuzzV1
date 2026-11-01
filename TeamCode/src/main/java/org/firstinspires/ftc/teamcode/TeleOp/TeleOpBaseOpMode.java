@@ -59,14 +59,32 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         }
     }
 
-    /// Clears cache of LynxModule
+    private long bulkReadNanos = System.nanoTime();
+
+    /// Clears cache of LynxModule, then reads every hub's bulk data now and records when.
     public void clearCacheOfLynxModule() {
 
         for (LynxModule hub : robotHubs) {
             hub.clearBulkCache();
         }
 
+        // HardwareMonitor.update() clears the bulk cache itself (MANUAL mode), so read after it.
         HardwareMonitor.get().update();
+
+        // getBulkData() always performs a fresh bulk read and caches it for the rest of the loop
+        // (SDK 12 LynxModule). Reading here, instead of lazily at whichever device is read first,
+        // gives every encoder in this loop one known sample time: velocity = Δcounts / Δ(sample time).
+        if (GeneralConstants.BULK_CACHING_MODE != LynxModule.BulkCachingMode.OFF) {
+            for (LynxModule hub : robotHubs) {
+                hub.getBulkData();
+            }
+        }
+        bulkReadNanos = System.nanoTime();
+    }
+
+    /// System.nanoTime() right after this loop's bulk read; pass it to Flywheel.update / TurretBase.update.
+    public long getBulkReadNanos() {
+        return bulkReadNanos;
     }
 
     /// Initializing devices

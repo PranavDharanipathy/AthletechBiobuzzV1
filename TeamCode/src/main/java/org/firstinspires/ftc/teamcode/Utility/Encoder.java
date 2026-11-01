@@ -46,9 +46,32 @@ public class Encoder {
         return motor.getCurrentPosition() * multiplier;
     }
 
+    /**
+     * Hub-measured velocity in ticks/s. The REV hub reports it as a 16-bit signed value
+     * ({@code short[] velocities} in LynxGetBulkInputDataResponse), so it wraps at ±32768 ticks/s.
+     * Use {@link #getInternalVelocity(double)} for fast, high-resolution encoders.
+     */
     public double getInternalVelocity() {
         int multiplier = direction.getMultiplier();
         return motor.getVelocity() * multiplier;
+    }
+
+    /** One full wrap of the hub's 16-bit velocity register, ticks/s. */
+    public static final double HUB_VELOCITY_WRAP = 65536;
+
+    /**
+     * Undoes the 16-bit wrap of a hub velocity, using any independent estimate in the same sign
+     * convention (for example Δposition/Δt) that is within ±32768 ticks/s of the truth.
+     * Returns the input unchanged if the estimate is not finite.
+     */
+    public static double correctVelocityOverflow(double hubVelocity, double estimate) {
+        if (!Double.isFinite(hubVelocity) || !Double.isFinite(estimate)) return hubVelocity;
+        return hubVelocity + Math.round((estimate - hubVelocity) / HUB_VELOCITY_WRAP) * HUB_VELOCITY_WRAP;
+    }
+
+    /** Hub velocity with the 16-bit wrap removed, using {@code estimate} (ticks/s) to pick the wrap. */
+    public double getInternalVelocity(double estimate) {
+        return correctVelocityOverflow(getInternalVelocity(), estimate);
     }
     private double filteredVelocity = 0;
 

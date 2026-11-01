@@ -33,6 +33,9 @@ public class HoodAnglerTesting extends LinearOpMode {
             hoodAngler.setPosition(POSITION);
 
             telemetry.addData("position", hoodAngler.getPosition());
+            telemetry.addData("left / right servo (with trims)", "%.4f / %.4f",
+                    hoodAngler.getServoPositions()[0], hoodAngler.getServoPositions()[1]);
+            telemetry.addLine("Trims: HoodConstants.LEFT_HOOD_TRIM / RIGHT_HOOD_TRIM (dashboard)");
             telemetry.update();
         }
 
