@@ -6,7 +6,7 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients
 
 public class FlywheelConstants {
 
-    public static DcMotorSimple.Direction FLYWHEEL_MOTOR_DIRECTION = DcMotorSimple.Direction.FORWARD;
+    public static DcMotorSimple.Direction FLYWHEEL_MOTOR_DIRECTION = DcMotorSimple.Direction.REVERSE;
 
     public static double FLYWHEEL_VOLTAGE_SAMPLE_PERIOD = 0.02;
     public static double FLYWHEEL_VOLTAGE_FILTER_TAU = 0.1;
