@@ -192,8 +192,10 @@ Flywheel launcher: build, controller, per-ball behavior, and shot results.
 | parameter | `launcher.hood_max_deg` | deg | input | yes | Highest launch angle above horizontal. |
 | parameter | `launcher.hood_speed_dps` | deg/s | input |  | How fast the hood moves. |
 | parameter | `launcher.has_turret` | flag | input |  | 1 = launcher aims with a turret, 0 = robot turns to aim. |
+| parameter | `launcher.pollen.enabled` | flag | input | yes | 1 = this launcher can fire POLLEN; 0 = unsupported (its shot inputs are not required). |
 | parameter | `launcher.pollen.exit_speed_ratio` | fraction | input | yes | POLLEN exit speed / flywheel surface speed. Measure with slow-motion video. |
 | parameter | `launcher.pollen.energy_loss_factor` | ratio | input |  | Flywheel energy taken per POLLEN shot / ball kinetic energy (>= 1; spin, squish and slip). |
+| parameter | `launcher.nectar.enabled` | flag | input | yes | 1 = this launcher can fire NECTAR; 0 = unsupported (its shot inputs are not required). |
 | parameter | `launcher.nectar.exit_speed_ratio` | fraction | input | yes | NECTAR exit speed / flywheel surface speed. Measure with slow-motion video. |
 | parameter | `launcher.nectar.energy_loss_factor` | ratio | input |  | Flywheel energy taken per NECTAR shot / ball kinetic energy (>= 1; spin, squish and slip). |
 | parameter | `launcher.spinup_time_s` | s | derived | yes | Time from a stopped flywheel to max_rpm within tolerance, full battery. |

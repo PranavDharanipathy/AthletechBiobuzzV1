@@ -28,6 +28,10 @@ public final class Projectile {
         private final double liftCoeff;
 
         public Ball(String name, double massKg, double diameterM, double dragCoeff, double liftCoeff) {
+            if (!Double.isFinite(massKg) || massKg <= 0 || !Double.isFinite(diameterM) || diameterM <= 0
+                    || !Double.isFinite(dragCoeff) || dragCoeff < 0 || !Double.isFinite(liftCoeff)) {
+                throw new IllegalArgumentException("ball needs finite positive mass/diameter, nonnegative drag and finite lift");
+            }
             this.name = name;
             this.massKg = massKg;
             this.diameterM = diameterM;
@@ -145,43 +149,59 @@ public final class Projectile {
     /** Same, also recording the ball position every step into {@code trace} (for drawing). */
     public static Result fly(Ball ball, Vec3 p0, Vec3 v0, Aperture target, double airDensity, double dt, double maxT,
                              java.util.List<Vec3> trace) {
+        if (!Double.isFinite(dt) || dt <= 0 || !Double.isFinite(maxT) || maxT < 0
+                || !Double.isFinite(airDensity) || airDensity < 0
+                || !finite(p0) || !finite(v0)) {
+            throw new IllegalArgumentException("flight needs finite vectors, positive dt, nonnegative horizon and air density");
+        }
         if (trace != null) trace.add(p0);
         double kd = 0.5 * airDensity * ball.dragCoeff() * ball.area() / ball.massKg();
         double kl = 0.5 * airDensity * ball.liftCoeff() * ball.area() / ball.massKg();
         double[] s = {p0.x(), p0.y(), p0.z(), v0.x(), v0.y(), v0.z()};
+        // Per-flight work buffers: the RK4 timestep itself creates no temporary arrays.
+        double[] k1 = new double[6], k2 = new double[6], k3 = new double[6], k4 = new double[6], work = new double[6];
         double apex = p0.z();
         double prevDist = target.signedDistance(p0);
-        Vec2 travel = v0.xy().norm() > 1e-9 ? v0.xy().times(1 / v0.xy().norm()) : new Vec2(1, 0);
+        double horizontal = Math.hypot(v0.x(), v0.y());
+        double travelX = horizontal > 1e-9 ? v0.x() / horizontal : 1;
+        double travelY = horizontal > 1e-9 ? v0.y() / horizontal : 0;
+        Vec3 center = target.center(), normal = target.normal();
         double t = 0;
         while (t < maxT) {
-            double[] prev = s.clone();
-            rk4(s, dt, kd, kl);
-            t += dt;
+            double prevX = s[0], prevY = s[1], prevZ = s[2];
+            double step = Math.min(dt, maxT - t);
+            if (t + step <= t) throw new IllegalArgumentException("timestep cannot advance flight time");
+            rk4(s, step, kd, kl, k1, k2, k3, k4, work);
+            t += step;
             apex = Math.max(apex, s[2]);
-            Vec3 p = new Vec3(s[0], s[1], s[2]);
-            Vec3 v = new Vec3(s[3], s[4], s[5]);
-            if (trace != null) trace.add(p);
-            if (v.xy().norm() > 1e-9) travel = v.xy().times(1 / v.xy().norm());
-            double dist = target.signedDistance(p);
-            if (prevDist <= 0 && dist > 0 && v.dot(target.normal()) > 0) {
+            if (trace != null) trace.add(new Vec3(s[0], s[1], s[2]));
+            horizontal = Math.hypot(s[3], s[4]);
+            if (horizontal > 1e-9) { travelX = s[3] / horizontal; travelY = s[4] / horizontal; }
+            double dist = (s[0] - center.x()) * normal.x() + (s[1] - center.y()) * normal.y() + (s[2] - center.z()) * normal.z();
+            double normalVelocity = s[3] * normal.x() + s[4] * normal.y() + s[5] * normal.z();
+            if (prevDist <= 0 && dist > 0 && normalVelocity > 0) {
                 // coming OUT through the opening's plane: if that happens within the goal's outline the
                 // ball came up from underneath and hit the structure (it cannot rise through a CELL)
                 double f = -prevDist / (dist - prevDist);
-                Vec3 out = new Vec3(prev[0] + f * (s[0] - prev[0]), prev[1] + f * (s[1] - prev[1]), prev[2] + f * (s[2] - prev[2]));
+                Vec3 out = new Vec3(prevX + f * (s[0] - prevX), prevY + f * (s[1] - prevY), prevZ + f * (s[2] - prevZ));
                 if (target.overlaps(out, ball.radius())) {
+                    Vec2 travel = new Vec2(travelX, travelY);
+                    Vec3 v = new Vec3(s[3], s[4], s[5]);
                     Vec2 rel = out.minus(target.center()).xy();
-                    return new Result(Outcome.SHORT, t - dt + f * dt, out, rel.dot(travel), travel.cross(rel), apex, v.norm(), Double.NaN);
+                    return new Result(Outcome.SHORT, t - step + f * step, out, rel.dot(travel), travel.cross(rel), apex, v.norm(), Double.NaN);
                 }
             }
-            if (prevDist > 0 && dist <= 0 && v.dot(target.normal()) < 0) {
+            if (prevDist > 0 && dist <= 0 && normalVelocity < 0) {
                 // went into the plane between the two steps: interpolate the crossing
                 double f = prevDist / (prevDist - dist);
-                Vec3 hit = new Vec3(prev[0] + f * (s[0] - prev[0]), prev[1] + f * (s[1] - prev[1]), prev[2] + f * (s[2] - prev[2]));
-                return classify(ball, target, hit, v, travel, t - dt + f * dt, apex);
+                Vec3 hit = new Vec3(prevX + f * (s[0] - prevX), prevY + f * (s[1] - prevY), prevZ + f * (s[2] - prevZ));
+                return classify(ball, target, hit, new Vec3(s[3], s[4], s[5]),
+                        new Vec2(travelX, travelY), t - step + f * step, apex);
             }
             prevDist = dist;
             if (s[2] <= ball.radius()) {
-                return hitFloor(target, p, v, travel, t, apex);
+                return hitFloor(target, new Vec3(s[0], s[1], s[2]), new Vec3(s[3], s[4], s[5]),
+                        new Vec2(travelX, travelY), t, apex);
             }
         }
         Vec3 p = new Vec3(s[0], s[1], s[2]);
@@ -215,21 +235,27 @@ public final class Projectile {
         return new Result(along > 0 ? Outcome.LONG : Outcome.SHORT, t, p, along, lateral, apex, v.norm(), Double.NaN);
     }
 
-    private static void rk4(double[] s, double h, double kd, double kl) {
-        double[] k1 = deriv(s, kd, kl);
-        double[] k2 = deriv(add(s, k1, h / 2), kd, kl);
-        double[] k3 = deriv(add(s, k2, h / 2), kd, kl);
-        double[] k4 = deriv(add(s, k3, h), kd, kl);
+    private static boolean finite(Vec3 v) {
+        return v != null && Double.isFinite(v.x()) && Double.isFinite(v.y()) && Double.isFinite(v.z());
+    }
+
+    private static void rk4(double[] s, double h, double kd, double kl,
+                            double[] k1, double[] k2, double[] k3, double[] k4, double[] work) {
+        deriv(s, kd, kl, k1);
+        add(s, k1, h / 2, work);
+        deriv(work, kd, kl, k2);
+        add(s, k2, h / 2, work);
+        deriv(work, kd, kl, k3);
+        add(s, k3, h, work);
+        deriv(work, kd, kl, k4);
         for (int i = 0; i < 6; i++) s[i] += h / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
     }
 
-    private static double[] add(double[] s, double[] k, double h) {
-        double[] o = new double[6];
+    private static void add(double[] s, double[] k, double h, double[] o) {
         for (int i = 0; i < 6; i++) o[i] = s[i] + h * k[i];
-        return o;
     }
 
-    private static double[] deriv(double[] s, double kd, double kl) {
+    private static void deriv(double[] s, double kd, double kl, double[] out) {
         double vx = s[3], vy = s[4], vz = s[5];
         double sp = Math.sqrt(vx * vx + vy * vy + vz * vz);
         double ax = -kd * sp * vx, ay = -kd * sp * vy, az = -Physics.G - kd * sp * vz;
@@ -245,6 +271,7 @@ public final class Projectile {
                 az += f * lz;
             }
         }
-        return new double[]{vx, vy, vz, ax, ay, az};
+        out[0] = vx; out[1] = vy; out[2] = vz;
+        out[3] = ax; out[4] = ay; out[5] = az;
     }
 }

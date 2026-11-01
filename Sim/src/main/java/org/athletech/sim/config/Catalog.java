@@ -506,6 +506,8 @@ public final class Catalog {
         p.add(in("launcher.has_turret", "flag", false, "1 = launcher aims with a turret, 0 = robot turns to aim.", 0, 1, 1.0));
         for (String b : BALLS) {
             String B = b.toUpperCase();
+            p.add(in("launcher." + b + ".enabled", "flag", true,
+                    "1 = this launcher can fire " + B + "; 0 = unsupported (its shot inputs are not required).", 0, 1, 1.0));
             p.add(in("launcher." + b + ".exit_speed_ratio", "fraction", true, B + " exit speed / flywheel surface speed. Measure with slow-motion video.", 0.05, 1, b.equals("pollen") ? 0.5 : 0.45));
             p.add(in("launcher." + b + ".energy_loss_factor", "ratio", false, "Flywheel energy taken per " + B + " shot / ball kinetic energy (>= 1; spin, squish and slip).", 1, 5, 1.6));
         }

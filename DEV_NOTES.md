@@ -3,6 +3,29 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-31 — Ongoing code audit and pollen-only simulation support
+
+- Andrew requested a checkpoint before a larger issue. Cross-agent handoff:
+  `docs/CHECKPOINT.md`. Latest verification: 54 Sim and 20 TeamCode tests pass;
+  Sim build and Android debug assembly pass. Audit remains incomplete.
+
+- Findings and verification scope are tracked in `docs/CODE_AUDIT.md`; the audit
+  is incomplete and no physical robot validation has been performed.
+- Baseline flywheel/turret arithmetic, reset/readiness checks, voltage fault handling,
+  and storage backlog/retry behavior now have direct TeamCode regression tests:
+  `./gradlew :TeamCode:testDebugUnitTest`. Legacy desktop shooter checks still use
+  `bash tools/run_tests.sh`; they do not prove baseline robot performance.
+- Sim profiles now require binary `launcher.pollen.enabled` and
+  `launcher.nectar.enabled`. The shared profile is 1/0 (manual, October 31 hardware
+  notes). Pollen simulations no longer require invented nectar fit data. Disabled
+  shot types are excluded and old simulated derived results cleared through normal
+  priority-aware writes; historical measurements are retained.
+- Recorded the documented 72 mm flywheel, one motor, 1:1 gearing, 6000 rpm free
+  speed, and estimated 31–54° launch range in the shared profile as manual values.
+  These launch angles are geometric estimates, not calibrated servo endpoints.
+  Inertia, losses, ball masses, and most real uncertainty/timing measurements remain
+  missing. No example physics were written to the shared database.
+
 ## 2026-10-31 — Shooter/turret hardware from CAD + team decisions
 
 Source: Onshape doc `231d0d2ccd57c7da2e3d018d`, read-only via API on 10-21 and again on 10-31.

@@ -48,6 +48,11 @@ Everything runs through Gradle from the repo root (PowerShell needs the `./`):
 - `profile clear <name>` empties any entry again (parameter, curve, surface, distribution or action).
 - Every value keeps its source. Priority is `measured` = `game_manual` > `manual` > `sim` > `placeholder`.
   A lower-priority write never replaces a higher one unless you pass `--force`.
+- Set `launcher.pollen.enabled` and `launcher.nectar.enabled` explicitly to 0 or 1.
+  The documented Athletech shooter is pollen-only (1 and 0 respectively). Disabled
+  ball types do not require launcher fit inputs or produce simulated shots. Historical
+  measurements remain stored; consumers must honor the capability flags. Missing flags
+  are reported as missing inputs, so existing profiles need these two settings after updating.
 
 ## Trying it before you have data
 
@@ -62,7 +67,7 @@ from them is also `placeholder`, so it can never pass for real data. Reports go 
 ## Quick predictions
 
 ```bash
-./gradlew :Sim:run --args="predict shot --distance 2.2 --ball nectar --battery 12.2"
+./gradlew :Sim:run --args="predict shot --distance 2.2 --ball pollen --battery 12.2"
 ./gradlew :Sim:run --args="predict drive --distance 1.5 --battery 12.2"
 ./gradlew :Sim:run --args="predict turn --angle 90"
 ./gradlew :Sim:run --args="predict loop --sensor-reads 3 --motor-writes 6"

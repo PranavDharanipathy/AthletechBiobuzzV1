@@ -63,17 +63,25 @@ public class TurretBase {
 
     /// @param turretStartPosition for re-zeroing the turret compensating for the home position not always being at 0
     public TurretBase(HardwareMap hardwareMap, Double turretStartPosition) {
+        this(new MonitoredCRServo(hardwareMap, DeviceConstants.leftTurretCRServoDeviceName, false),
+                new MonitoredCRServo(hardwareMap, DeviceConstants.rightTurretCRServoDeviceName, false),
+                new Encoder(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.turretEncoderDeviceName, false)),
+                hardwareMap.voltageSensor.iterator().next(), turretStartPosition);
+    }
 
-        leftTurretBase = new MonitoredCRServo(hardwareMap, DeviceConstants.leftTurretCRServoDeviceName, false);
-        rightTurretBase = new MonitoredCRServo(hardwareMap, DeviceConstants.rightTurretCRServoDeviceName, false);
+    /** Device injection keeps controller tests independent of Android hardware discovery. */
+    public TurretBase(CRServo left, CRServo right, Encoder angleEncoder,
+                      VoltageSensor voltageSensor, Double turretStartPosition) {
+        leftTurretBase = java.util.Objects.requireNonNull(left, "left servo");
+        rightTurretBase = java.util.Objects.requireNonNull(right, "right servo");
 
         leftTurretBase.setDirection(TurretConstants.TURRET_BASE_DIRECTIONS[0]);
         rightTurretBase.setDirection(TurretConstants.TURRET_BASE_DIRECTIONS[1]);
 
-        encoder = new Encoder(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.turretEncoderDeviceName, false));
+        encoder = java.util.Objects.requireNonNull(angleEncoder, "encoder");
         encoder.setDirection(TurretConstants.TURRET_ENCODER_DIRECTION);
 
-        batteryVoltageSensor = hardwareMap.voltageSensor.iterator().next();
+        batteryVoltageSensor = java.util.Objects.requireNonNull(voltageSensor, "voltage sensor");
 
         // first targetPosition is the start position
         double tsp = turretStartPosition != null ? turretStartPosition : encoder.getCurrentPosition();
@@ -267,19 +275,33 @@ public class TurretBase {
         else if (fineTune) ki = kiClose;
         else ki = kiFar;
 
-        if (dt != 0) errorSum.updateSum(dt, error);
+        if (ki != 0 && dt > 0 && MathUtil.isFinite(error * dt)) errorSum.updateSum(dt, error);
         if (Math.signum(error) != Math.signum(prevError)) {
             errorSum.setSum(errorSum.getSum() * kISmash);
         }
-        errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(), (minI / ki) /*integrated error min*/, (maxI / ki) /*integrated error max*/));
-        i = ki * errorSum.getSum();
-        //i = MathUtil.clamp(ki * errorSum.getSum(), minI, maxI);
+        if (ki == 0) {
+            errorSum.setSum(0);
+            i = 0;
+        } else {
+            double bound0 = minI / ki;
+            double bound1 = maxI / ki;
+            errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(),
+                    Math.min(bound0, bound1), Math.max(bound0, bound1)));
+            i = ki * errorSum.getSum();
+        }
 
         //derivative
         d = dt > 0 && MathUtil.valueWithinRange(Math.abs(error), dActivation[0], dActivation[1]) ? kd * (error - prevError) / dt : 0;
 
         //feedforward
-        f = kHold * Math.signum(error) * (1.0 - Math.exp(-Math.abs(error) / (holdDecay * ShooterConstants.TURRET_TICKS_PER_DEGREE)));
+        if (kHold == 0 || error == 0) {
+            f = 0;
+        } else {
+            // Zero smoothing width is the limiting step function, not 0/0 at rest.
+            double activation = holdDecay == 0 ? 1 :
+                    -Math.expm1(-Math.abs(error) / (holdDecay * ShooterConstants.TURRET_TICKS_PER_DEGREE));
+            f = kHold * Math.signum(error) * activation;
+        }
 
         power = voltageCompensator.toPower(p + i + d + f);
 

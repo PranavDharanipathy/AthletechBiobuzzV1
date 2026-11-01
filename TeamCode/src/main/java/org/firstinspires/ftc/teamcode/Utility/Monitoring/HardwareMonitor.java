@@ -898,6 +898,7 @@ public final class HardwareMonitor {
                 if (s.store != null) {
                     mon.put("eventLogBytes", s.store.eventBytes());
                     mon.put("eventLogLimitReached", s.store.eventLimitReached());
+                    mon.put("queuedRowsDropped", s.store.droppedRows());
                     String err = s.store.lastError();
                     if (err != null) mon.put("lastWriteError", err);
                 }

@@ -95,7 +95,8 @@ public final class LoopTimingScenario {
         Launcher.Params lp = lprobe.missing().isEmpty() && lprobeP != null ? rp.launcher() : null;
         boolean onHub = lp != null && rp.flag("launcher.velocity_on_hub", false);
         double hubHz = rp.opt("launcher.hub_velocity_hz", 50);
-        int balls = lp == null ? 0 : Math.max(1, (int) Math.round(rp.opt("robot.max_pollen_held", 3)));
+        String feedBall = lp == null ? "pollen" : lp.balls().keySet().iterator().next();
+        int balls = lp == null ? 0 : Math.max(1, (int) Math.round(rp.opt("robot.max_" + feedBall + "_held", 3)));
         if (lp == null) notes.add("Launcher inputs are incomplete: the flywheel part is skipped.");
 
         SimContext.Saver save = ctx.saver(rp, "sim loop");
@@ -357,7 +358,7 @@ public final class LoopTimingScenario {
             ds[n] = Double.isFinite(d.settleS) ? d.settleS : DRIVE_S;
             de[n] = d.endError;
             if (lp != null) {
-                Launcher.BallFit fit = lp.ball("pollen");
+                Launcher.BallFit fit = lp.balls().values().iterator().next();
                 LoopControlSim.FlywheelResult fr = LoopControlSim.flywheelFeedErrors(lp.flywheel(), lp.maxRpm(), lp.readyToleranceRpm(), lp.feedIntervalS(), balls,
                         fit.ball().massKg(), fit.exitSpeedRatio(), fit.energyLossFactor(), bat, other, m, onHub, hubHz, rng);
                 for (double e : fr.errors) rpm.add(e);

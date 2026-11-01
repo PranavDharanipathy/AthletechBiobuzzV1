@@ -112,8 +112,9 @@ public final class LauncherScenario {
         double rInt = rp.req("battery.internal_resistance_ohm"), drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
         java.util.function.DoubleFunction<Battery> bat = v -> new Battery(v, rInt, drop); // no DB access: safe in parallel
         double other = rp.electronicsCurrent();
-        int[] held = new int[Catalog.BALLS.size()];
-        for (int i = 0; i < held.length; i++) held[i] = (int) Math.round(rp.req("robot.max_" + Catalog.BALLS.get(i) + "_held"));
+        List<String> ballTypes = rp.launcherBallTypes();
+        int[] held = new int[ballTypes.size()];
+        for (int i = 0; i < held.length; i++) held[i] = (int) Math.round(rp.req("robot.max_" + ballTypes.get(i) + "_held"));
         ShotPredictor.Errors errors = errors(rp);
         Turret turret = rp.turret();
         double[] dists = distances(Math.sqrt(2) * rp.opt("field.size_m", 3.6575));
@@ -121,6 +122,7 @@ public final class LauncherScenario {
         double voc = ctx.db.value("battery.open_circuit_v");
         Launcher L = new Launcher(lp);
         SimContext.Saver save = ctx.saver(rp, "sim launcher");
+        clearDisabledResults(save, ballTypes);
         HtmlReport r = new HtmlReport("Launcher sim");
         Reports.provenance(r, rp, ctx);
         ctx.log.println("Launcher sim  (flywheel free speed " + Math.round(lp.flywheel().freeSpeedRpm()) + " rpm, max " + lp.maxRpm() + " rpm, battery " + voc + " V)");
@@ -160,8 +162,8 @@ public final class LauncherScenario {
         SvgChart hoodLut = new SvgChart("Shooting table: hood angle", "distance to CELL (m)", "deg");
         SvgChart makeChart = new SvgChart("Make probability", "distance to CELL (m)", "probability").yRange(0, 1);
 
-        for (int bi = 0; bi < Catalog.BALLS.size(); bi++) {
-            String ball = Catalog.BALLS.get(bi);
+        for (int bi = 0; bi < ballTypes.size(); bi++) {
+            String ball = ballTypes.get(bi);
             String B = ball.toUpperCase();
             int count = Math.max(1, held[bi]);
 
@@ -293,6 +295,23 @@ public final class LauncherScenario {
         spin.write(ctx.outDir.resolve("launcher/spinup.csv"));
         ctx.log.println("  report: " + ctx.outDir.resolve("launcher/report.html"));
         save.report();
+    }
+
+    /** Do not leave earlier simulated nectar shots usable after switching to pollen-only. */
+    static void clearDisabledResults(SimContext.Saver save, List<String> enabled) throws java.sql.SQLException {
+        for (String ball : Catalog.BALLS) {
+            if (enabled.contains(ball)) continue;
+            String prefix = "launcher." + ball + ".";
+            for (Catalog.Param p : Catalog.PARAMS) {
+                if (p.role() == Catalog.Role.DERIVED && p.key().startsWith(prefix)) save.param(p.key(), Double.NaN);
+            }
+            for (Catalog.Curve c : Catalog.CURVES) {
+                if (c.role() == Catalog.Role.DERIVED && c.name().startsWith(prefix)) save.curve(c.name(), java.util.Collections.emptyList());
+            }
+            for (Catalog.Surface s : Catalog.SURFACES) {
+                if (s.role() == Catalog.Role.DERIVED && s.name().startsWith(prefix)) save.surface(s.name(), java.util.Collections.emptyList());
+            }
+        }
     }
 
     /**
