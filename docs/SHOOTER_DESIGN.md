@@ -155,7 +155,7 @@ A shot is allowed only if **all** of the following hold, and the code reports th
 
 ---
 
-## 6. Verification results (simulation; `tools/run_tests.sh`, 34 checks, all passing 2026-10-21)
+## 6. Verification results (simulation; 34 checks, all passing 2026-10-21; the test suite and `tools/run_tests.sh` were removed 2026-10-31 and live in git history)
 
 The simulators are deliberately *richer than and different from* the controllers' models:
 - **Flywheel:** +20 % inertia mismatch, battery internal resistance plus a 35 A drivetrain load, 28-count quantization, 8–15 ms loop jitter, 2 ms I/O delay, 2.5 J ball contacts.

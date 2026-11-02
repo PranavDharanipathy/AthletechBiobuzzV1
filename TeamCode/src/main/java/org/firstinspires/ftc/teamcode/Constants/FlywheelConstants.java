@@ -13,20 +13,20 @@ public class FlywheelConstants {
     public static double FLYWHEEL_NOMINAL_VOLTS = 12.0;
 
     public static FlywheelPIDVSCoefficients FLYWHEEL_PIDVS_COEFFICIENTS = new FlywheelPIDVSCoefficients(
-            0.0016,//0.00125
-            0.0013,//0.00125
+            0.1,//0.00125
+            0.5,//0.00125
             0,
-            0.000915,
-            0.0000635,
-            0.00037,//0.00032
-            0,
-            50,
+            0.0025,
+            0.00035,
+            0.00428,//0.00032
+            0.2,
+            35,
             100,
-            60,//100
+            120,//100
             0.05,
-            -1, 1,
+            -2, 3,
             -0.3, 0.3,
-            -0.1, 0.1
+            -0.4, 0.4
     );
 
     public static double FLYWHEEL_VELOCITY_MARGIN_OF_ERROR = 50;

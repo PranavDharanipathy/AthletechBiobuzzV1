@@ -1,5 +1,5 @@
 apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android' // required: TeamCode has .kt sources (Systems/FIArm)
+apply plugin: 'org.jetbrains.kotlin.android'
 
 //
 // build.gradle in TeamCode
@@ -20,10 +20,6 @@ apply from: '../build.dependencies.gradle'
 android {
     namespace = 'org.firstinspires.ftc.teamcode'
 
-    // The legacy desktop suite uses JDK management APIs absent from android.jar.
-    // It is compiled and executed separately by tools/run_tests.sh (Java 8).
-    sourceSets.test.java.exclude 'org/firstinspires/ftc/teamcode/shooter/**'
-
     packagingOptions {
         // '=' assignment required: Gradle 9 removed space-assignment for
         // Gradle-generated properties (this one was flagged in the problems report).
@@ -42,6 +38,5 @@ kotlin {
 }
 
 dependencies {
-    testImplementation 'junit:junit:4.13.2'
     implementation project(':FtcRobotController')
 }

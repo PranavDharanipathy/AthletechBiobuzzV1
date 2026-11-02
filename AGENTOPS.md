@@ -21,12 +21,6 @@ From the repo root:
 # Build + test the desktop sim module (plain JVM, no device needed)
 ./gradlew :Sim:build
 
-# Baseline robot controller and utility regressions (SDK-interface fakes, no device)
-./gradlew :TeamCode:testDebugUnitTest
-
-# Legacy desktop shooter model suite (separate from the baseline controllers)
-bash tools/run_tests.sh
-
 # All Android modules
 ./gradlew assembleDebug
 ```

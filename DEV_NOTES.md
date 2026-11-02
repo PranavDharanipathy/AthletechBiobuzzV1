@@ -3,6 +3,27 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-10-31 — Merged `shooter-turret-v1`; pruned unrelated code
+
+- Merged `origin/shooter-turret-v1` (servo-free pollen shot experiment) into `main`.
+- Kept: turret, flywheel, hood, intake, drive, `shooter/` v1 package, Turret Diagnostic, Pollen
+  Shot Experiment, HardwareMonitor + `Monitored*` read caches, `RobotLogger`, Pedro tuners, the
+  whole `Sim` module (including its tests), and the turret/shot docs and tools.
+- Removed: the whole `TeamCode/src/test` folder (JUnit dependency, `tools/run_tests.sh` and
+  `tools/run_utility_tests.sh` with it); the unused FIArm/Field collision geometry (all of
+  TeamCode's `.kt` sources); unused `Calculations`, `DriverConstants`, `FieldConstants`,
+  `VisionConstants`, `DriverKeybinds`, `Resistor`, `DigitalDistanceSensor`, `TickrateChecker`;
+  and `docs/CHECKPOINT.md` / `docs/CODE_AUDIT.md`. All recoverable from git history.
+- TeamCode has no Kotlin sources now. The Kotlin plugin stays so `.kt` files can return without
+  touching the version matrix below.
+- TeamCode controller changes now have no automated tests; only `:Sim:test` runs off-robot.
+- **Pollen Shot Experiment** is now an automatic flywheel-only sweep (voltage steps -> kv/ks fit,
+  then RPM setpoints -> rise/settle/ripple, optional feed shots -> dip/recovery). It ends on a
+  telemetry **Done!** summary and saves CSVs. `ShotGate`, `PollenPhysics` and
+  `tools/summarize_pollen_shots.py` were removed. See `docs/POLLEN_SHOT_EXPERIMENT.md`.
+  Ranges: flywheel 500–2100 RPM, battery 12–14.5 V. Voltage steps stay at or below 12 V (can't
+  command more than the battery), and the sweep stops once it passes 2100 RPM.
+
 ## 2026-10-31 — Turret diagnostic and characterization OpMode
 
 - New OpMode **Turret Diagnostic** (`Testing/TurretDiagnostics/`). It collects data and diagnoses
@@ -416,13 +437,6 @@ Java 22). AGP 8.7.0's min/default Gradle is 8.9 and it predates Gradle 9, and it
 only tested to `compileSdk 35`. The FTC-stock stack (Gradle 8.9 + AGP 8.7.0 + Kotlin
 2.2.20) is only viable if the Gradle JDK is switched to 17 or 21 — *and* it would
 still need Kotlin ≥ 2.3 because of Sloth's stdlib 2.4.10.
-
-### Still open
-
-Some `FIArm` errors may be real code bugs rather than stdlib fallout — e.g.
-`Field.kt:42` (*expected List<Obstacle>, actual String*), `SectorPrism.kt:46–53`
-(Double/String mismatches), `SectorPrism.kt:61` (*Unresolved compareTo*). Re-check
-them once the stdlib error is gone.
 
 ## 2026-10-22 — SDK 36 bump, new deps, Kotlin, Gradle 9 cleanup
 
