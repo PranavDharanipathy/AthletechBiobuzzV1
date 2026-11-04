@@ -104,6 +104,8 @@ with `=`. Genuine AGP DSL methods (`keyAlias`, `pickFirst`, `abiFilters`,
 | FTC Dashboard (Sloth fork) | `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0` | `https://repo.dairy.foundation/releases/` |
 | Pedro Pathing 3 | `com.pedropathing:revhub:3.0.2` (pulls `core`) | Maven Central |
 | Pedro tuning | `com.pedropathing:tuning:1.0.1` (pulls Sloth) | Maven Central + `https://repo.dairy.foundation/releases/` |
+| NextFTC v2 | `dev.nextftc.v2:control` / `hardware` / `robot`, all `0.3.0` | Maven Central |
+| Ivy Pedro commands | `com.pedropathing.ivy:pedro:1.1.1` (`PedroCommands`) | Maven Central |
 | Apache Commons Math | `org.apache.commons:commons-math3:3.6.1` | Maven Central |
 | Kotlin stdlib | `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` | Maven Central |
 
@@ -116,6 +118,12 @@ declared with `exclude group: 'org.firstinspires.ftc'` so it can't drag in an ol
 
 `com.pedropathing:ftc` is **Pedro 2 only** (last release 2.1.2). Never add it alongside
 `revhub`/`tuning` — it silently mixes `core` 2.x and 3.x on the classpath.
+
+Autonomous command code uses NextFTC **v2**, with `PedroCommands` from Ivy for path following.
+Never add NextFTC v1 (`dev.nextftc:ftc`, `dev.nextftc:hardware`) or `dev.nextftc.extensions:pedro`:
+v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep exactly one
+`NextRobot` (`Systems/AthletechRobot`) with no hardware access in its constructor, and don't use
+`BlazeOpMode` (Blaze isn't packaged). Details are in DEV_NOTES.
 
 ## Conventions for agents
 

@@ -3,6 +3,36 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-03 — NextFTC v2 + Ivy for Pedro 3 autonomous commands
+
+- **Installed:** `dev.nextftc.v2:control`, `hardware`, `robot` 0.3.0 and
+  `com.pedropathing.ivy:pedro:1.1.1`, in `build.dependencies.gradle`.
+- **Why not NextFTC v1:** `dev.nextftc.extensions:pedro:1.0.0` (its only release, 2025-09) pulls
+  `com.pedropathing:ftc:2.0.0`, the artifact that mixes `core` 2.x and 3.x. Its source also calls
+  Pedro 2 methods that Pedro 3's `Follower` no longer has (`followPath`, `breakFollowing`,
+  `isTurning`, `turnTo`). v1 and v2 share class names, so they can't be installed together.
+- **Why v2 fits:** it pulls Sloth 0.3.2 (same as `tuning`, and the `slothboard` prefix), stdlib
+  2.3.0 (resolved up to our 2.4.10), minSdk 24 and Java 8 bytecode. No FTC SDK comes in transitively.
+- **Path following:** NextFTC v2 has no Pedro integration of its own. Its scheduler is Ivy, and
+  `PedroCommands.follow(follower, path)` / `hold(...)` use the Pedro 3 `Follower` API. The artifact
+  declares no Pedro dependency, so it runs against whichever Pedro we declare. Nothing calls
+  `follower.update()` for you: do it in `periodic()`.
+- **`Systems/AthletechRobot` is required.** At startup NextFTC's `RobotScanner` sets a Driver
+  Station global error if TeamCode has no `NextRobot`, and warns and picks none if there are several.
+  This applies even if no NextFTC OpMode exists. It builds the class during app startup and keeps
+  the instance, so its constructor must not touch hardware.
+- **Don't extend `BlazeOpMode`.** `dev.anygeneric.blazeftc` was compile-only for NextFTC and isn't
+  in our APK (checked with dexdump), so it would throw `NoClassDefFoundError`. `NextMotor` only
+  reaches Blaze when `blazeEnabled` is true, which plain `NextOpMode` never sets.
+- **`PedroCommands.hold(follower)` reads the pose when the command is built**, not when it runs.
+  Inside a sequence, use `hold(follower, pose)` or wrap it in `Commands.lazy`.
+- **Version pairing:** if `tuning` moves to a new Sloth version, check NextFTC v2's Sloth at the same
+  time. Sloth, `slothboard` and NextFTC v2 all have to agree.
+- **Verified off-robot only:** `clean :TeamCode:assembleDebug` passes, the runtime classpath has
+  no `com.pedropathing:ftc` or NextFTC v1, and an example `NextAutonomous` using `PedroCommands`
+  compiled (then deleted). **Not yet run on the robot:** scanner registration under Sloth, including
+  `kotlin-reflect` 2.3.0 next to stdlib 2.4.10, is unproven until it boots on a Control Hub.
+
 ## 2026-10-31 — Merged `shooter-turret-v1`; pruned unrelated code
 
 - Merged `origin/shooter-turret-v1` (servo-free pollen shot experiment) into `main`.

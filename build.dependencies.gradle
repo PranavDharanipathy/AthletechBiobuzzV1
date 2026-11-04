@@ -30,10 +30,18 @@ dependencies {
     implementation 'com.pedropathing:revhub:3.0.2'
     implementation 'com.pedropathing:tuning:1.0.1'
 
-    // Sloth's FTC Dashboard fork. The stock acmerobotics dashboard can't see classes Sloth
-    // hot-reloads, so @Config edits don't apply and its OpModes don't register. The version
-    // prefix must match the Sloth version pedropathing:tuning pulls (0.3.2).
-    implementation('com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0') {
-        exclude group: 'org.firstinspires.ftc'
-    }
+    // NextFTC v2 command framework, built on Pedro's Ivy scheduler. Its Sloth version must
+    // match the one pedropathing:tuning pulls (0.3.2). Do NOT use dev.nextftc v1 or
+    // dev.nextftc.extensions:pedro: v1 clashes with v2 and the extension pulls
+    // com.pedropathing:ftc:2.0.0, which mixes core 2.x/3.x.
+    implementation 'dev.nextftc.v2:control:0.3.0'
+    implementation 'dev.nextftc.v2:hardware:0.3.0'
+    implementation 'dev.nextftc.v2:robot:0.3.0'
+
+    // Ivy's Pedro 3 path commands (PedroCommands.follow / hold). The Pedro extension for
+    // NextFTC is v1-only, so this is the bridge between the commands and the Follower.
+    implementation 'com.pedropathing.ivy:pedro:1.1.1'
+
+    // Sloth's FTC Dashboard fork
+    implementation('com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0')
 }
