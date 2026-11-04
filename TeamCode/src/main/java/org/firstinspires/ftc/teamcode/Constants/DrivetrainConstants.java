@@ -33,7 +33,7 @@ public class DrivetrainConstants {
     );
 
     public static PinpointConfig localizerConfig = new PinpointConfig(c -> {
-        c.name.set("pinpoint");
+        c.name.set(DeviceConstants.pinpointDeviceName);
         c.podType.set(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
         c.xPodOffset.set(1.9680610416442392);
         c.yPodOffset.set(-3.0641817107914);
@@ -69,7 +69,7 @@ public class DrivetrainConstants {
             }
     );
 
-    public static Follower create(HardwareMap h) {
+    public static Follower createFollower(HardwareMap h) {
 
         return new Follower(
                 new PinpointLocalizer(h, localizerConfig),

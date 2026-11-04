@@ -9,26 +9,18 @@ import org.firstinspires.ftc.teamcode.Utility.MathUtil;
 
 public class HoodAngler {
 
-    private final Servo leftHoodServo;
-    private final Servo rightHoodServo;
+    private final Servo hood;
 
-    public HoodAngler(HardwareMap hardwareMap, String leftHoodAnglerServoName, String rightHoodAnglerServoName) {
+    public HoodAngler(HardwareMap hardwareMap, String hoodAnglerServoName) {
 
-        leftHoodServo = new MonitoredServo(hardwareMap, leftHoodAnglerServoName, false);
-        rightHoodServo = new MonitoredServo(hardwareMap, rightHoodAnglerServoName, false);
+        hood = new MonitoredServo(hardwareMap, hoodAnglerServoName, false);
 
-        Servo.Direction leftDirection = HoodConstants.LEFT_HOOD_ANGLER_SERVO_DIRECTION;
-        leftHoodServo.setDirection(leftDirection);
-        rightHoodServo.setDirection(leftDirection == Servo.Direction.FORWARD ? Servo.Direction.REVERSE : Servo.Direction.FORWARD);
-    }
-
-    public Servo.Direction[] getServoDirections() {
-        return new Servo.Direction[] {leftHoodServo.getDirection(), rightHoodServo.getDirection()};
+        Servo.Direction leftDirection = HoodConstants.HOOD_ANGLER_SERVO_DIRECTION;
+        hood.setDirection(leftDirection);
     }
 
     public void setPosition(double position) {
-        leftHoodServo.setPosition(position);
-        rightHoodServo.setPosition(position);
+        hood.setPosition(position);
     }
 
     public void setSafePosition(double position) {
@@ -36,7 +28,7 @@ public class HoodAngler {
     }
 
     public double getPosition() {
-        return leftHoodServo.getPosition();
+        return hood.getPosition();
     }
 
 }

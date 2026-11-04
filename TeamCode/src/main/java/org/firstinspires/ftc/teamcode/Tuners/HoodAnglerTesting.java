@@ -23,7 +23,7 @@ public class HoodAnglerTesting extends LinearOpMode {
 
         Telemetry telemetry = new MultipleTelemetry(this.telemetry, FtcDashboard.getInstance().getTelemetry());
 
-        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.leftHoodAnglerServoDeviceName, DeviceConstants.rightHoodAnglerServoDeviceName);
+        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.hoodServoDeviceName);
 
         if (isStopRequested()) return;
         waitForStart();
@@ -37,4 +37,4 @@ public class HoodAnglerTesting extends LinearOpMode {
         }
 
     }
-}
+}

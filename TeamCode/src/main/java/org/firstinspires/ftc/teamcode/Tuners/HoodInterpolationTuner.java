@@ -6,6 +6,7 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
@@ -18,6 +19,8 @@ import java.util.List;
 @Config
 @TeleOp (group = "tuning")
 public class HoodInterpolationTuner extends TeleOpBaseOpMode {
+
+    public static Alliance ALLIANCE = Alliance.RED;
 
     public static boolean SHOOT = false;
 
@@ -33,6 +36,8 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
 
     private RobotCentricDrive robotCentricDrive;
 
+    private Intake intake;
+
     private Telemetry telemetry;
 
     @Override
@@ -41,11 +46,13 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
         telemetry.setMsTransmissionInterval(10);
 
-        initializeDevices();
+        initializeComponents(ALLIANCE);
 
         applyComponentTraits();
 
         robotCentricDrive = new RobotCentricDrive(left_front, right_front, left_back, right_back, controller1);
+
+        intake = new Intake(super.intake);
 
         //setup lynx module
         setUpLynxModule();
@@ -74,7 +81,7 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
         intake.setState(SHOOT ? Intake.IntakeState.INTAKE : Intake.IntakeState.IDLE);
         flywheel.setVelocity(FLYWHEEL_VELOCITY, true);
 
-        intakeMotor.update();
+        intake.update();
         flywheel.update();
 
         if (controller1.dpad_upHasJustBeenPressed) {

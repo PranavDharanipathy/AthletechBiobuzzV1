@@ -1,21 +1,25 @@
 package org.firstinspires.ftc.teamcode.TeleOp;
 
+import com.pedropathing.follower.Follower;
+import com.pedropathing.math.Pose;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
+import org.firstinspires.ftc.teamcode.Constants.DrivetrainConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.HoodConstants;
 import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
+import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
+import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Hood.Hood;
 import org.firstinspires.ftc.teamcode.Systems.Hood.HoodAngler;
-import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
@@ -28,15 +32,16 @@ import java.util.List;
 
 public abstract class TeleOpBaseOpMode extends OpMode {
 
-    public TeleOpBaseOpMode() {}
+    public AllianceState alliance;
 
     public BetterGamepad controller1;
     public BetterGamepad controller2;
 
+    public Follower follower;
+
     public DcMotor left_front, right_front, left_back, right_back;
 
-    public GeneralVeloMotor intakeMotor;
-    public Intake intake;
+    public GeneralVeloMotor intake;
 
     public Blocker blocker;
 
@@ -70,15 +75,18 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     }
 
     /// Initializing devices
-    public void initializeDevices() {
+    public void initializeComponents(Alliance alliance) {
+
+        this.alliance = new AllianceState(alliance);
 
         left_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.leftFrontMotorDeviceName, false);
         right_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.rightFrontMotorDeviceName, false);
         left_back = new MonitoredDcMotor(hardwareMap, DeviceConstants.leftBackMotorDeviceName, false);
         right_back = new MonitoredDcMotor(hardwareMap, DeviceConstants.rightBackMotorDeviceName, false);
 
-        intakeMotor = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
-        intake = new Intake(intakeMotor);
+        follower = DrivetrainConstants.createFollower(hardwareMap);
+
+        intake = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
 
         blocker = new Blocker(new MonitoredServo(hardwareMap, DeviceConstants.blockerServoDeviceName, false));
 
@@ -86,7 +94,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         turret = new TurretBase(hardwareMap);
 
-        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.leftHoodAnglerServoDeviceName, DeviceConstants.rightHoodAnglerServoDeviceName);
+        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.hoodServoDeviceName);
         hood = new Hood(hoodAngler);
 
         controller1 = new BetterGamepad(gamepad1);
@@ -104,7 +112,9 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         right_front.setDirection(DcMotorSimple.Direction.REVERSE);
         right_back.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        intakeMotor.setVelocityPDFCoefficients(
+        follower.setPose(new Pose(0,0));
+
+        intake.setVelocityPDFCoefficients(
                 IntakeConstants.INTAKE_PDF_COEFFICIENTS[0],
                 IntakeConstants.INTAKE_PDF_COEFFICIENTS[1],
                 IntakeConstants.INTAKE_PDF_COEFFICIENTS[2]

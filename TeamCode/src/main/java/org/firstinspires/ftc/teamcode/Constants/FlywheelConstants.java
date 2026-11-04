@@ -6,23 +6,23 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients
 
 public class FlywheelConstants {
 
-    public static DcMotorSimple.Direction FLYWHEEL_MOTOR_DIRECTION = DcMotorSimple.Direction.REVERSE;
+    public static DcMotorSimple.Direction FLYWHEEL_MOTOR_DIRECTION = DcMotorSimple.Direction.FORWARD;
 
     public static double FLYWHEEL_VOLTAGE_SAMPLE_PERIOD = 0.02;
     public static double FLYWHEEL_VOLTAGE_FILTER_TAU = 0.1;
     public static double FLYWHEEL_NOMINAL_VOLTS = 12.0;
 
     public static FlywheelPIDVSCoefficients FLYWHEEL_PIDVS_COEFFICIENTS = new FlywheelPIDVSCoefficients(
-            0.1,//0.00125
-            0.5,//0.00125
+            0.024,
+            0.009,
             0,
-            0.0025,
+            0.002,
             0.00035,
-            0.00428,//0.00032
-            0.2,
+            0.00478,
+            0.4,
             35,
             100,
-            120,//100
+            80,
             0.05,
             -2, 3,
             -0.3, 0.3,
