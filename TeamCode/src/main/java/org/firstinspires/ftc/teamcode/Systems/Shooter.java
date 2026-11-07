@@ -115,18 +115,18 @@ public class Shooter extends Subsystem {
     }
 
     //autonomous: no gamepads, always aims
-    public void updateAutonomous(boolean spinUp) {
+    public void updateAutonomous(boolean rampUp) {
 
         goal = Goal.forAlliance(alliance.getAlliance());
         currentRobotPose = follower.pose();
-        updateMechanisms(spinUp, true);
+        updateMechanisms(rampUp, true);
     }
 
     public boolean isAimSolutionUsable() {
         return goalCoordinate != null && Goal.isSet(goalCoordinate) && MathUtil.isFinite(turretAimPosition) && !turretRoute.isOutside(ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES) && !turretRoute.hasSwung();
     }
 
-    private void updateMechanisms(boolean spinUp, boolean aimEnabled) {
+    private void updateMechanisms(boolean rampUp, boolean aimEnabled) {
 
         Velocity robotVelocity = follower.velocity();
 
@@ -163,7 +163,7 @@ public class Shooter extends Subsystem {
         virtualGoal = goalSet ? new Pose(goalCoordinate.x() - vx * shotTime, goalCoordinate.y() - vy * shotTime) : goalCoordinate;
         distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
 
-        if (spinUp) flywheel.setVelocity(flywheelTargetVelocity, false);
+        if (rampUp) flywheel.setVelocity(flywheelTargetVelocity, false);
         else flywheel.setVelocity(0, true);
 
         //turret

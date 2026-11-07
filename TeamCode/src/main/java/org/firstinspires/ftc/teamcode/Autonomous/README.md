@@ -5,7 +5,7 @@ Installed stack: NextFTC v2 0.3.0, Ivy Pedro commands 1.1.1, Pedro Pathing 3.0.2
 | Folder | Purpose |
 | --- | --- |
 | `Autos/` | The six match autos (Red/Blue Park, Preload + Park, 2 Tip Garden + Park). Each is its paths plus one Ivy sequence of robot commands, with its own `Constants/Autos/<Auto>Constants`; nothing shared between autos |
-| `AutoSubsystems/` | NextFTC mechanisms with their own Ivy commands: `Drive` (`follow` = PedroCommands.follow + tolerance + timeout, `hold`), `Intake` (`run`, `stop`), `FIArm` (`deploy`, `retract`), `Blocker`, `Shooter` (`spinUp`, `spinDown`); `AutoShotWindow` (the timed firing window). Commands using several mechanisms (`shoot`, `collect`, `stow`, `autonomous`) are on `Systems/AthletechRobot` |
+| `AutoSubsystems/` | NextFTC mechanisms with their own Ivy commands: `Drive` (`follow` = PedroCommands.follow + tolerance + timeout, `hold`), `Intake` (`run`, `stop`), `FIArm` (`deploy`, `retract`), `Blocker`, `Shooter` (`rampUp`, `rampDown`); `AutoShotWindow` (the timed firing window). Commands using several mechanisms (`shoot`, `collect`, `stow`, `autonomous`) are on `Systems/AthletechRobot` |
 
 Every auto is a NextFTC `NextOpMode` (`@NextAutonomous`, group **A_Match**), so NextFTC runs the loop. Each loop runs these
 in order:

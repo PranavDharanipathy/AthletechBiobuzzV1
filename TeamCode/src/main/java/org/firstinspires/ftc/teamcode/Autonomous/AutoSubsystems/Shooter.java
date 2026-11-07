@@ -19,7 +19,7 @@ public final class Shooter implements Mechanism {
     public final Flywheel flywheel;
     public final TurretBase turret;
     public final org.firstinspires.ftc.teamcode.Systems.Shooter shooter = new org.firstinspires.ftc.teamcode.Systems.Shooter();
-    private boolean spinUp, started;
+    private boolean rampUp, started;
 
     /// turret must point straight at INIT: that's its home
     public Shooter(HardwareMap hardwareMap, Drive drive) {
@@ -41,29 +41,29 @@ public final class Shooter implements Mechanism {
 
     @Override
     public void periodic() {
-        if (started) shooter.updateAutonomous(spinUp);
+        if (started) shooter.updateAutonomous(rampUp);
     }
 
-    public void setSpinUp(boolean spinUp) {
-        this.spinUp = spinUp;
+    public void setRampUp(boolean rampUp) {
+        this.rampUp = rampUp;
     }
 
-    public Command spinUp() {
-        return instant(() -> spinUp = true);
+    public Command rampUp() {
+        return instant(() -> rampUp = true);
     }
 
-    public Command spinDown() {
-        return instant(() -> spinUp = false);
+    public Command rampDown() {
+        return instant(() -> rampUp = false);
     }
 
     /// aimed, the aim is one it can shoot from, and the flywheel is within band of its target
     public boolean isReady(double flywheelBand) {
-        return started && spinUp && turret.isOnTarget() && shooter.isAimSolutionUsable() && Math.abs(flywheel.getTargetVelocity() - flywheel.getCurrentVelocity()) <= flywheelBand;
+        return started && rampUp && turret.isOnTarget() && shooter.isAimSolutionUsable() && Math.abs(flywheel.getTargetVelocity() - flywheel.getCurrentVelocity()) <= flywheelBand;
     }
 
     public void stopNow() {
 
-        started = spinUp = false;
+        started = rampUp = false;
         flywheel.reset();
         turret.setVolts(0, 0);
     }

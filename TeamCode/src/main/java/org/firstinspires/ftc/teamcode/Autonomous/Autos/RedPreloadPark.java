@@ -36,7 +36,7 @@ public final class RedPreloadPark extends BlazeOpMode {
         robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, SHOT_READY_DWELL_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND, MAX_SHOOTING_SPEED_INCHES_PER_SECOND, MAX_SHOOTING_YAW_DEGREES_PER_SECOND);
 
         routine = robot.autonomous(
-                robot.shooter.spinUp(),
+                robot.shooter.rampUp(),
                 robot.shoot(start),
                 robot.drive.follow(Drive.line(start, park))
         );

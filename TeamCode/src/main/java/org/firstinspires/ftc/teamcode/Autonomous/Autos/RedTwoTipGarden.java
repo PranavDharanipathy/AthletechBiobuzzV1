@@ -46,7 +46,7 @@ public final class RedTwoTipGarden extends BlazeOpMode {
 
         routine = robot.autonomous(
                 robot.fiArm.retract(),
-                robot.shooter.spinUp(),
+                robot.shooter.rampUp(),
                 robot.shoot(start),
                 robot.intake.run(),
                 robot.drive.follow(toGarden),
