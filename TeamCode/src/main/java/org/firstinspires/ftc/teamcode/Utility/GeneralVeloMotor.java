@@ -14,8 +14,12 @@ public class GeneralVeloMotor {
     }
 
     public GeneralVeloMotor(HardwareMap hardwareMap, String deviceName) {
+        this(hardwareMap.get(DcMotorEx.class, deviceName));
+    }
 
-        motor = hardwareMap.get(DcMotorEx.class, deviceName);
+    public GeneralVeloMotor(DcMotorEx motor) {
+
+        this.motor = java.util.Objects.requireNonNull(motor, "motor");
         motor.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
     }
 
