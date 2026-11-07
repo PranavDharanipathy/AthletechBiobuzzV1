@@ -107,7 +107,6 @@ public class Intake extends Subsystem {
             setState(IntakeState.IDLE);
         }
 
-        //the arm lives in the component this subsystem was given
         FIArm arm = ((Intake) intake).getFIArm();
         if (arm != null) {
             if (controller1.dpad_downHasJustBeenPressed) fiArmState = !fiArmState;

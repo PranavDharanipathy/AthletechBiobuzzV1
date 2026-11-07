@@ -5,10 +5,10 @@ import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
-import org.firstinspires.ftc.teamcode.Systems.Mechanisms.BlockerMechanism;
-import org.firstinspires.ftc.teamcode.Systems.Mechanisms.DriveMechanism;
-import org.firstinspires.ftc.teamcode.Systems.Mechanisms.IntakeMechanism;
-import org.firstinspires.ftc.teamcode.Systems.Mechanisms.ShooterMechanism;
+import org.firstinspires.ftc.teamcode.Autonomous.Mechanisms.BlockerMechanism;
+import org.firstinspires.ftc.teamcode.Autonomous.Mechanisms.DriveMechanism;
+import org.firstinspires.ftc.teamcode.Autonomous.Mechanisms.IntakeMechanism;
+import org.firstinspires.ftc.teamcode.Autonomous.Mechanisms.ShooterMechanism;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
 import java.util.Collections;
