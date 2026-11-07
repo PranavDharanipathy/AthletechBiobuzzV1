@@ -1,6 +1,9 @@
 package org.firstinspires.ftc.teamcode.Systems.Mechanisms;
 
 import com.pedropathing.follower.Follower;
+import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.revhub.localizers.PinpointLocalizer;
+import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.AutoMecanum;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
@@ -16,8 +19,16 @@ public final class DriveMechanism implements Mechanism {
     public final Follower follower;
 
     public DriveMechanism(HardwareMap hardwareMap, Pose start) {
+        this(hardwareMap, start, false);
+    }
 
-        follower = DrivetrainConstants.createFollower(hardwareMap);
+    public DriveMechanism(HardwareMap hardwareMap, Pose start, boolean reverseStrafe) {
+
+        follower = new Follower(
+                new PinpointLocalizer(hardwareMap, DrivetrainConstants.localizerConfig),
+                new AutoMecanum(hardwareMap, DrivetrainConstants.driveConfig, reverseStrafe),
+                new Foresight(DrivetrainConstants.foresightConfig)
+        );
         follower.holdEnd.set(true);
         follower.setPose(start);
     }

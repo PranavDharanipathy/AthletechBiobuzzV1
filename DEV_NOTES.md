@@ -3,6 +3,27 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-06 — Merge autonomous correction into current NextFTC main
+
+- Preserved main's NextFTC OpMode/mechanisms and latest shooter tuning. Auto passes the snapshotted reversal flag through AthletechRobot.init into DriveMechanism; other callers default to normal strafe.
+- Restored exact coordinates and retained AutoMecanum output correction. Supersedes prior notes describing the old LinearOpMode implementation.
+- Android assembly passes. Sim suite: 70 pass, 1 skipped, 1 fails (`holdDoesNotHuntWhenFrictionIsGuessedHigh`, hold RMS 1.9925214752183356). Confirmed identical failure on pristine main 7c2fc70 in a separate worktree; no turret tuning modified by this merge.
+
+## 2026-11-06 — Manual auto strafe reversal
+
+- User authorized fallback reversal after code review found no established cause for physical horizontal inversion.
+- Auto-only AutoMecanum reverses the body strafe term before normalization, including maxScaling wheel-mix calls. Forward/yaw and supplied coordinates unchanged.
+- AutoPathConstants.REVERSE_STRAFE defaults true, captured at INIT and displayed in telemetry. False plus re-INIT restores normal Pedro mixing. Global drive/localizer configuration and TeleOp untouched.
+- Build and mixed-command algebra checks pass; does not establish actual motor response or fix wrong odometry signs. Physical diagnosis remains required.
+
+## 2026-11-06 — Restored exact user route on auton
+
+- Supersedes the clearance/range revision below: restored all 12 supplied coordinates without mirroring or scaling. Original headings and shooting sequence retained.
+- Physical horizontal reversal is unresolved; verify manually observed pose-axis signs and heading before changing hardware directions. See docs/AUTO_PATH.md.
+- Prior geometry PASS does not apply: restored wall approach violates deployed-intake clearance and shots need range review. Partner push-through at point 6 remains pending.
+
+## 2026-11-06 — AutoPath clearance/range coordinate revision
+
 ## 2026-11-06 — Turret hunting and buzz on holds (`TurretController`)
 
 - **Seen on the robot** (every DRIVING run, flywheel on the whole time): at DONE it swung ±4° at ~2 Hz forever, and holds

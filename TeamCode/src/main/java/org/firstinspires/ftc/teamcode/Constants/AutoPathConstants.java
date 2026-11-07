@@ -5,6 +5,7 @@ import com.acmerobotics.dashboard.config.Config;
 @Config
 public final class AutoPathConstants {
 
+    public static boolean REVERSE_STRAFE = true;
     public static double AUTO_LIMIT_SECONDS = 29.5;
     public static double PATH_TIMEOUT_SECONDS = 8;
     public static double SHOT_TIMEOUT_SECONDS = 4;
