@@ -3,6 +3,34 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-06 — AutoPath clearance/range coordinate revision
+
+- User confirmed recorded robot dimensions. Kept seven paths, continuous intake and shots after 1/3/5;
+  revised endpoints/controls west of the hive and farther from walls. Point 2 is (10,16.75,270), not the
+  original wall-overlapping pose. Start remains unchanged; its inferred rear-wall reference needs checking.
+- Shots now south/north/south at (20,17,90), (20,128,300), (17,18,270). Turret ranges are
+  57.52/58.94/55.13 in, inside the current table including an assumed ±1-in/±3° envelope.
+- `tools/check_auto_path.py` checks real Pedro geometry: 28007 nominal footprint samples and error cases.
+  Deployed front 14.134 in, side 7.64 in; rear 8.2495 inferred from the user's start, not measured.
+  Minimum perturbed wall reserve after initial wall departure 0.63 in; central review envelope reserve 1.03 in.
+- Endpoint tolerances tightened to 1 in / 3°. These are not guaranteed actual tracking bounds. Coordinates
+  do not detect hive tips; the alternating shot sides assume preceding bursts tip as planned. See docs/AUTO_PATH.md.
+
+## 2026-11-06 — AutoPath Red from supplied visualizer route
+
+- `Autonomous/Autos/AutoPath`: intake throughout; paths 1 → shoot → 2 → 3 → shoot → 4 → 5 → shoot → 6 → 7.
+  `AutoPathRoutes` preserves all supplied points/headings. SDK LinearOpMode + one Ivy scheduler loop.
+- Uses gamepad-free `Shooter.updateAutonomous` for the existing aim/flywheel logic, holds endpoints for firing,
+  checks speed/aim/pose, and closes the blocker in transit. Initial timed burst: 1.5 cumulative open seconds,
+  4-second timeout. No ball count or hive-tip sensor. Controls in AutoPathConstants; no drive tuning changed.
+- Added the single hardware-free NextRobot container `Systems/AthletechRobot` and an injected-motor constructor
+  on GeneralVeloMotor. Auto shutdown neutralizes all outputs, including on exception; deadline 29.5 seconds.
+- Known field checks: point 2 faces the wall only 10.25 in away, versus historical intake-down reach 14.13 in;
+  all three shot positions fall below the shortest flywheel-table distance; paths 3/5 select the same cell,
+  whose upward/downward state can change after a tip. See `docs/AUTO_PATH.md` before physical running.
+- Android debug build and all 70 Sim tests pass (7 new shot-window tests). Actual Pedro checks passed for
+  connectivity and 7007 red-half centerline samples; footprint clearance and robot performance are unverified.
+
 ## 2026-11-06 — Vibration rejection floor comes from DRIVING (`TURRET_SHAKE_BANDWIDTH`)
 
 - **Problem:** rejection could never soften. Its floor `TURRET_MIN_BANDWIDTH` was a hand-set 7 rad/s from the PIDF

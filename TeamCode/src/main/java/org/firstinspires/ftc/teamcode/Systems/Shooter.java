@@ -102,9 +102,30 @@ public class Shooter extends Subsystem {
         if (controller1.main_buttonHasJustBeenPressed) relocalization(Garden.forAlliance(alliance.getAlliance()).relocalizationPose());
 
         currentRobotPose = follower.pose();
-        Velocity robotVelocity = follower.velocity();
-
         goalAimUpdate();
+        if (controller1.left_bumperHasJustBeenPressed) shooterToggle = !shooterToggle;
+        if (controller2.right_bumperHasJustBeenPressed) autoAim = !autoAim;
+        updateMechanisms(shooterToggle, autoAim);
+    }
+
+    public void provideComponents(Flywheel flywheel, TurretBase turret, Follower follower) {
+        provideComponents(flywheel, turret, follower, null, null);
+    }
+
+    public void updateAutonomous(boolean spinUp) {
+
+        goal = Goal.forAlliance(alliance.getAlliance());
+        currentRobotPose = follower.pose();
+        updateMechanisms(spinUp, true);
+    }
+
+    public boolean isAimSolutionUsable() {
+        return goalCoordinate != null && Goal.isSet(goalCoordinate) && MathUtil.isFinite(turretAimPosition) && !turretRoute.isOutside(ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES) && !turretRoute.hasSwung();
+    }
+
+    private void updateMechanisms(boolean spinUp, boolean aimEnabled) {
+
+        Velocity robotVelocity = follower.velocity();
 
         turretPose = getTurretPoseFromBotPose(currentRobotPose);
 
@@ -114,17 +135,13 @@ public class Shooter extends Subsystem {
         distanceToGoal = goalSet ? turretPose.distance(goalCoordinate) : Double.NaN;
 
         //flywheel
-        if (controller1.left_bumperHasJustBeenPressed) shooterToggle = !shooterToggle;
-
         flywheelTargetVelocity = goalSet ? getFlywheelTargetVelocityFromInterpolation(currentRobotPose, robotVelocity, goalCoordinate) : ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
 
-        if (shooterToggle) flywheel.setVelocity(flywheelTargetVelocity, false);
+        if (spinUp) flywheel.setVelocity(flywheelTargetVelocity, false);
         else flywheel.setVelocity(0, true);
 
         //turret
-        if (controller2.right_bumperHasJustBeenPressed) autoAim = !autoAim;
-
-        if (autoAim && goalSet) {
+        if (aimEnabled && goalSet) {
 
             Pose virtualGoal = getVirtualGoalCoordinate(ShooterConstants.SHOT_TIME_OF_FLIGHT, robotVelocity, goalCoordinate);
 
