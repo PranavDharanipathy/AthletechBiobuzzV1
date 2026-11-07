@@ -3,6 +3,27 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-07 — Auto: user's mirrored export, movement only; strafe flip removed
+
+- The "X flipped" run was `16d5d0d`, whose route an earlier agent had shifted west (path 1 to (20, 17): left 11.4, up 8.8).
+  The auto-only strafe flip that `33368b6` added was a misdiagnosis: TeleOp strafes correctly with the same wheel commands,
+  and with the drawn points the flip makes Pedro run away sideways (Pedro sim). Removed `AutoMecanum` and `REVERSE_STRAFE`.
+  `DriveMechanism`/`AthletechRobot` are back to main's `7c2fc70` (plain `createFollower`).
+- `AutoPathRoutes` = the user's visualizer export exactly, through `PoseFactory.degrees().mirrorX(70.75)`
+  (x → 141.5 − x, heading → 180 − heading), so the robot drives the drawing's mirror image (path 1 goes left).
+  `AutoPath` is movement only: shooter/intake never started. Details: docs/AUTO_PATH.md.
+- Lesson: before blaming hardware, check which commit actually ran and whether someone changed the user's points.
+- Builds; Pedro sim finishes all 7 paths in about 10 s. Not run on the robot. `tools/AutoPathGeometryCheck.java` still uses
+  the old route field names.
+
+## 2026-11-06 — Evidence review of autonomous on d8649e7
+
+- Reviewed autonomous, mechanism/shooter integration, installed NextFTC/Pedro implementation and read-only profile provenance. Findings and source references: docs/AUTO_REVIEW.md.
+- Confirmed missing exception cleanup and non-immediate Follower.stop motor writes; actual Pedro stop probe reproduced this. Seven AutoShotWindow tests pass.
+- Exact shot ranges 49.660/39.015/36.948 in all clamp below table minimum to 1300 ticks/s. Shot sides south/north/north, no cell-tip sensing. Partner push-through remains absent.
+- Geometry checker inferred rear from start Y, despite a CAD back-plate extent in robot_profile.db; CAD-to-Pedro origin match itself remains unverified. Prior validation is not a physical guarantee.
+- Corrected stale autonomous docs and shutdown claims. No control-code changes, commit, push or deployment during review; manual strafe override remains enabled as requested, with physical cause unresolved.
+
 ## 2026-11-06 — Merge autonomous correction into current NextFTC main
 
 - Preserved main's NextFTC OpMode/mechanisms and latest shooter tuning. Auto passes the snapshotted reversal flag through AthletechRobot.init into DriveMechanism; other callers default to normal strafe.
