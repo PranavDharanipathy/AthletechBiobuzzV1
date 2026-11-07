@@ -35,11 +35,15 @@ public final class AthletechRobot implements NextRobot {
     public AthletechRobot() {}
 
     public void init(HardwareMap hardwareMap, Pose start) {
+        init(hardwareMap, start, false);
+    }
+
+    public void init(HardwareMap hardwareMap, Pose start, boolean reverseStrafe) {
 
         hubs = hardwareMap.getAll(LynxModule.class);
         for (LynxModule hub : hubs) hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         clearCaches();
-        drive = new DriveMechanism(hardwareMap, start);
+        drive = new DriveMechanism(hardwareMap, start, reverseStrafe);
         intake = new IntakeMechanism(hardwareMap);
         blocker = new BlockerMechanism(hardwareMap);
         shooter = new ShooterMechanism(hardwareMap, drive);

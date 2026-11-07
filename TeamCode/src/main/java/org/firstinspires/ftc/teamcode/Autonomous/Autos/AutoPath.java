@@ -35,6 +35,7 @@ public final class AutoPath extends NextOpMode {
     private String stage = "Init", fault = "";
     private double pathStarted, autoStarted, lastLoop;
     private boolean finished, stopped;
+    private final boolean reverseStrafe;
     private int shotTimeouts, activeShot;
     private final double autoLimit, pathTimeout, shotTimeout, feedSeconds, readyDwell, maxLoop, positionError, headingError, maxSpeed, maxYaw;
 
@@ -57,7 +58,8 @@ public final class AutoPath extends NextOpMode {
         for (double value : positive) if (!Double.isFinite(value) || value <= 0) throw new IllegalArgumentException("Invalid AutoPath settings");
         if (autoLimit > 30) throw new IllegalArgumentException("AutoPath must end within 30 seconds");
         speedGate = new ShotGate(band, band, band * 2, band * 2, readyDwell, 0.05, 0);
-        robot.init(hardwareMap, AutoPathRoutes.START);
+        reverseStrafe = AutoPathConstants.REVERSE_STRAFE;
+        robot.init(hardwareMap, AutoPathRoutes.START, reverseStrafe);
         routine = autoRoutine();
     }
 
@@ -137,6 +139,7 @@ public final class AutoPath extends NextOpMode {
     public void disabledPeriodic() {
 
         Telemetry.log("RED route. Turret must point straight at INIT.");
+        Telemetry.log("Auto strafe reversed", reverseStrafe);
         Telemetry.log("Intake runs throughout. Shoot after paths 1, 3 and 5.");
         Telemetry.log("Check intake/wall clearance and cell orientation before running.");
     }
