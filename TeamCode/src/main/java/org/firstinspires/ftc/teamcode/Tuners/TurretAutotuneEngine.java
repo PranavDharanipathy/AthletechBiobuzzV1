@@ -118,6 +118,7 @@ public class TurretAutotuneEngine {
         this.aimDirection = aimDirection;
         this.params = start.copy();
         controller.vibrationRejection = false; //tune the raw loop, rejection only helps on top of it
+        if (mode == Mode.STATIONARY) controller.minHoldScale = 1; //and the hold push it learns
 
         if (mode == Mode.STATIONARY) {
             //nothing closed loop until the speed steps have measured the turret: a wrong guess runs it away

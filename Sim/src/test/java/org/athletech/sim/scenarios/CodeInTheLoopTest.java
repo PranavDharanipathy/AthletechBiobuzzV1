@@ -151,6 +151,61 @@ public class CodeInTheLoopTest {
         assertEquals(got.shakeBandwidth, r.engine.getResults().get("shake_bandwidth"), 0.01);
     }
 
+    //pushing all the way in when the friction guess is high used to swing it +-4 deg forever
+    @Test
+    public void holdDoesNotHuntWhenFrictionIsGuessedHigh() {
+
+        //the robot's turret: it slid on 0.65-0.75 V where STATIONARY said 1.01 (runs 20280507-195213, -210857)
+        for (double slide : new double[] {0.65, 0.75}) {
+            TurretScenario.Setup s = TurretScenario.setup(new RobotParams(db), ctx).with(0, 59.5, 0, true);
+            double tpd = 68.27;
+            s.tpd = tpd;
+            s.loop = new CodeLoop(0.031, 0.3, 1);
+            s.plant = new CrServoTurret.Params(166.6 * tpd, 0.046, 0.036, slide, 1.163, 0, 384 * tpd, 1735 * tpd);
+            s.plant.startDelay = 0.083;
+            s.plant.coastDecel = 1050 * tpd;
+            s.plant.neutralDecel = 1500 * tpd;
+            s.startTicks = 6 * tpd;
+            TurretAutotuneEngine.Parameters guess = new TurretAutotuneEngine.Parameters(166.6 * tpd, 0.046, 1.011, 1.163, 0.036, 3.2, 0.9, 0.3, 1).capability(384 * tpd, 1735 * tpd).startDelay(0.083).deceleration(1050 * tpd);
+            TurretScenario.Target still = new TurretScenario.Target() {
+                public double position(double t) {
+                    return 0;
+                }
+
+                public double velocity(double t) {
+                    return 0;
+                }
+            };
+            for (long seed = 1; seed <= 3; seed++) {
+                TurretScenario.Track r = TurretScenario.track(s, guess, still, 10, false, 3, -1, false, seed);
+                assertTrue(slide + " V seed " + seed + " hold RMS " + r.rmsDeg, r.rmsDeg < 1); //used to be 2.8
+            }
+            }
+    }
+
+    //the Pinpoint's heading rate jitters ~1 deg/s with the robot still: that used to flip the whole friction push every loop
+    @Test
+    public void noisyRateDoesNotBuzzAStillTurret() {
+
+        TurretScenario.Setup s = TurretScenario.setup(new RobotParams(db), ctx);
+        final double tpd = s.tpd;
+        for (long seed = 1; seed <= 3; seed++) {
+            final java.util.Random noise = new java.util.Random(seed);
+            TurretScenario.Target jittery = new TurretScenario.Target() {
+                public double position(double t) {
+                    return 0;
+                }
+
+                public double velocity(double t) {
+                    return 1.1 * tpd * noise.nextGaussian();
+                }
+            };
+            TurretScenario.Track r = TurretScenario.track(s, TurretScenario.matched(s, 4), jittery, 10, false, 2, -1, false, seed);
+            assertTrue("seed " + seed + " volts jumping " + r.chatterV, r.chatterV < 0.2);
+            assertTrue("seed " + seed + " hold RMS " + r.rmsDeg, r.rmsDeg < 0.2);
+        }
+    }
+
     //match aim with the robot spinning as hard as a driver can: it swings round early enough to never run past the travel
     @Test
     public void matchAimNeverRunsPastTheTravel() {

@@ -3,6 +3,42 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-06 — Turret hunting and buzz on holds (`TurretController`)
+
+- **Seen on the robot** (every DRIVING run, flywheel on the whole time): at DONE it swung ±4° at ~2 Hz forever, and holds
+  buzzed with the ±1 V friction push flipping almost every loop. That "hold shake" was the controller, not the flywheel:
+  with the turret unpushed the encoder barely moves (median 0–6 ticks a loop), so the sim's default 0.3° flywheel shake is
+  far too strong for this robot.
+- **Hunting:** it slides on ~0.75 V at speed (run `20280507-195213-driving`, 50°/s on 1.04 V) but STATIONARY measured
+  1.01 V near rest. Pushing full friction all the way in overshoots, then it pushes back the same way. Now, holding, if it
+  comes in faster than 3× what the loop asks for (+3°/s) it lets go once it gets there within a lead, and brakes if it'll
+  run well past. With the friction guess right it never triggers, so STATIONARY behaves as before.
+- **Buzz:** the Pinpoint heading rate jitters 1.1°/s sd with the robot still, and the plan's target-acceleration lead
+  blew that up to ~5°/s of planned speed against a 1°/s "moving" line. Now the target rate gets a soft deadband of
+  4× its measured noise (second difference, at least 2°/s, fading out by twice that), and the plan has to pass 4°/s to
+  count as moving. The noise is only measured while the rate stays under 10°/s: real turning jerks around (and the sim's
+  spin target clamps at ±50°), which counted as noise, grew the deadband and made spins lag.
+- **Sim, the robot's turret with plant friction 0.75 V vs a 1.01 V guess:** DONE-style hold 2.6 → 0.05° (31 ms),
+  3.4 → 1.9° (60 ms TeleOp). Still robot with 1.1°/s rate noise: 0.7–5° and 0.7–1.5 V of chatter → 0.00° and
+  ≤0.05 V. Exact friction: steps unchanged. Tests `holdDoesNotHuntWhenFrictionIsGuessedHigh`,
+  `noisyRateDoesNotBuzzAStillTurret`.
+- **Costs (sim, exact friction):**
+  - Spin tracking at bandwidth 3.2: 3.44 vs 3.35° (31 ms), 3.97 vs 3.94° (50 ms).
+  - STATIONARY (16 seeds) never picks below 1.5 rad/s, same as before. At what it picks, spins are about 0.3° worse
+    (3.33 vs 3.04° at 24 ms).
+  - Under the sim's 0.3° flywheel shake, holds are 1.0–1.4° vs 0.5–0.6°: velocity noise trips the let-go. The real
+    encoder doesn't shake like that.
+- **Robot run `20280507-210857-driving` with this code:**
+  - The buzz was mostly gone: the push flipped 2–4 times a second instead of 17.
+  - It still hunted ±4–5° at DONE. It slid on ~0.65 V and reached 60°/s within 100 ms, so letting go a lead early came
+    too late.
+  - So the hold push strength is now learned (`holdScale`): each overshoot under its own push takes 10% off (down to
+    0.4), and it creeps back to 1 over 20 s. Kicks still use the full breakaway.
+  - An earlier version also raised it on every kick. Stuck turrets kick a lot, which put it straight back to 1.
+  - STATIONARY doesn't learn it (`minHoldScale = 1`), the same way it turns rejection off.
+  - Sim with plant friction 0.65 / 0.75 V: holds 0.0–0.32° (were 2.2–2.8°).
+- **Not verified on a robot.**
+
 ## 2026-11-06 — Vibration rejection floor comes from DRIVING (`TURRET_SHAKE_BANDWIDTH`)
 
 - **Problem:** rejection could never soften. Its floor `TURRET_MIN_BANDWIDTH` was a hand-set 7 rad/s from the PIDF
@@ -723,8 +759,9 @@ bandwidth"):
   same frame as `START_POSE`.
 - `FieldConstants.START_POSE` is (0, 0, 0), only so Pedro has a pose. Real aiming needs a real start pose,
   or relocalization at a known spot.
-- Unverified: `TURRET_AIM_DIRECTION = -1` follows DECODE's `heading - angle`, so check the sign on the
-  robot. `TURRET_OFFSET_X = -2.82` is from CAD. Shot lead (`SHOT_TIME_OF_FLIGHT`) and future-pose speed
+- `TURRET_AIM_DIRECTION` was -1 (from DECODE's `heading - angle`) and wrong. On the robot (2026-11-06) the turret turned
+  the same way as the robot's spin, twice as fast. It's +1 now, which also mirrored the DRIVING autotune's targets.
+  Not re-checked after the flip. `TURRET_OFFSET_X = -2.82` is from CAD. Shot lead (`SHOT_TIME_OF_FLIGHT`) and future-pose speed
   (`FLYWHEEL_SPEED_ADJUSTMENT_T`) are 0 (off) and use Pedro's `follower.velocity()`. There's no camera or
   pose estimator yet. The turret gains are still zero, so it won't move until tuned.
 

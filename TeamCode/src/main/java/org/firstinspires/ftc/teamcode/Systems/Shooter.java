@@ -15,12 +15,12 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretRoute;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
-import org.firstinspires.ftc.teamcode.Utility.InterpolationData;
 import org.firstinspires.ftc.teamcode.Utility.MathUtil;
 import org.firstinspires.ftc.teamcode.Utility.Subsystem;
 
 import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.FLYWHEEL_DISTANCES;
 import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.FLYWHEEL_VELOCITIES;
+import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.SHOT_TIMES_OF_FLIGHT;
 
 import java.util.List;
 
@@ -89,6 +89,7 @@ public class Shooter extends Subsystem {
     public Pose turretPose;
 
     public double distanceToGoal;
+    public Pose virtualGoal;
 
     public double flywheelTargetVelocity;
 
@@ -111,12 +112,14 @@ public class Shooter extends Subsystem {
         goalCoordinate = goal.getCoordinate(currentRobotPose);
         boolean goalSet = Goal.isSet(goalCoordinate);
 
-        distanceToGoal = goalSet ? turretPose.distance(goalCoordinate) : Double.NaN;
+        //time table SOTM: aim (and pick the speed) for where the goal is relative to the turret when the ball gets there
+        virtualGoal = goalSet ? getVirtualGoalCoordinate(turretPose, robotVelocity, goalCoordinate) : goalCoordinate;
+        distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
 
         //flywheel
         if (controller1.left_bumperHasJustBeenPressed) shooterToggle = !shooterToggle;
 
-        flywheelTargetVelocity = goalSet ? getFlywheelTargetVelocityFromInterpolation(currentRobotPose, robotVelocity, goalCoordinate) : ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
+        flywheelTargetVelocity = goalSet ? getFlywheelTargetVelocityFromInterpolation(distanceToGoal) : ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
 
         if (shooterToggle) flywheel.setVelocity(flywheelTargetVelocity, false);
         else flywheel.setVelocity(0, true);
@@ -125,8 +128,6 @@ public class Shooter extends Subsystem {
         if (controller2.right_bumperHasJustBeenPressed) autoAim = !autoAim;
 
         if (autoAim && goalSet) {
-
-            Pose virtualGoal = getVirtualGoalCoordinate(ShooterConstants.SHOT_TIME_OF_FLIGHT, robotVelocity, goalCoordinate);
 
             Pose aimBotPose = getFutureBotPose(ShooterConstants.TURRET_AIM_LEAD_TIME, currentRobotPose, robotVelocity);
             Pose aimTurretPose = getTurretPoseFromBotPose(aimBotPose);
@@ -159,34 +160,24 @@ public class Shooter extends Subsystem {
         turret.update();
     }
 
-    public static double getFlywheelTargetVelocityFromInterpolation(Pose botPose, Velocity robotVelocity, Pose goalCoordinate) {
+    public static double getFlywheelTargetVelocityFromInterpolation(double distanceToGoal) {
+        return lookUp(FLYWHEEL_DISTANCES, FLYWHEEL_VELOCITIES, distanceToGoal);
+    }
 
-        Pose futurePose = getFutureBotPose(ShooterConstants.FLYWHEEL_SPEED_ADJUSTMENT_T, botPose, robotVelocity);
+    public static double getTimeOfFlight(double distanceToGoal) {
+        return lookUp(FLYWHEEL_DISTANCES, SHOT_TIMES_OF_FLIGHT, distanceToGoal);
+    }
 
-        double distanceToGoal = getTurretPoseFromBotPose(futurePose).distance(goalCoordinate);
+    //linear between the table's points, held at the ends
+    private static double lookUp(List<Double> distances, List<Double> values, double distance) {
 
-        List<Double> distances = FLYWHEEL_DISTANCES;
-        List<Double> velocities = FLYWHEEL_VELOCITIES;
-
-        if (distanceToGoal <= distances.get(0)) {
-            return velocities.get(0);
-        }
-        else if (distanceToGoal >= distances.get(distances.size() - 1)) {
-            return velocities.get(velocities.size() - 1);
-        }
-
+        int last = Math.min(distances.size(), values.size()) - 1;
+        if (distance <= distances.get(0)) return values.get(0);
+        if (distance >= distances.get(last)) return values.get(last);
         int i = 1;
-        while (distances.get(i) < distanceToGoal) i++;
-
-        return MathUtil.interpolateLinear(
-
-                distanceToGoal,
-
-                new InterpolationData(
-                        new double[] {distances.get(i - 1), velocities.get(i - 1)},
-                        new double[] {distances.get(i), velocities.get(i)}
-                )
-        );
+        while (distances.get(i) < distance) i++;
+        double s = (distance - distances.get(i - 1)) / (distances.get(i) - distances.get(i - 1));
+        return values.get(i - 1) + s * (values.get(i) - values.get(i - 1));
     }
 
     public static Pose getTurretPoseFromBotPose(Pose botPose) {
@@ -200,8 +191,20 @@ public class Shooter extends Subsystem {
         return new Pose(botPose.x() + robotVelocity.vx * t, botPose.y() + robotVelocity.vy * t, botPose.heading() + robotVelocity.omega * t);
     }
 
-    public static Pose getVirtualGoalCoordinate(double timeOfFlight, Velocity robotVelocity, Pose goalCoordinate) {
-        return new Pose(goalCoordinate.x() - robotVelocity.vx * timeOfFlight, goalCoordinate.y() - robotVelocity.vy * timeOfFlight);
+    /// the goal moved back by the turret's field velocity times the ball's time of flight, which depends on the distance
+    /// to that moved goal, so it goes round SOTM_ITERATIONS times
+    public static Pose getVirtualGoalCoordinate(Pose turretPose, Velocity robotVelocity, Pose goalCoordinate) {
+
+        double[] offset = MathUtil.rotateCartesian(ShooterConstants.TURRET_OFFSET_X, ShooterConstants.TURRET_OFFSET_Y, turretPose.heading());
+        double vx = robotVelocity.vx - robotVelocity.omega * offset[1];
+        double vy = robotVelocity.vy + robotVelocity.omega * offset[0];
+        double x = goalCoordinate.x(), y = goalCoordinate.y();
+        for (int k = 0; k < ShooterConstants.SOTM_ITERATIONS; k++) {
+            double t = getTimeOfFlight(Math.hypot(x - turretPose.x(), y - turretPose.y()));
+            x = goalCoordinate.x() - vx * t;
+            y = goalCoordinate.y() - vy * t;
+        }
+        return new Pose(x, y);
     }
 
     /// degrees per second the turret has to turn (relative to the robot) to stay on the goal

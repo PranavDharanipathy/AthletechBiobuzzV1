@@ -201,6 +201,9 @@ Flywheel shake is handled by **vibration rejection** in `TurretController`: it m
 second difference and lowers stiffness while the turret shakes, down to `TURRET_MIN_BANDWIDTH`, which DRIVING
 derives (`TURRET_SHAKE_BANDWIDTH`: the softest bandwidth that really shook less without holding or tracking worse; equal
 to the bandwidth = never soften). The autotuner turns rejection off while it measures.
+Holding, the friction push lets go early when the turret comes in much faster than the loop asked for (the friction
+guess is too high: it slides on less than it takes to start), and the target rate gets a deadband sized to its measured
+noise, so the Pinpoint's heading-rate jitter can't flip the push every loop.
 **Lanyard compensation** (`LanyardMap`, `TURRET_LANYARDS_ENABLED`, off for now) learns the volts the lanyards need at
 each angle (the Manual Tuner's X sweep) and adds them as feedforward. When it's off it must add exactly 0.
 

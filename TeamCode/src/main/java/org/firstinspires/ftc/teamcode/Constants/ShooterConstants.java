@@ -28,16 +28,19 @@ public class ShooterConstants {
     //turret axis from drive center, inches, +x forward +y left
     public static double TURRET_OFFSET_X = -2.82, TURRET_OFFSET_Y = 0;
 
-    public static double TURRET_AIM_DIRECTION = -1;
+    //+1: encoder ticks go up as the turret turns counterclockwise (seen from above). -1 had it turning with the robot's spin, twice as fast
+    public static double TURRET_AIM_DIRECTION = 1;
 
     public static double DEFAULT_FLYWHEEL_VELOCITY = 1450;
 
-    public static double FLYWHEEL_SPEED_ADJUSTMENT_T = 0;
-    public static double SHOT_TIME_OF_FLIGHT = 0;
 
     public static double TURRET_AIM_LEAD_TIME = 0;
 
     public static List<Double> FLYWHEEL_DISTANCES = new ArrayList<>(Arrays.asList(51.71503320693509, 56.29514009214838, 60.899456934836486, 68.99167060900542, 74.57368259902958, 80.60268703640344, 91.2495467341891, 100.4429764662134));
     public static List<Double> FLYWHEEL_VELOCITIES = new ArrayList<>(Arrays.asList(1300.0, 1330.0, 1380.0, 1440.0, 1455.0, 1485.0, 1590.0, 1665.0));
+    //shoot on the move: s from leaving the turret to the goal at each FLYWHEEL_DISTANCES distance. All 0 = no SOTM
+    public static List<Double> SHOT_TIMES_OF_FLIGHT = new ArrayList<>(Arrays.asList(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    //times the virtual goal gets moved (its distance changes the time of flight)
+    public static int SOTM_ITERATIONS = 3;
 
 }

@@ -22,6 +22,17 @@ public class TurretController {
     public double startDelay = Double.NaN;
     //ticks. The plan never heads for an end faster than it can still stop before it, whatever the target does
     public double travelMin = Double.NEGATIVE_INFINITY, travelMax = Double.POSITIVE_INFINITY;
+    //the target rate jitters (Pinpoint heading rate, ~1 deg/s with the robot still). Within rateDeadband x that noise (at least
+    //rateDeadbandFloor x movingVelocity) it counts as still, fading out by twice that. The plan has to pass planStartFactor x
+    //movingVelocity before it counts as moving, so noise can't flip the friction push loop to loop. The noise is only measured
+    //while the rate stays under rateNoiseBand x movingVelocity: real turning jerks around and would count as noise
+    public double rateDeadband = 4, rateDeadbandFloor = 2, rateNoiseTime = 1, rateNoiseBand = 10, planStartFactor = 4;
+    //holding, it lets go early only when it comes in faster than overpushFactor x what the loop asks for (+ overpushMargin x
+    //movingVelocity): the friction guess is too high then
+    public double overpushFactor = 3, overpushMargin = 3;
+    //how hard it pushes while holding, learned: running past the target under its own push takes overshootCut off, and it creeps
+    //back to 1 over holdRecoverTime s (the robot's turret slid on 0.65 V where STATIONARY said 1.01). Kicks still start it
+    public double holdScale = 1, minHoldScale = 0.4, overshootCut = 0.1, holdRecoverTime = 20;
 
     public double kp, kd, ki;
     public double p, i, d, f, v, volts, lanyard;
@@ -34,7 +45,8 @@ public class TurretController {
     private double lastError, lastError2, vibrationSquare;
     private double lastKick = -1e9, kickUntil, kickBoost, lastGap;
     private int kickLoops = 1;
-    private boolean movedSinceKick = true;
+    private boolean movedSinceKick = true, planWasMoving;
+    private double lastRate, lastRate2, rateNoise, lastHoldError;
     private double learnDirection = Double.NaN, learnTime, learnLast, learnResidual, learnDegrees;
     private int updates = 0;
     private boolean started = false;
@@ -115,6 +127,8 @@ public class TurretController {
         kickUntil = kickBoost = lastGap = 0;
         kickLoops = 1;
         movedSinceKick = true;
+        planWasMoving = false;
+        lastRate = lastRate2 = rateNoise = lastHoldError = 0;
         learnDirection = Double.NaN;
         historyNewest = -1;
         historyCount = 0;
@@ -128,6 +142,15 @@ public class TurretController {
         if (Double.isNaN(target) || Double.isNaN(position)) return volts = 0;
         if (Double.isNaN(targetVelocity)) targetVelocity = 0;
         if (Double.isNaN(velocity)) velocity = 0;
+
+        //noise from the rate's second difference, a single jerk clipped. White noise: mean |that| = 1.95 sigma
+        double rateJerk = Math.abs(targetVelocity - 2 * lastRate + lastRate2);
+        boolean slow = Math.max(Math.abs(targetVelocity), Math.max(Math.abs(lastRate), Math.abs(lastRate2))) < rateNoiseBand * movingVelocity;
+        if (updates >= 2 && slow) rateNoise += (Math.min(rateJerk, 3 * rateNoise + movingVelocity) - rateNoise) * Math.min(1, dt / rateNoiseTime);
+        lastRate2 = lastRate;
+        lastRate = targetVelocity;
+        double deadband = Math.max(rateDeadbandFloor * movingVelocity, rateDeadband * rateNoise / 1.954);
+        if (deadband > 0) targetVelocity = Math.signum(targetVelocity) * Math.max(0, Math.abs(targetVelocity) - deadband * clamp(2 - Math.abs(targetVelocity) / deadband, 0, 1));
 
         time += dt;
         loopTime = updates++ < 3 ? dt : loopTime + 0.3 * (dt - loopTime);
@@ -193,8 +216,9 @@ public class TurretController {
         }
         else if (effectiveBandwidth != bandwidth) gains(bandwidth);
 
-        boolean planMoving = Math.abs(planVelocity) > movingVelocity;
-        boolean holding = !planMoving && Math.abs(referenceVelocity) < movingVelocity && Math.abs(error) < holdTolerance;
+        boolean planMoving = Math.abs(planVelocity) > (planWasMoving ? 1 : planStartFactor) * movingVelocity;
+        planWasMoving = planMoving;
+        boolean holding = !planMoving && Math.abs(referenceVelocity) < planStartFactor * movingVelocity && Math.abs(error) < holdTolerance;
 
         //exact inverse of the lag over one held loop, (v + tau * a) / gain overdrives on slow loops
         v = (planVelocity - decay * startVelocity) / ((1 - decay) * gain);
@@ -230,7 +254,18 @@ public class TurretController {
         if (planMoving) f = (kicking ? breakaway : kineticFriction) * pushing;
         else if (holding) f = 0;
         else if (kicking) f = breakaway * frictionScale * Math.signum(error);
-        else f = kineticFriction * frictionScale * clamp((Math.abs(error) - holdTolerance) / frictionErrorWidth, 0, 1) * Math.signum(error);
+        else {
+            //it slides on less than it takes to start, so the friction guess is often high and pushing all the way in runs it past
+            //and back, forever. Coming in that fast it lets go once it gets there within a lead anyway, well past it pushes back to brake
+            double toward = Math.max(0, velocity * Math.signum(error));
+            boolean overpushed = toward > overpushFactor * effectiveBandwidth * Math.abs(error) + overpushMargin * movingVelocity;
+            double left = Math.abs(error) - (overpushed ? toward * lead : 0);
+            f = kineticFriction * frictionScale * holdScale * clamp((left - holdTolerance) / frictionErrorWidth, left < -2 * frictionErrorWidth ? -1 : 0, 1) * Math.signum(error);
+        }
+        //ran past the target under its own push: it pushes too hard
+        if (!planMoving && error * lastHoldError < 0 && Math.abs(velocity) > overpushMargin * movingVelocity && Math.abs(lastHoldError) > holdTolerance) holdScale = Math.max(minHoldScale, holdScale * (1 - overshootCut));
+        lastHoldError = planMoving ? 0 : error;
+        holdScale += (1 - holdScale) * Math.min(1, dt / holdRecoverTime);
         p = kp * error;
         d = kd * velocityError;
 
