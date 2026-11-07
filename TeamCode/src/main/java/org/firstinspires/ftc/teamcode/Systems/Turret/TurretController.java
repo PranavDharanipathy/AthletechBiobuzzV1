@@ -18,6 +18,8 @@ public class TurretController {
     public double maxSpeed = Double.POSITIVE_INFINITY, maxAcceleration = Double.POSITIVE_INFINITY; //ticks/s, ticks/s^2
     //these servos don't brake when the command drops, they coast at this (ticks/s^2); they only brake when reversed
     public double maxDeceleration = Double.POSITIVE_INFINITY;
+    //stops are planned with this share of it whatever maxVelocityFraction is: a turret sliding on less friction coasts further
+    public double decelerationFraction = 0.8;
     //from rest it takes longer to get going than to change speed while moving (backlash, deadband): NaN = same as deadTime
     public double startDelay = Double.NaN;
     //ticks. The plan never heads for an end faster than it can still stop before it, whatever the target does
@@ -162,7 +164,7 @@ public class TurretController {
 
         //biggest plan speed change per loop: half the volts, or what the torque allows. Slowing down it's what coasting gives
         double step = Math.min(0.5 * gain * headroom * (1 - decay), maxVelocityFraction * maxAcceleration * loopTime);
-        double slowStep = Math.min(step, maxVelocityFraction * maxDeceleration * loopTime);
+        double slowStep = Math.min(step, decelerationFraction * maxDeceleration * loopTime);
 
         if (updates == 1) lastTargetVelocity = targetVelocity;
         targetAcceleration += ((targetVelocity - lastTargetVelocity) / dt - targetAcceleration) * Math.min(1, dt / 0.05);

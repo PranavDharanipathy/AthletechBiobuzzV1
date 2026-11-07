@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.Tuners;
 
+import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
@@ -25,6 +26,8 @@ import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 public class FlywheelTuner extends LinearOpMode {
 
     public static boolean SHOOT = false;
+    //run the turret like TeleOp does (holding home), so the flywheel is tuned with its load and control running
+    public static boolean RUN_TURRET = true;
 
     public static int LOOP_TIME = (int) Math.round(TunedConstants.LOOP_TIME_MS);
 
@@ -93,6 +96,9 @@ public class FlywheelTuner extends LinearOpMode {
         coefficients = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
         flywheel.setVelocityPIDVSCoefficients(coefficients);
 
+        TurretBase turret = new TurretBase(hardwareMap);
+        turret.setVolts(0, 0);
+
         if (isStopRequested()) return;
         waitForStart();
 
@@ -129,6 +135,12 @@ public class FlywheelTuner extends LinearOpMode {
             intake.update();
             blocker.setState(SHOOT ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
             flywheel.update();
+            if (RUN_TURRET) {
+                turret.setPosition(turret.startPosition);
+                turret.setTargetVelocity(0);
+                turret.update();
+            }
+            else turret.setVolts(0, 0);
 
             telemetry.addData("filtered voltage", flywheel.getFilteredVolts());
             telemetry.addData("Target Velocity", flywheel.getTargetVelocity());

@@ -78,6 +78,9 @@ public final class Flywheel {
     public double p = 0, i = 0, d = 0;
     private DynamicTrapezoidalSum errorSum = new DynamicTrapezoidalSum();
     public double v = 0;
+
+    public double load = 0;
+    private double lastSentVolts = 0;
     public double s = 0;
 
     public double minP, maxP;
@@ -181,9 +184,16 @@ public final class Flywheel {
 
         error = targetVelocity - currentVelocity;
 
-        //proportional
+        //velocity feedforward
+        v = kv * targetVelocity;
+
+        //static friction
+        s = targetVelocity != 0 ? ks * MathUtil.smoothSign(currentVelocity, ksSignWidth) : 0;
+
+        //proportional. Well over the target it may cancel the feedforward so it coasts down: clamped at minP it kept
+        //driving ~4.6 V and took 2 s to drop 170 ticks/s when the target fell (TeleOp moving closer, relocalizing)
         p = kp * error;
-        p = MathUtil.clamp(p, minP, maxP);
+        p = MathUtil.clamp(p, Math.min(minP, -(v + s + Math.max(i, 0))), maxP);
 
         if (ki != 0 && MathUtil.isFinite(error * dt) && targetVelocity != 0) errorSum.updateSum(dt, error);
         else errorSum.setSum(0); //integral is reset if it's NaN or if targetVelocity is equal to 0
@@ -211,13 +221,19 @@ public final class Flywheel {
         if (!MathUtil.valueWithinRangeIncludingPoles(d, -batteryVolts, batteryVolts)) d = 0;
         d = MathUtil.clamp(d, minD, maxD);
 
-        //velocity feedforward
-        v = kv * targetVelocity;
+        //hidden load: what it sent minus what holding this speed (and speeding up this fast) takes. Near the target only, not maxed out
+        double observerTime = FlywheelConstants.FLYWHEEL_LOAD_OBSERVER_TIME;
+        if (targetVelocity == 0 || !(observerTime > 0)) load = 0;
+        else if (!wasFirstTick && dt > 0 && Math.abs(error) <= FlywheelConstants.FLYWHEEL_VELOCITY_MARGIN_OF_ERROR && Math.abs(power) < 0.98) {
 
-        //static friction
-        s = targetVelocity != 0 ? ks * MathUtil.smoothSign(currentVelocity, ksSignWidth) : 0;
+            double accel = (currentVelocity - lastCurrentVelocity) / dt;
+            double needed = kv * currentVelocity + ks * MathUtil.smoothSign(currentVelocity, ksSignWidth) + accel / FlywheelConstants.FLYWHEEL_ACCEL_PER_VOLT;
+            load += (lastSentVolts - needed - load) * Math.min(1, dt / observerTime);
+            load = MathUtil.clamp(load, -FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS, FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS);
+        }
 
-        power = voltageCompensator.toPower(p + i + d + v + s);
+        power = voltageCompensator.toPower(p + i + d + v + s + load);
+        lastSentVolts = power * voltageCompensator.volts();
 
         if (targetVelocity == 0) power = 0;
 
@@ -308,7 +324,7 @@ public final class Flywheel {
 
         flywheelMotor.setPower(0);
         power = 0;
-        p = d = v = s = 0;
+        p = d = v = s = load = lastSentVolts = 0;
         error = velocityEstimate = dt = 0;
 
         firstTick = true;

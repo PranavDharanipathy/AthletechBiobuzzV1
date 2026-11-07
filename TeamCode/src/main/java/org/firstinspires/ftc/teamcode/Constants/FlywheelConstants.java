@@ -24,10 +24,17 @@ public class FlywheelConstants {
             110,
             110,
             0.05,
-            -2, 4.5, //max P: P was maxed 88-92% of every recovery in bursts, ShotGate Tuner says up to 4.9
+            -2, 8, //max P: after a ball it pushes everything the battery has left (P passes 4.5 V only beyond ~65 ticks/s slow, so
+                   //near the target nothing changes). TeleOp recovered 28% slower with the turret on: P was stuck at 3 V, power 0.85
             -0.3, 0.3,
             -0.4, 0.4
     );
+
+    //steady load the volts reading can't see (a new actuator, drag): learned near the target from the speed it holds for the
+    //volts it sent, added back. Slow on purpose: on 20280507-230429 there was none near the target (the turret's ~1 V only
+    //showed in recoveries, which max P now covers) and 0.3 s just added 0.4 V of jitter. 0 time = off
+    public static double FLYWHEEL_LOAD_OBSERVER_TIME = 2, FLYWHEEL_MAX_LOAD_VOLTS = 1.5;
+    public static double FLYWHEEL_ACCEL_PER_VOLT = 165; //ticks/s^2 per spare volt, same session with the turret quiet
 
     public static double FLYWHEEL_VELOCITY_MARGIN_OF_ERROR = 50;
     public static double FLYWHEEL_STABILITY_MARGIN_OF_ERROR = 20;

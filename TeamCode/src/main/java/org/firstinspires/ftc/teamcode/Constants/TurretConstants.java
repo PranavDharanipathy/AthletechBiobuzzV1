@@ -40,7 +40,7 @@ public class TurretConstants {
     public static double TURRET_START_DELAY = TunedConstants.TURRET_START_DELAY; //s to get going from rest, TURRET_DEAD_TIME is while it's moving
     public static double TURRET_MAX_DECELERATION = TunedConstants.TURRET_MAX_DECELERATION; //ticks/s^2 it coasts down at (the servos only brake reversed), 0 = not measured
 
-    public static double TURRET_MAX_SPEED_FRACTION = 1; //of the measured top speed, acceleration and coasting deceleration it plans with
+    public static double TURRET_MAX_SPEED_FRACTION = 0.8; //of measured top speed + acceleration. 0.85+ hunted on the slippery turret and 0.9 ran past the travel in sim
     public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.15;
     public static double TURRET_FRICTION_RAMP_DEGREES = 0.5;
     public static double TURRET_MOVING_DEGREES_PER_SECOND = 1;

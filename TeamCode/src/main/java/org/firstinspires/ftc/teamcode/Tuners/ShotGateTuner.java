@@ -26,6 +26,8 @@ import java.util.List;
 public class ShotGateTuner extends TeleOpBaseOpMode {
 
     public static double TARGET_VELOCITY = ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
+    //run the turret like TeleOp does (holding home), so the flywheel is tuned with its load and control running
+    public static boolean RUN_TURRET = true;
 
     public static double VIBRATION_SECONDS = 3;
 
@@ -163,6 +165,12 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
         intake.update();
         flywheel.update();
         robotCentricDrive.update();
+        if (RUN_TURRET) {
+            turret.setPosition(turret.startPosition);
+            turret.setTargetVelocity(0);
+            turret.update();
+        }
+        else turret.setVolts(0, 0);
 
         show(velocity, error);
     }
