@@ -11,6 +11,8 @@ public class Intake extends Subsystem {
 
     private boolean isSubsystem;
 
+    private FIArm fiArm; //null = no arm (tuners)
+
     private Object intake; //given Intake (non-subsystem) or GeneralVeloMotor data
 
     public Object getIntake() {
@@ -20,8 +22,14 @@ public class Intake extends Subsystem {
     private BetterGamepad controller1;
 
     public Intake(GeneralVeloMotor intake) {
+        this(intake, null);
+    }
+
+    public Intake(GeneralVeloMotor intake, FIArm fiArm) {
 
         isSubsystem = false;
+
+        this.fiArm = fiArm;
 
         intake.setDirection(IntakeConstants.INTAKE_MOTOR_DIRECTION);
         this.intake = intake;
@@ -72,6 +80,10 @@ public class Intake extends Subsystem {
         return state;
     }
 
+    public FIArm getFIArm() {
+        return fiArm;
+    }
+
     //SUBSYSTEM
     public void provideComponents(Intake intake, BetterGamepad controller1) {
 
@@ -79,6 +91,8 @@ public class Intake extends Subsystem {
 
         this.controller1 = controller1;
     }
+
+    private boolean fiArmState = false;
 
     @Override
     public void update() {
@@ -91,6 +105,13 @@ public class Intake extends Subsystem {
         }
         else {
             setState(IntakeState.IDLE);
+        }
+
+        //the arm lives in the component this subsystem was given
+        FIArm arm = ((Intake) intake).getFIArm();
+        if (arm != null) {
+            if (controller1.dpad_downHasJustBeenPressed) fiArmState = !fiArmState;
+            arm.setState(fiArmState ? FIArm.FIArmState.DEPLOY : FIArm.FIArmState.RETRACT);
         }
 
         ((GeneralVeloMotor) ((Intake) intake).getIntake()).update();

@@ -196,6 +196,9 @@ public final class TurretScenario {
         c.lanyardMaxVolts = TurretConstants.TURRET_LANYARD_MAX_VOLTS;
         c.lanyardStuckBand = TurretConstants.TURRET_LANYARD_STUCK_BAND_DEGREES * tpd;
         c.setLimits(TurretConstants.TURRET_MAX_SPEED_FRACTION, TurretConstants.TURRET_INTEGRAL_ZONE_DEGREES * tpd, TurretConstants.TURRET_MAX_INTEGRAL_VOLTS, TurretConstants.TURRET_FRICTION_RAMP_DEGREES * tpd, TurretConstants.TURRET_MOVING_DEGREES_PER_SECOND * tpd, TurretConstants.TURRET_HOLD_TOLERANCE_DEGREES * tpd);
+        c.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
+        c.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
+        c.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
         c.setTravel(ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd); //same as TurretBase
         return c;
     }
@@ -293,6 +296,46 @@ public final class TurretScenario {
         return track(s, p, t, 0.3 + Math.max(1.5, 0.03 * degrees), false, 1e9, 0.3, keepTrace, seed);
     }
 
+    static final double[] STEP_SEQUENCE = {30, -60, 150, -190, 0, 90, 60, -30, 195};
+    static final double STEP_SECONDS = 2;
+
+    static final class Steps {
+
+        double stallSeconds, divergedFraction;
+        final double[] reachSeconds = new double[STEP_SEQUENCE.length]; //to within 5 deg, NaN = never
+    }
+
+    /// STEP_SEQUENCE, STEP_SECONDS apart. Stalled = over 10 deg off and under 15 deg/s; diverged = over 15 deg off its own plan
+    static Steps steps(Setup s, TurretAutotuneEngine.Parameters p, long seed) {
+
+        Target target = new Target() {
+            public double position(double t) {
+
+                int k = (int) Math.floor(t / STEP_SECONDS);
+                return k < 1 ? 0 : STEP_SEQUENCE[Math.min(k - 1, STEP_SEQUENCE.length - 1)] * s.tpd;
+            }
+
+            public double velocity(double t) {
+                return 0;
+            }
+        };
+        Track r = track(s, p, target, STEP_SECONDS * (STEP_SEQUENCE.length + 1), false, 0, -1, true, seed);
+        Steps out = new Steps();
+        java.util.Arrays.fill(out.reachSeconds, Double.NaN);
+        double last = 0, diverged = 0, total = 0;
+        for (double[] row : r.trace) {
+            double t = row[0], dt = t - last;
+            last = t;
+            if (Math.abs(row[1] - row[3]) > 10 && Math.abs(row[4]) < 15) out.stallSeconds += dt;
+            if (Math.abs(row[2] - row[3]) > 15) diverged += dt;
+            total += dt;
+            int k = (int) Math.floor(t / STEP_SECONDS) - 1;
+            if (k >= 0 && k < STEP_SEQUENCE.length && Double.isNaN(out.reachSeconds[k]) && Math.abs(row[3] - STEP_SEQUENCE[k]) < 5) out.reachSeconds[k] = t - STEP_SECONDS * (k + 1);
+        }
+        out.divergedFraction = total > 0 ? diverged / total : 0;
+        return out;
+    }
+
     static Track hold(Setup s, TurretAutotuneEngine.Parameters p, long seed) {
 
         final double ticks = 20 * s.tpd;
@@ -310,7 +353,7 @@ public final class TurretScenario {
 
     static final class MatchSpin {
 
-        double maxTravelDeg, aimedFraction;
+        double maxTravelDeg, aimedFraction, firstSwingDeg = Double.NaN;
         int swings;
     }
 
@@ -324,7 +367,6 @@ public final class TurretScenario {
         Encoder filter = newFilter();
         CodeLoop loop = new CodeLoop(s.loop.meanSeconds, s.loop.jitter, seed + 7);
         double min = ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, max = ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES;
-        double decel = (p.maxDeceleration > 0 ? p.maxDeceleration : p.maxAcceleration > 0 ? p.maxAcceleration : 1000 * s.tpd) / s.tpd;
         double toAim = ShooterConstants.TURRET_AIM_DIRECTION * -180 / Math.PI;
         MatchSpin r = new MatchSpin();
         double t = 0, next = 0, last = 0, aimed = 0, n = 0, half = seconds / 2;
@@ -338,10 +380,8 @@ public final class TurretScenario {
                 double aimRate = toAim * (headingRate(t) + (t < half ? spin : -spin));
                 double position = turret.encoderPosition();
                 double velocity = filter.updateFilteredVelocity(t, turret.encoderVelocity());
-                double loopTime = c.getLoopTime();
-                double lead = p.deadTime + 2 * (Double.isNaN(loopTime) ? 0.03 : loopTime);
-                double tt = route.update(aim, aimRate, position / s.tpd, min, max, lead, 0.8 * decel, ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
-                if (route.hasSwung()) r.swings++;
+                double tt = route.update(aim, aimRate, position / s.tpd, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
+                if (route.hasSwung() && r.swings++ == 0) r.firstSwingDeg = Math.abs(position / s.tpd);
                 double volts = c.update(dt, tt * s.tpd, route.isOutside(min, max) ? 0 : aimRate * s.tpd, position, velocity, 0.95 * 12.5);
                 turret.command(t, volts, volts);
                 if (Math.abs(Math.IEEEremainder(position / s.tpd - aim, 360)) < 2) aimed++;

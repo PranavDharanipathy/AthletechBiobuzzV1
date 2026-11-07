@@ -206,7 +206,7 @@ public class CodeInTheLoopTest {
         }
     }
 
-    //match aim with the robot spinning as hard as a driver can: it swings round early enough to never run past the travel
+    //match aim with the robot spinning as hard as a driver can: the plan stops it at the ends in time, it never runs past the travel
     @Test
     public void matchAimNeverRunsPastTheTravel() {
 
@@ -216,6 +216,54 @@ public class CodeInTheLoopTest {
             //6 rad/s outruns the turret, so it waits right at the end: still short of where TurretBase cuts the power
             assertTrue(spin + " rad/s travel " + m.maxTravelDeg, m.maxTravelDeg < ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES);
             assertTrue(spin + " rad/s swings " + m.swings, m.swings >= 2);
+        }
+    }
+
+    //the match aim follows the aim right out to the ends before it swings round; it used to swing at ~155-180 deg, so the
+    //turret never got past 160
+    @Test
+    public void matchAimUsesTheWholeTravel() {
+
+        TurretScenario.Setup s = TurretScenario.setup(new RobotParams(db), ctx);
+        for (double spin : new double[] {1.5, 3}) {
+            TurretScenario.MatchSpin m = TurretScenario.matchSpin(s, TurretScenario.matched(s, 4), spin, 30, 4);
+            assertTrue(spin + " rad/s first swing at " + m.firstSwingDeg, m.firstSwingDeg > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES - 10);
+        }
+    }
+
+    static TurretScenario.Setup robotTurret(SimContext ctx, double slide) {
+
+        TurretScenario.Setup s = TurretScenario.setup(new RobotParams(ctx.db), ctx).with(0, 59.5, 0, true);
+        double tpd = 68.27;
+        s.tpd = tpd;
+        s.loop = new CodeLoop(0.031, 0.3, 1);
+        s.plant = new CrServoTurret.Params(166.6 * tpd, 0.046, 0.036, slide, 1.163, 0, 384 * tpd, 1735 * tpd);
+        s.plant.startDelay = 0.083;
+        s.plant.coastDecel = 1050 * tpd;
+        s.plant.neutralDecel = 1500 * tpd;
+        return s;
+    }
+
+    static TurretAutotuneEngine.Parameters robotModel() {
+
+        double tpd = 68.27;
+        return new TurretAutotuneEngine.Parameters(166.6 * tpd, 0.046, 1.011, 1.163, 0.036, 3.2, 0.9, 0.3, 1).capability(384 * tpd, 1735 * tpd).startDelay(0.083).deceleration(1050 * tpd).shakeBandwidth(3.2);
+    }
+
+    //the robot's TeleOp log (20280507-230429): 31% of loops 15+ deg off its own plan, the two fighting to ~0 V, once stuck 2 s
+    //30 deg short. The plan now moves onto the turret instead (used to be 6-8% here), and every step gets within 5 deg in time
+    @Test
+    public void turretNeverFightsItsOwnPlan() {
+
+        for (double slide : new double[] {0.65, 0.75}) {
+            for (long seed = 1; seed <= 2; seed++) {
+                TurretScenario.Steps r = TurretScenario.steps(robotTurret(ctx, slide), robotModel(), seed);
+                assertTrue(slide + " V seed " + seed + " diverged " + r.divergedFraction, r.divergedFraction < 0.01);
+                for (int k = 0; k < r.reachSeconds.length; k++) {
+                    double move = Math.abs(TurretScenario.STEP_SEQUENCE[k] - (k == 0 ? 0 : TurretScenario.STEP_SEQUENCE[k - 1]));
+                    assertTrue(slide + " V seed " + seed + " step " + k + " (" + move + " deg) reach " + r.reachSeconds[k], r.reachSeconds[k] < 0.5 + move / 260);
+                }
+            }
         }
     }
 
@@ -234,11 +282,11 @@ public class CodeInTheLoopTest {
     public void robotFlywheelCodeSpinsUpAndHoldsSpeed() {
 
         FlywheelCodeScenario.Setup s = FlywheelCodeScenario.setup(new RobotParams(db), ctx);
-        FlywheelCodeScenario.SpinUp r = FlywheelCodeScenario.spinUp(s, ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY, s.batteryVolts, null, 1);
+        FlywheelCodeScenario.SpinUp r = FlywheelCodeScenario.spinUp(s, ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, s.batteryVolts, null, 1);
         assertTrue("never settled", Double.isFinite(r.settleS));
         assertTrue("overshoot " + r.overshoot, r.overshoot < 100);
         assertTrue("ripple " + r.rippleRms, r.rippleRms < 30);
-        FlywheelCodeScenario.Burst b = FlywheelCodeScenario.burst(s, ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY, s.batteryVolts, false, null, 1);
+        FlywheelCodeScenario.Burst b = FlywheelCodeScenario.burst(s, ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, s.batteryVolts, false, null, 1);
         assertEquals(s.balls, b.exitSpeeds.size());
         double now = System.nanoTime() * 1e-9;
         assertEquals("the sim gave the robot clock back", now, Clock.seconds(), 1);

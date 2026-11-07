@@ -40,7 +40,13 @@ public class TurretConstants {
     public static double TURRET_START_DELAY = TunedConstants.TURRET_START_DELAY; //s to get going from rest, TURRET_DEAD_TIME is while it's moving
     public static double TURRET_MAX_DECELERATION = TunedConstants.TURRET_MAX_DECELERATION; //ticks/s^2 it coasts down at (the servos only brake reversed), 0 = not measured
 
-    public static double TURRET_MAX_SPEED_FRACTION = 0.8; //of measured top speed + acceleration. 0.85+ hunted on the slippery turret and 0.9 ran past the travel in sim
+    public static double TURRET_MAX_SPEED_FRACTION = 0.8; //of measured top speed. 1.0 ran 6 deg past the travel in sim once the aim used all of it
+    public static double TURRET_ACCELERATION_FRACTION = 0.8; //of measured acceleration
+    //off its own plan by this, the plan moves onto where the turret really is (it fell behind, coasted on or stalled) instead of
+    //the two fighting to ~0 V. TeleOp log 20280507-230429: 31% of loops 15+ deg off, 2 s stuck 30 deg short
+    public static double TURRET_RESYNC_DEGREES = 7;
+    //moving: the friction push fades to full reverse over this much lead on the plan (0 = flip at 1 deg, which chopped the speed)
+    public static double TURRET_BRAKE_DEGREES = 5;
     public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.15;
     public static double TURRET_FRICTION_RAMP_DEGREES = 0.5;
     public static double TURRET_MOVING_DEGREES_PER_SECOND = 1;

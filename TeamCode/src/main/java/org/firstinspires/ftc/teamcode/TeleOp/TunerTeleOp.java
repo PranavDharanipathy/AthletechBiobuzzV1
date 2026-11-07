@@ -81,7 +81,7 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
 
         robotCentricDrive = new RobotCentricDrive(motors[0], motors[1], motors[2], motors[3], controller1);
 
-        intake.provideComponents(new Intake(super.intake), controller1);
+        intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel, turret);
         shooter.provideComponents(flywheel, turret, follower, controller1, controller2);
 

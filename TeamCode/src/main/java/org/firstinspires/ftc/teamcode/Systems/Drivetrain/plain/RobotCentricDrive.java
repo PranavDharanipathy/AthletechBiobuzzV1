@@ -12,7 +12,6 @@ public class RobotCentricDrive {
 
     private BetterGamepad controller1;
 
-    //sticks go through the curve (on their size, sign kept), then get scaled by these
     private final FastSigmoidCurve curve = new FastSigmoidCurve();
     private double forwardRatio = 1, strafeRatio = 1, turnRatio = 1;
 
@@ -43,7 +42,6 @@ public class RobotCentricDrive {
         double strafe = strafeRatio * shape(controller1.left_stick_x());
         double turn = turnRatio * shape(controller1.right_stick_x());
 
-        //mecanum: scale all four down together so none asks for more than full power, keeping the mix
         double denominator = Math.max(Math.abs(forward) + Math.abs(strafe) + Math.abs(turn), 1);
 
         double lfPower = (forward + turn + strafe) / denominator;

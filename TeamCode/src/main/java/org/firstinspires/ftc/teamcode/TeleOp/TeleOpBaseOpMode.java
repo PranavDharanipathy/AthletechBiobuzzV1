@@ -18,6 +18,7 @@ import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
+import org.firstinspires.ftc.teamcode.Systems.Intake.FIArm;
 import org.firstinspires.ftc.teamcode.Systems.Shooter;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
@@ -44,6 +45,8 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     public GeneralVeloMotor intake;
 
     public Blocker blocker;
+
+    public FIArm fiArm;
 
     public TurretBase turret;
 
@@ -105,6 +108,11 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         intake = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
 
         blocker = new Blocker(new MonitoredServo(hardwareMap, DeviceConstants.blockerServoDeviceName, false));
+
+        fiArm = new FIArm(
+                new MonitoredServo(hardwareMap, DeviceConstants.fiArmLeftServoDeviceName, false),
+                new MonitoredServo(hardwareMap, DeviceConstants.fiArmRightServoDeviceName, false)
+        );
 
         flywheel = new Flywheel(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.flywheelMotorDeviceName, false));
 

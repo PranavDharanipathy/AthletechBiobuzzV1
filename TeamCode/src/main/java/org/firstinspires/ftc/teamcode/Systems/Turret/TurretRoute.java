@@ -1,8 +1,8 @@
 package org.firstinspires.ftc.teamcode.Systems.Turret;
 
-/// which turn of the aim the turret goes to (deg from home), so the robot can spin forever. Heading for an end faster than
-/// the turret can stop before it, the aim swings a full turn around and the turret waits at the other end till it comes in.
-/// No hardware calls, the sims run it
+/// which turn of the aim the turret goes to (deg from home), so the robot can spin forever. The match aim uses the whole
+/// travel and swings a full turn once the aim is past an end; the autotuner's version swings early, before the turret would
+/// have to stop. No hardware calls, the sims run it
 public class TurretRoute {
 
     private double unwrapped = Double.NaN;
@@ -29,6 +29,22 @@ public class TurretRoute {
         if (swung) unwrapped += upper ? -360 : 360;
         return clamp(unwrapped, min, max);
     }
+
+    /// match aim: uses the whole travel. It follows the aim right to the ends (the controller's plan stops it there in time) and
+    /// only swings a full turn once the aim is past an end by margin and not coming back in within RETURN_SECONDS
+    public double update(double aim, double aimRate, double turretNow, double min, double max, double margin) {
+
+        if (Double.isNaN(unwrapped)) unwrapped = nearest(aim, turretNow, min, max);
+        else unwrapped += Math.IEEEremainder(aim - unwrapped, 360);
+        boolean upper = unwrapped > 0.5 * (min + max);
+        double outside = upper ? unwrapped - max : min - unwrapped;
+        double inward = upper ? -aimRate : aimRate;
+        swung = outside > margin && inward * RETURN_SECONDS < outside - margin;
+        if (swung) unwrapped += upper ? -360 : 360;
+        return clamp(unwrapped, min, max);
+    }
+
+    public static final double RETURN_SECONDS = 1;
 
     /// waiting at an end for the aim to come round
     public boolean isOutside(double min, double max) {

@@ -35,6 +35,15 @@ public class TurretController {
     //how hard it pushes while holding, learned: running past the target under its own push takes overshootCut off, and it creeps
     //back to 1 over holdRecoverTime s (the robot's turret slid on 0.65 V where STATIONARY said 1.01). Kicks still start it
     public double holdScale = 1, minHoldScale = 0.4, overshootCut = 0.1, holdRecoverTime = 20;
+    //ticks. Off its own plan by more than this (it lagged, coasted on or stalled), the plan restarts from where the turret really
+    //is instead of the two fighting each other to 0 V (the robot's log: 31% of loops 15+ deg off, stuck 2 s at 30 deg)
+    public double resyncBand = 500;
+    public double accelerationFraction = 0.8; //of maxAcceleration, separate from maxVelocityFraction
+    //ticks. Cruising or speeding up, the friction push fades from full ahead to full reverse (the only way these servos brake) as
+    //the turret gets this far ahead of its plan. Slowing down, or 0, it flips at 2 x frictionErrorWidth (hard braking for stops;
+    //flipping while cruising chopped the speed between 100 and 320 deg/s)
+    public double brakeBand = 0;
+    public int resyncs;
 
     public double kp, kd, ki;
     public double p, i, d, f, v, volts, lanyard;
@@ -48,7 +57,7 @@ public class TurretController {
     private double lastKick = -1e9, kickUntil, kickBoost, lastGap;
     private int kickLoops = 1;
     private boolean movedSinceKick = true, planWasMoving;
-    private double lastRate, lastRate2, rateNoise, lastHoldError;
+    private double lastRate, lastRate2, rateNoise, lastHoldError, lastPosition;
     private double learnDirection = Double.NaN, learnTime, learnLast, learnResidual, learnDegrees;
     private int updates = 0;
     private boolean started = false;
@@ -131,6 +140,7 @@ public class TurretController {
         movedSinceKick = true;
         planWasMoving = false;
         lastRate = lastRate2 = rateNoise = lastHoldError = 0;
+        resyncs = 0;
         learnDirection = Double.NaN;
         historyNewest = -1;
         historyCount = 0;
@@ -163,8 +173,13 @@ public class TurretController {
         double maxVelocity = maxVelocityFraction * Math.min(gain * headroom, maxSpeed);
 
         //biggest plan speed change per loop: half the volts, or what the torque allows. Slowing down it's what coasting gives
-        double step = Math.min(0.5 * gain * headroom * (1 - decay), maxVelocityFraction * maxAcceleration * loopTime);
+        double step = Math.min(0.5 * gain * headroom * (1 - decay), accelerationFraction * maxAcceleration * loopTime);
         double slowStep = Math.min(step, decelerationFraction * maxDeceleration * loopTime);
+
+        if (updates > 3) {
+            lookBack(time - lead);
+            if (Math.abs(reference - position) > resyncBand) resync(position, velocity, maxVelocity);
+        }
 
         if (updates == 1) lastTargetVelocity = targetVelocity;
         targetAcceleration += ((targetVelocity - lastTargetVelocity) / dt - targetAcceleration) * Math.min(1, dt / 0.05);
@@ -227,7 +242,9 @@ public class TurretController {
         //stuck: a short kick at breakaway, then kinetic until a start delay shows whether it went. Holding breakaway until the
         //velocity shows motion hops way past small targets. A kick that didn't move it comes back longer and harder (so a friction
         //guess that's too low can't leave it stuck), one that did comes back a bit shorter: it settles on what this servo needs
-        boolean stopped = Math.abs(velocity) < movingVelocity;
+        //the filtered velocity rings for a while after a stop (40 deg/s with the encoder not moving): well short, ticks decide.
+        //Near the target it waits for the velocity, or it hops about
+        boolean stopped = Math.abs(velocity) < movingVelocity || updates > 1 && Math.abs(error) > integralZone && Math.abs(position - lastPosition) < movingVelocity * dt;
         double startWait = (startDelay > 0 ? Math.max(startDelay, deadTime) : deadTime) + loopTime;
         if (!stopped) {
             if (!movedSinceKick && lastKick > -1e8) {
@@ -245,14 +262,18 @@ public class TurretController {
                 kickBoost = Math.min(kickBoost + 0.08, 0.6);
             }
             lastKick = time;
-            kickUntil = time + (kickLoops - 0.5) * loopTime;
+            //stopped well short (past the integral zone), hopping past isn't the risk: kick for the whole start delay first time
+            int loops = Math.abs(error) > integralZone ? Math.max(kickLoops, (int) Math.ceil(startWait / loopTime)) : kickLoops;
+            kickUntil = time + (loops - 0.5) * loopTime;
             movedSinceKick = false;
             kicking = true;
         }
         double breakaway = breakawayFriction + kickBoost;
         //run past the reference: reverse past friction, that's the only way these servos brake (easing off only coasts)
         double pushing = Math.signum(planVelocity);
-        if (error * pushing < -2 * frictionErrorWidth) pushing = -pushing;
+        boolean slowing = change * planVelocity < 0;
+        if (brakeBand > 0 && !slowing) pushing *= clamp(1 + 2 * Math.min(0, error * pushing) / brakeBand, -1, 1);
+        else if (error * pushing < -2 * frictionErrorWidth) pushing = -pushing;
         if (planMoving) f = (kicking ? breakaway : kineticFriction) * pushing;
         else if (holding) f = 0;
         else if (kicking) f = breakaway * frictionScale * Math.signum(error);
@@ -262,7 +283,9 @@ public class TurretController {
             double toward = Math.max(0, velocity * Math.signum(error));
             boolean overpushed = toward > overpushFactor * effectiveBandwidth * Math.abs(error) + overpushMargin * movingVelocity;
             double left = Math.abs(error) - (overpushed ? toward * lead : 0);
-            f = kineticFriction * frictionScale * holdScale * clamp((left - holdTolerance) / frictionErrorWidth, left < -2 * frictionErrorWidth ? -1 : 0, 1) * Math.signum(error);
+            //the learned hold push is for holding: further out it pushes with all of the friction guess
+            double scale = holdScale + (1 - holdScale) * clamp((Math.abs(error) - integralZone) / Math.max(integralZone, 1e-6), 0, 1);
+            f = kineticFriction * frictionScale * scale * clamp((left - holdTolerance) / frictionErrorWidth, left < -2 * frictionErrorWidth ? -1 : 0, 1) * Math.signum(error);
         }
         //ran past the target under its own push: it pushes too hard
         if (!planMoving && error * lastHoldError < 0 && Math.abs(velocity) > overpushMargin * movingVelocity && Math.abs(lastHoldError) > holdTolerance) holdScale = Math.max(minHoldScale, holdScale * (1 - overshootCut));
@@ -311,8 +334,30 @@ public class TurretController {
             }
         }
 
+        lastPosition = position;
         volts = clamp(p + i + d + f + v + lanyard, -availableVolts, availableVolts);
         return volts;
+    }
+
+    //the plan (and what it already sent) moves over onto where the turret really is, no fight, no restart. Behind, it keeps its
+    //speed (the measured one lags while the turret gets going); ahead, it takes the turret's, so stops get planned from the real
+    //speed. Never outside the travel
+    private void resync(double position, double velocity, double maxVelocity) {
+
+        double offset = position - reference;
+        if (offset * planVelocity >= 0) {
+            double was = planVelocity;
+            planVelocity = clamp(velocity, -maxVelocity, maxVelocity);
+            for (int k = 0; k < HISTORY; k++) historyVelocity[k] += planVelocity - was;
+        }
+        offset = clamp(plan + offset, travelMin, travelMax) - plan;
+        plan += offset;
+        for (int k = 0; k < HISTORY; k++) historyPosition[k] += offset;
+        reference = position;
+        integral = 0;
+        lastGap = 0;
+        lastError = lastError2 = lastHoldError = 0;
+        resyncs++;
     }
 
     private void remember(double position, double velocity) {

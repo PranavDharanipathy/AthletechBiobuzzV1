@@ -49,6 +49,16 @@ Dashboard and commons-math — it needs network access to Maven Central and
   `@Config` values. Tuning OpModes live in `TeamCode/.../Tuners`.
 - **Pedro Pathing**: path/localizer tuners also surface through Dashboard; keep
   tuned constants in `Constants/`.
+- **Limelight Lab** (live vision tuning; moves nothing): run the `Limelight Lab` OpMode
+  (Diagnostics). While it runs, the hub forwards ports 5800-5809 to the Limelight, so a laptop
+  on the robot's Wi-Fi gets the web UI at `http://192.168.43.1:5801`, the stream at `:5800` and
+  REST at `:5807`. Drive it with `python tools/limelight.py ...` (find, watch, get, set, sweep,
+  record, inputs, pull, push, snap). Pipelines and SnapScripts live in
+  `TeamCode/src/main/assets/limelight/p<index>_<name>.json|.py`. `push` backs up the camera's
+  pipelines into `tools/out/` first and asks before overwriting; hold A+B in the OpMode does the
+  same upload from the APK. An agent with Claude in Chrome can open the web UI and tune with the
+  user; see `Systems/Vision/README.md` Part 6. Never run `push --yes` or `set --save` without the
+  user asking: both overwrite tuned pipelines on the camera.
 
 ## Sims and the robot profile (desktop, no robot needed)
 

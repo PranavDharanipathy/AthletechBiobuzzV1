@@ -139,6 +139,9 @@ public class TurretBase {
         controller.lanyardMaxVolts = TurretConstants.TURRET_LANYARD_MAX_VOLTS;
         controller.lanyardStuckBand = TurretConstants.TURRET_LANYARD_STUCK_BAND_DEGREES * tpd;
         controller.setLimits(TurretConstants.TURRET_MAX_SPEED_FRACTION, TurretConstants.TURRET_INTEGRAL_ZONE_DEGREES * tpd, TurretConstants.TURRET_MAX_INTEGRAL_VOLTS, TurretConstants.TURRET_FRICTION_RAMP_DEGREES * tpd, TurretConstants.TURRET_MOVING_DEGREES_PER_SECOND * tpd, TurretConstants.TURRET_HOLD_TOLERANCE_DEGREES * tpd);
+        controller.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
+        controller.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
+        controller.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
         controller.setTravel(startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd);
     }
 

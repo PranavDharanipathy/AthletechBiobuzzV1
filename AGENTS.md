@@ -30,6 +30,7 @@ Sim/               Bridge between robot code and the Sim module
   Adapters/        Adapt hardware interfaces to sim implementations
   Interfaces/      Abstractions shared by real + simulated hardware
 Systems/           Robot subsystems (drive, mechanisms)
+  Vision/          Vision guide (README.md) + LimelightBridge (hub -> Limelight port forwarding for tuning)
 TeleOp/            Driver-controlled OpModes
 Testing/           Throwaway / diagnostic OpModes
 Tuners/            PID / path / sensor tuning OpModes (pair with FTC Dashboard)
@@ -37,7 +38,7 @@ Utility/           Shared helpers (MathUtil, BetterGamepad, RobotLogger, ...)
   Hardware/        Monitored* drop-in hardware wrappers (read caching + I/O stats)
   Monitoring/      HardwareMonitor: loop/power/hub/motor monitoring + on-robot database
                    + MonitorWebServer (web dashboard at :8080/hwmonitor)
-  opmodes/         Utility OpModes (Hardware Monitor Viewer, Clear Database, example)
+  opmodes/         Utility OpModes (Hardware Monitor Viewer, Clear Database, example, Limelight Lab)
 ```
 
 ### `Sim` layout (`org.athletech.sim`)
@@ -193,9 +194,11 @@ Tuner** is for dashboard tweaking. `TurretAutotuneEngine` has no hardware calls,
 test it against a simulated turret. Details are in DEV_NOTES.
 
 The turret travels **±200° from home** (20° past straight back each way) (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`) and the robot may spin
-forever. `TurretRoute` (used by `Shooter` and the autotuner's DRIVING mode) follows the aim round continuously and
-swings it a full turn around before an end, early enough for the turret's stopping distance. `TurretController`'s plan
-never heads for an end faster than it can stop (`setTravel`). Past the limit plus
+forever. `TurretRoute` follows the aim round continuously. The match aim (`Shooter`) uses the whole ±200° and swings a full
+turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`); the autotuner's DRIVING mode swings early, before
+the turret's stopping distance. `TurretController`'s plan never heads for an end faster than it can stop (`setTravel`).
+When the turret ends up more than `TURRET_RESYNC_DEGREES` off its own plan (lagged, coasted on, stalled) the plan moves
+onto where it really is instead of the two fighting to 0 V; stopped well short, it kicks through the whole start delay. Past the limit plus
 `TURRET_HARD_LIMIT_MARGIN_DEGREES`, `TurretBase` will only drive back toward home, which protects the wiring.
 Flywheel shake is handled by **vibration rejection** in `TurretController`: it measures shake from the error's
 second difference and lowers stiffness while the turret shakes, down to `TURRET_MIN_BANDWIDTH`, which DRIVING

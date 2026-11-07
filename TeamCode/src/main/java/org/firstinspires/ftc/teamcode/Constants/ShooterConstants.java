@@ -16,7 +16,7 @@ public class ShooterConstants {
 
     //20 deg past straight back each way
     public static double MIN_TURRET_POSITION_IN_DEGREES = -200, MAX_TURRET_POSITION_IN_DEGREES = 200;
-    public static double TURRET_SWING_MARGIN_DEGREES = 5; //spare room past the turret's stopping distance before the aim swings a turn around
+    public static double TURRET_SWING_MARGIN_DEGREES = 5; //how far the aim goes past an end before the turret swings a turn around
 
     public static double TURRET_TICKS_PER_DEGREE = 68.27;
 
@@ -24,16 +24,12 @@ public class ShooterConstants {
 
     public static double GOAL_NUDGE_INCHES = 1; //gamepad 2 dpad, per press
 
-    public static double TURRET_POSITIONAL_OFFSET = -1.775591;
-
-    //turret axis from drive center, inches, +x forward +y left
-    public static double TURRET_OFFSET_X = -2.82, TURRET_OFFSET_Y = 0;
+    public static double TURRET_POSITIONAL_OFFSET = -2.82252; //how forward the turret is from the center of the drivetrain (- is back, + is forward)
 
     //+1: encoder ticks go up as the turret turns counterclockwise (seen from above). -1 had it turning with the robot's spin, twice as fast
     public static double TURRET_AIM_DIRECTION = 1;
 
-    public static double DEFAULT_FLYWHEEL_VELOCITY = 1450;
-
+    public static double FLYWHEEL_SHOOT_VELOCITY = 1450;
 
     public static double TURRET_AIM_LEAD_TIME = 0;
 

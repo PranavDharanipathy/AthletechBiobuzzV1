@@ -20,4 +20,6 @@ public class DeviceConstants {
 
     public static String limelightCameraDeviceName = "ll";
 
+    public static String fiArmLeftServoDeviceName = "dropdownleft";
+    public static String fiArmRightServoDeviceName = "dropdownright";
 }

@@ -776,7 +776,7 @@ bandwidth"):
 - Goal switching: `Field/Goal` (RED, BLUE) picks the close or far aim point from the robot pose
   (`y > FAR_ZONE_CLOSE_ZONE_BARRIER` means close). The coordinates live in `FieldConstants` and are NaN
   until measured. While they're NaN, the turret holds home and the flywheel uses
-  `DEFAULT_FLYWHEEL_VELOCITY`. Fill all eight goal values (x and y, close and far, per alliance) in the
+  `FLYWHEEL_SHOOT_VELOCITY`. Fill all eight goal values (x and y, close and far, per alliance) in the
   same frame as `START_POSE`.
 - `FieldConstants.START_POSE` is (0, 0, 0), only so Pedro has a pose. Real aiming needs a real start pose,
   or relocalization at a known spot.

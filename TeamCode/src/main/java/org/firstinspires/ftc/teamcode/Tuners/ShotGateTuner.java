@@ -25,7 +25,7 @@ import java.util.List;
 @TeleOp (group = "tuning")
 public class ShotGateTuner extends TeleOpBaseOpMode {
 
-    public static double TARGET_VELOCITY = ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
+    public static double TARGET_VELOCITY = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY;
     //run the turret like TeleOp does (holding home), so the flywheel is tuned with its load and control running
     public static boolean RUN_TURRET = true;
 

@@ -79,7 +79,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
         motors[3].setDirection(DcMotorSimple.Direction.REVERSE);
         robotCentricDrive = new RobotCentricDrive(motors[0], motors[1], motors[2], motors[3], controller1);
 
-        intake.provideComponents(new Intake(super.intake), controller1);
+        intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel);
 
         setUpLynxModule();
@@ -154,7 +154,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
             left_back.setPower(0);
             right_back.setPower(0);
         }
-        if (flywheelOn) flywheel.setVelocity(ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY, false);
+        if (flywheelOn) flywheel.setVelocity(ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, false);
         else flywheel.setVelocity(0, true);
         flywheel.update();
 

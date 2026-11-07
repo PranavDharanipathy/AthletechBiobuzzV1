@@ -32,7 +32,7 @@ public class TurretManualTuner extends OpMode {
     public static double SINE_AMPLITUDE_DEGREES = 25, SINE_HZ = 0.5;
     public static long LOOP_TIME = 0; //extra ms per loop, set to TunedConstants.LOOP_TIME_MS to act like a match
     public static boolean VOLTAGE_COMPENSATION = TurretConstants.TURRET_VOLTAGE_COMPENSATION;
-    public static double FLYWHEEL_VELOCITY = ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY; //B spins it, that's what shakes the turret
+    public static double FLYWHEEL_VELOCITY = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY; //B spins it, that's what shakes the turret
 
     private TurretBase turret;
     private Flywheel flywheel;

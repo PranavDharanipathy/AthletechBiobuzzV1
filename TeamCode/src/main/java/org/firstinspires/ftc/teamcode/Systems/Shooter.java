@@ -6,7 +6,6 @@ import com.pedropathing.math.Velocity;
 
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
-import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Field.Goal;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
@@ -138,8 +137,8 @@ public class Shooter extends Subsystem {
         virtualGoal = goalSet ? getVirtualGoalCoordinate(turretPose, robotVelocity, goalCoordinate) : goalCoordinate;
         distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
 
-        //flywheel
-        flywheelTargetVelocity = goalSet ? getFlywheelTargetVelocityFromInterpolation(distanceToGoal) : ShooterConstants.DEFAULT_FLYWHEEL_VELOCITY;
+        //flywheel: one speed everywhere (the distance table is still there, unused)
+        flywheelTargetVelocity = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY;
 
         if (spinUp) flywheel.setVelocity(flywheelTargetVelocity, false);
         else flywheel.setVelocity(0, true);
@@ -156,7 +155,7 @@ public class Shooter extends Subsystem {
             double turretNow = ShooterConstants.TURRET_AIM_DIRECTION * (turret.getPosition() - turretStartPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE;
             double aimRate = getTurretAimRate(aimBotPose, robotVelocity, virtualGoal);
             double min = ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, max = ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES;
-            tt = turretRoute.update(rawtt, aimRate, turretNow, min, max, turretLead(), turretStopDeceleration(), ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
+            tt = turretRoute.update(rawtt, aimRate, turretNow, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
 
             turretAimPosition = ShooterConstants.TURRET_AIM_DIRECTION * tt * ShooterConstants.TURRET_TICKS_PER_DEGREE + turretStartPosition;
 
@@ -198,11 +197,17 @@ public class Shooter extends Subsystem {
         return values.get(i - 1) + s * (values.get(i) - values.get(i - 1));
     }
 
+    //turret axis from the drive center in polar: TURRET_POSITIONAL_OFFSET along the robot's heading
+    private static double offsetX(double heading) {
+        return ShooterConstants.TURRET_POSITIONAL_OFFSET * Math.cos(heading);
+    }
+
+    private static double offsetY(double heading) {
+        return ShooterConstants.TURRET_POSITIONAL_OFFSET * Math.sin(heading);
+    }
+
     public static Pose getTurretPoseFromBotPose(Pose botPose) {
-
-        double[] offset = MathUtil.rotateCartesian(ShooterConstants.TURRET_OFFSET_X, ShooterConstants.TURRET_OFFSET_Y, botPose.heading());
-
-        return new Pose(botPose.x() + offset[0], botPose.y() + offset[1], botPose.heading());
+        return new Pose(botPose.x() + offsetX(botPose.heading()), botPose.y() + offsetY(botPose.heading()), botPose.heading());
     }
 
     public static Pose getFutureBotPose(double t, Pose botPose, Velocity robotVelocity) {
@@ -213,9 +218,9 @@ public class Shooter extends Subsystem {
     /// to that moved goal, so it goes round SOTM_ITERATIONS times
     public static Pose getVirtualGoalCoordinate(Pose turretPose, Velocity robotVelocity, Pose goalCoordinate) {
 
-        double[] offset = MathUtil.rotateCartesian(ShooterConstants.TURRET_OFFSET_X, ShooterConstants.TURRET_OFFSET_Y, turretPose.heading());
-        double vx = robotVelocity.vx - robotVelocity.omega * offset[1];
-        double vy = robotVelocity.vy + robotVelocity.omega * offset[0];
+        //the turret swings round the drive center when the robot spins: omega x offset on top of the robot's velocity
+        double vx = robotVelocity.vx - robotVelocity.omega * offsetY(turretPose.heading());
+        double vy = robotVelocity.vy + robotVelocity.omega * offsetX(turretPose.heading());
         double x = goalCoordinate.x(), y = goalCoordinate.y();
         for (int k = 0; k < ShooterConstants.SOTM_ITERATIONS; k++) {
             double t = getTimeOfFlight(Math.hypot(x - turretPose.x(), y - turretPose.y()));
@@ -228,32 +233,18 @@ public class Shooter extends Subsystem {
     /// degrees per second the turret has to turn (relative to the robot) to stay on the goal
     public static double getTurretAimRate(Pose botPose, Velocity robotVelocity, Pose goalCoordinate) {
 
-        double[] offset = MathUtil.rotateCartesian(ShooterConstants.TURRET_OFFSET_X, ShooterConstants.TURRET_OFFSET_Y, botPose.heading());
+        double ox = offsetX(botPose.heading()), oy = offsetY(botPose.heading());
 
-        double turretVx = robotVelocity.vx - robotVelocity.omega * offset[1];
-        double turretVy = robotVelocity.vy + robotVelocity.omega * offset[0];
+        double turretVx = robotVelocity.vx - robotVelocity.omega * oy;
+        double turretVy = robotVelocity.vy + robotVelocity.omega * ox;
 
-        double dx = goalCoordinate.x() - (botPose.x() + offset[0]);
-        double dy = goalCoordinate.y() - (botPose.y() + offset[1]);
+        double dx = goalCoordinate.x() - (botPose.x() + ox);
+        double dy = goalCoordinate.y() - (botPose.y() + oy);
         double distanceSquared = dx * dx + dy * dy;
 
         double bearingRate = distanceSquared < 1 ? 0 : (dy * turretVx - dx * turretVy) / distanceSquared;
 
         return Math.toDegrees(bearingRate - robotVelocity.omega);
-    }
-
-    //s before the turret reacts to a new aim: dead time, plus the loop it's held for and the loop it's decided in
-    private double turretLead() {
-
-        double loop = turret.getController().getLoopTime();
-        return TurretConstants.TURRET_DEAD_TIME + 2 * (Double.isNaN(loop) ? 0.03 : loop);
-    }
-
-    //deg/s^2 the controller plans its stops with (0.8 of the coasting deceleration)
-    private static double turretStopDeceleration() {
-
-        double ticks = TurretConstants.TURRET_MAX_DECELERATION > 0 ? TurretConstants.TURRET_MAX_DECELERATION : TurretConstants.TURRET_MAX_ACCELERATION > 0 ? TurretConstants.TURRET_MAX_ACCELERATION : 1000 * ShooterConstants.TURRET_TICKS_PER_DEGREE;
-        return 0.8 * ticks / ShooterConstants.TURRET_TICKS_PER_DEGREE;
     }
 
     private void goalAimUpdate() {
