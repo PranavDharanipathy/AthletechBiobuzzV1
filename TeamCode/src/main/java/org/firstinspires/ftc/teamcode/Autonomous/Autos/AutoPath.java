@@ -1,6 +1,8 @@
 package org.firstinspires.ftc.teamcode.Autonomous.Autos;
 
 import com.pedropathing.follower.Follower;
+import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
@@ -12,6 +14,7 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.RobotLog;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.AutoShotWindow;
+import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.AutoMecanum;
 import org.firstinspires.ftc.teamcode.Autonomous.Paths.AutoPathRoutes;
 import org.firstinspires.ftc.teamcode.Constants.AutoPathConstants;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
@@ -49,7 +52,7 @@ public final class AutoPath extends LinearOpMode {
     private final AutoShotWindow shot = new AutoShotWindow();
     private String stage = "Init", fault = "";
     private double pathStarted, autoStarted, lastLoop;
-    private boolean finished;
+    private boolean finished, reverseStrafe;
     private int shotTimeouts, activeShot;
     private double autoLimit, pathTimeout, shotTimeout, feedSeconds, readyDwell, maxLoop, positionError, headingError, maxSpeed, maxYaw;
     private double intakeVelocity;
@@ -155,7 +158,12 @@ public final class AutoPath extends LinearOpMode {
         hubs = hardwareMap.getAll(LynxModule.class);
         for (LynxModule hub : hubs) hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         clearCaches();
-        follower = DrivetrainConstants.createFollower(hardwareMap);
+        reverseStrafe = AutoPathConstants.REVERSE_STRAFE;
+        follower = new Follower(
+                new PinpointLocalizer(hardwareMap, DrivetrainConstants.localizerConfig),
+                new AutoMecanum(hardwareMap, DrivetrainConstants.driveConfig, reverseStrafe),
+                new Foresight(DrivetrainConstants.foresightConfig)
+        );
         follower.holdEnd.set(true);
         follower.setPose(AutoPathRoutes.START);
         intake = new GeneralVeloMotor(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.intakeMotorDeviceName, false));
@@ -184,6 +192,7 @@ public final class AutoPath extends LinearOpMode {
             Command routine = autoRoutine();
             telemetry.addLine("RED route. Turret must point straight at INIT.");
             telemetry.addLine("Intake runs throughout. Shoot after paths 1, 3 and 5.");
+            telemetry.addData("Auto strafe reversed", reverseStrafe);
             telemetry.addLine("Check intake/wall clearance and cell orientation before running.");
             telemetry.update();
             waitForStart();

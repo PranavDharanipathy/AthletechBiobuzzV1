@@ -3,6 +3,19 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-06 — Manual auto strafe reversal
+
+- User authorized fallback reversal after code review found no established cause for physical horizontal inversion.
+- Auto-only AutoMecanum reverses the body strafe term before normalization, including maxScaling wheel-mix calls. Forward/yaw and supplied coordinates unchanged.
+- AutoPathConstants.REVERSE_STRAFE defaults true, captured at INIT and displayed in telemetry. False plus re-INIT restores normal Pedro mixing. Global drive/localizer configuration and TeleOp untouched.
+- Build and mixed-command algebra checks pass; does not establish actual motor response or fix wrong odometry signs. Physical diagnosis remains required.
+
+## 2026-11-06 — Restored exact user route on auton
+
+- Supersedes the clearance/range revision below: restored all 12 supplied coordinates without mirroring or scaling. Original headings and shooting sequence retained.
+- Physical horizontal reversal is unresolved; verify manually observed pose-axis signs and heading before changing hardware directions. See docs/AUTO_PATH.md.
+- Prior geometry PASS does not apply: restored wall approach violates deployed-intake clearance and shots need range review. Partner push-through at point 6 remains pending.
+
 ## 2026-11-06 — AutoPath clearance/range coordinate revision
 
 - User confirmed recorded robot dimensions. Kept seven paths, continuous intake and shots after 1/3/5;
