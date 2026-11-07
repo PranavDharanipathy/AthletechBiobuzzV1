@@ -18,7 +18,7 @@ public class RedTeleOp extends TeleOpBaseOpMode {
     private final Blocker blocker = new Blocker().asSubsystem();
     private final Shooter shooter = new Shooter();
 
-    private RobotCentricDrive robotCentricDrive;
+    protected RobotCentricDrive robotCentricDrive;
 
     @Override
     public void init() {

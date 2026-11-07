@@ -14,7 +14,8 @@ public class ShooterConstants {
     /// Middle of the field: y above it (away from the audience) aims at the CLOSE point, below it at the FAR point.
     public static double FAR_ZONE_CLOSE_ZONE_BARRIER = 72;
 
-    public static double MIN_TURRET_POSITION_IN_DEGREES = -190, MAX_TURRET_POSITION_IN_DEGREES = 190;
+    //20 deg past straight back each way
+    public static double MIN_TURRET_POSITION_IN_DEGREES = -200, MAX_TURRET_POSITION_IN_DEGREES = 200;
     public static double TURRET_SWING_MARGIN_DEGREES = 5; //spare room past the turret's stopping distance before the aim swings a turn around
 
     public static double TURRET_TICKS_PER_DEGREE = 68.27;

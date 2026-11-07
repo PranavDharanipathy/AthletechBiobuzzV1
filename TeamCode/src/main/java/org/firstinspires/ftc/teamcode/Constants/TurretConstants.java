@@ -40,7 +40,7 @@ public class TurretConstants {
     public static double TURRET_START_DELAY = TunedConstants.TURRET_START_DELAY; //s to get going from rest, TURRET_DEAD_TIME is while it's moving
     public static double TURRET_MAX_DECELERATION = TunedConstants.TURRET_MAX_DECELERATION; //ticks/s^2 it coasts down at (the servos only brake reversed), 0 = not measured
 
-    public static double TURRET_MAX_SPEED_FRACTION = 0.8;
+    public static double TURRET_MAX_SPEED_FRACTION = 1; //of the measured top speed, acceleration and coasting deceleration it plans with
     public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.15;
     public static double TURRET_FRICTION_RAMP_DEGREES = 0.5;
     public static double TURRET_MOVING_DEGREES_PER_SECOND = 1;
@@ -55,7 +55,7 @@ public class TurretConstants {
     public static double TURRET_MIN_BANDWIDTH = TunedConstants.TURRET_SHAKE_BANDWIDTH; //rad/s rejection may soften to, from Turret Autotuner DRIVING (= bandwidth: never soften)
 
     //aim gate: the blocker only opens once the turret has sat on target, like the shot gate for the flywheel
-    public static boolean TURRET_AIM_GATE_ENABLED = false;
+    public static boolean TURRET_AIM_GATE_ENABLED = true; //TeleOp fired 7 of 13 bursts with the turret up to 10.7 deg off
     public static double TURRET_AIM_GATE_ENTER_DEGREES = 1.0, TURRET_AIM_GATE_HOLD_DEGREES = 2.0;
     public static double TURRET_AIM_GATE_DWELL = 0.06;
     public static double TURRET_AIM_GATE_SMOOTHING = 0.05; //s, takes the shake out of the position it checks

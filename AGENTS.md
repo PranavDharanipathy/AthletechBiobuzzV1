@@ -192,7 +192,7 @@ first, with the robot still and the turret straight at INIT, then DRIVING (press
 Tuner** is for dashboard tweaking. `TurretAutotuneEngine` has no hardware calls, so keep it that way and
 test it against a simulated turret. Details are in DEV_NOTES.
 
-The turret travels **±190° from home** (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`) and the robot may spin
+The turret travels **±200° from home** (20° past straight back each way) (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`) and the robot may spin
 forever. `TurretRoute` (used by `Shooter` and the autotuner's DRIVING mode) follows the aim round continuously and
 swings it a full turn around before an end, early enough for the turret's stopping distance. `TurretController`'s plan
 never heads for an end faster than it can stop (`setTravel`). Past the limit plus
