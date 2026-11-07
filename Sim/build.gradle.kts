@@ -76,12 +76,20 @@ val teamCodeSources = tasks.register<Sync>("copyTeamCodeSources") {
         include("org/firstinspires/ftc/teamcode/Constants/TurretConstants.java")
         include("org/firstinspires/ftc/teamcode/Systems/Flywheel/Flywheel.java")
         include("org/firstinspires/ftc/teamcode/Systems/Flywheel/FlywheelPIDVSCoefficients.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Flywheel/FlywheelVelocityModel.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Flywheel/ShotSolver.java")
         include("org/firstinspires/ftc/teamcode/Systems/Flywheel/ShotGate.java")
         include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretController.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Drivetrain/DriveController.java")
         include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretRoute.java")
         include("org/firstinspires/ftc/teamcode/Systems/Turret/LanyardMap.java")
         include("org/firstinspires/ftc/teamcode/Tuners/TurretLanyardSweep.java")
         include("org/firstinspires/ftc/teamcode/Tuners/TurretAutotuneEngine.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/DriveAutotuneEngine.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/OnlineTuner.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/FlywheelHyperTuner.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/TurretHyperTuner.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/Findings.java")
         include("org/firstinspires/ftc/teamcode/Tuners/FlywheelVoltageFilterFit.java")
     }
     from(file("src/ftcStubs/java"))
@@ -94,7 +102,7 @@ sourceSets.named("main") {
 
 tasks.register<JavaExec>("analyzeTuning") {
     group = "tuning"
-    description = "Pulls new TunerTeleOp sessions and Turret Autotuner results (if a robot is on adb) and writes TunedConstants.java + tuning-data/REPORT.md"
+    description = "Pulls new TunerTeleOp sessions and Turret / Drivetrain Autotuner results (if a robot is on adb) and writes TunedConstants.java + tuning-data/REPORT.md"
     dependsOn(":TeamCode:pullTuningData")
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("org.athletech.sim.tuning.TuningAnalyzer")
@@ -103,6 +111,7 @@ tasks.register<JavaExec>("analyzeTuning") {
         "tuning-data/sessions",
         "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Constants/TunedConstants.java",
         "tuning-data/REPORT.md",
-        "tuning-data/turret-autotune"
+        "tuning-data/turret-autotune",
+        "tuning-data/drive-autotune"
     )
 }

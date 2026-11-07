@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.Utility.Hardware;
 import com.qualcomm.robotcore.hardware.HardwareDevice;
 
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
+import org.firstinspires.ftc.teamcode.Utility.TemporalLog.TemporalLog;
 
 import java.util.ArrayList;
 
@@ -16,6 +17,11 @@ public final class DeviceTracker {
     private final ArrayList<CacheSlot> slots = new ArrayList<>(4);
     private volatile boolean cacheReads;
     private volatile int monitorId = -1;
+    //temporal log: the value of the read/write that's about to be recorded (wrappers set it with v()), and the log's key per op
+    private double pending = Double.NaN;
+    private Class<?> pendingEnum;
+    public int[] temporalKeys;
+    public int temporalSession = -1;
 
     public DeviceTracker(String name, String type, HardwareDevice device, boolean cacheReads) {
 
@@ -73,6 +79,48 @@ public final class DeviceTracker {
         this.monitorId = id;
     }
 
+    public void v(double x) {
+        pending = x;
+    }
+
+    public void v(float x) {
+        pending = x;
+    }
+
+    public void v(int x) {
+        pending = x;
+    }
+
+    public void v(long x) {
+        pending = x;
+    }
+
+    public void v(boolean x) {
+        pending = x ? 1 : 0;
+    }
+
+    public void v(Enum<?> e) {
+
+        pending = e == null ? Double.NaN : e.ordinal();
+        pendingEnum = e == null ? null : e.getDeclaringClass();
+    }
+
+    public void v(Object o) {
+        pending = Double.NaN;
+    }
+
+    /// HardwareMonitor's own sampling reads (current, velocity), which don't go through read()
+    public void monitorRead(HwOp op, long t0, long t1, double value) {
+        if (TemporalLog.active) TemporalLog.io(this, op, t0, t1, false, value, null);
+    }
+
+    private void logIo(HwOp op, long t0, long t1, boolean flag) {
+
+        if (TemporalLog.active) TemporalLog.io(this, op, t0, t1, flag, pending, pendingEnum);
+        pending = Double.NaN;
+        pendingEnum = null;
+    }
+
     CacheSlot newSlot() {
 
         CacheSlot slot = new CacheSlot();
@@ -90,6 +138,7 @@ public final class DeviceTracker {
         if (now - slot.timeNs > HardwareMonitor.cacheMaxAgeNs()) return false;
         stats.recordRead(op, now, now, true);
         HardwareMonitor.get().onIo(this, op, now, now, true);
+        if (TemporalLog.active) TemporalLog.io(this, op, now, now, true, Double.NaN, null);
         return true;
     }
 
@@ -102,6 +151,7 @@ public final class DeviceTracker {
         long t1 = System.nanoTime();
         stats.recordRead(op, t0, t1, false);
         HardwareMonitor.get().onIo(this, op, t0, t1, false);
+        logIo(op, t0, t1, false);
     }
 
     void read(HwOp op, long t0, CacheSlot slot, long key) {
@@ -114,6 +164,7 @@ public final class DeviceTracker {
         }
         stats.recordRead(op, t0, t1, false);
         HardwareMonitor.get().onIo(this, op, t0, t1, false);
+        logIo(op, t0, t1, false);
     }
 
     void write(HwOp op, long t0, boolean redundant) {
@@ -146,6 +197,7 @@ public final class DeviceTracker {
 
         stats.recordWrite(op, t0, t1, redundant);
         HardwareMonitor.get().onIo(this, op, t0, t1, redundant);
+        logIo(op, t0, t1, redundant);
     }
 
     private static String safeConnectionInfo(HardwareDevice device) {

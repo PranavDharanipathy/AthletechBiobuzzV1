@@ -24,6 +24,7 @@ public class MonitoredVoltageSensor extends MonitoredDevice<VoltageSensor> imple
         long t0 = tracker.start();
         double v = device.getVoltage();
         voltageSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_VOLTAGE, t0, voltageSlot, CacheSlot.NO_KEY);
         return v;
     }

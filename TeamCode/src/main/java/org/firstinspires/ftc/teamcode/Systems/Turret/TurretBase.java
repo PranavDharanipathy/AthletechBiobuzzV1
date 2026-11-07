@@ -142,6 +142,8 @@ public class TurretBase {
         controller.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
         controller.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
         controller.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
+        controller.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
+        controller.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
         controller.setTravel(startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd);
     }
 
@@ -262,7 +264,23 @@ public class TurretBase {
         double margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
         if ((aimDegrees > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + margin && outward > 0) || (aimDegrees < ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - margin && outward < 0)) volts = 0;
 
+        //the limit above only works with a live encoder: a hard push it doesn't see at all means it's dead, stop for good
+        double nowSeconds = MathUtil.millisecondsToSeconds(currTime);
+        if (currentPosition != lastCurrentPosition || Math.abs(lastVolts) < TurretConstants.TURRET_FROZEN_ENCODER_VOLTS) frozenSince = Double.NaN;
+        else if (Double.isNaN(frozenSince)) frozenSince = nowSeconds;
+        else if (nowSeconds - frozenSince >= TurretConstants.TURRET_FROZEN_ENCODER_SECONDS) encoderFrozen = true;
+        if (encoderFrozen) volts = 0;
+        lastVolts = volts;
+
         setVolts(volts, volts);
+    }
+
+    private double frozenSince = Double.NaN, lastVolts;
+    private boolean encoderFrozen;
+
+    /// the encoder stopped changing under a hard push: the turret is off until the OpMode restarts
+    public boolean isEncoderFrozen() {
+        return encoderFrozen;
     }
 
     /// update() calls this, only call it yourself when driving the servos with setVolts

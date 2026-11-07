@@ -117,6 +117,16 @@ public final class MecanumDrive {
         vx = vy = omega = 0;
     }
 
+    //something pushing the robot (another robot, a wall): field frame N, and N*m ccw
+    private double pushX, pushY, pushTorque;
+
+    public void push(double fieldX, double fieldY, double torqueCcw) {
+
+        pushX = fieldX;
+        pushY = fieldY;
+        pushTorque = torqueCcw;
+    }
+
     public void setPowers(double fl, double fr, double bl, double br) {
 
         double cap = p.maxPower() > 0 ? p.maxPower() : 1;
@@ -172,6 +182,9 @@ public final class MecanumDrive {
         double fx = f[FL] + f[FR] + f[BL] + f[BR];
         double fy = eta * (-f[FL] + f[FR] + f[BL] - f[BR]);
         double tz = k * (-f[FL] + f[FR] - f[BL] + f[BR]);
+        fx += c * pushX + s * pushY;
+        fy += -s * pushX + c * pushY;
+        tz += pushTorque;
 
         double rr = p.rollingResistanceCoeff() * p.massKg() * Physics.G;
         double sp = Math.hypot(vxr, vyr);

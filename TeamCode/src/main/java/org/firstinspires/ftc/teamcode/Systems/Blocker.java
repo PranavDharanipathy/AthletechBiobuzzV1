@@ -121,9 +121,11 @@ public class Blocker extends Subsystem {
 
         if (shotGate != null) {
             shotGate.update(System.nanoTime() * 1e-9, flywheel.getTargetVelocity(), flywheel.getCurrentVelocity(), state == BlockerState.CLEAR);
+            flywheel.setFeeding(state == BlockerState.CLEAR);
         }
 
-        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady()) {
+        //Shooter.shotWillScore: a ball fired at the flywheel's actual speed, with the robot moving as it is, lands in the CELL
+        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady() && Shooter.shotWillScore()) {
             setState(BlockerState.CLEAR);
         }
         else {

@@ -10,6 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 
 @Config
@@ -35,7 +36,9 @@ public class GeneralVeloMotorTuner extends OpMode {
     @Override
     public void init() {
 
+        BlazeSession.begin(hardwareMap);
         motor = new GeneralVeloMotor(hardwareMap, motorName);
+        BlazeSession.engage(hardwareMap, null);
 
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
 
@@ -45,6 +48,7 @@ public class GeneralVeloMotorTuner extends OpMode {
     @Override
     public void loop() {
 
+        BlazeSession.tick();
         motor.setDirection(DIRECTION);
 
         motor.setVelocityPDFCoefficients(KP, KD, KFF);
@@ -61,5 +65,10 @@ public class GeneralVeloMotorTuner extends OpMode {
         telemetry.update();
 
         sleep(LOOP_TIME);
+    }
+
+    @Override
+    public void stop() {
+        BlazeSession.end();
     }
 }

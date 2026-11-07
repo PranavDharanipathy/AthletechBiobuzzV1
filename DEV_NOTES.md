@@ -3,6 +3,260 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-07 — Autos rewritten command based (Ivy on NextFTC)
+
+- **Why:** the user wanted command-based autos. The split version rebuilt drive, shoot, fault and telemetry plumbing inside
+  every auto.
+- **Mechanisms own their commands:**
+  - `Drive.follow(path)` = Ivy's `PedroCommands.follow`, with `setDone` adding the end tolerance and a timeout that sets
+    `drive.fault`. Plus `hold`, and the static `pose`/`line`/`curve`/`slow` path helpers.
+  - `Intake.run/stop`, `FIArm.deploy/retract`, `Shooter.spinUp/spinDown`, `Blocker.block/clear`.
+- **`AthletechRobot` has the commands that use several mechanisms:**
+  - `shoot(pose)`: hold, ready, feed window; it includes `shotWillScore`.
+  - `collect()`, `stow()`.
+  - `autonomous(steps...)`: a `race` of the sequence against a watchdog (time limit, loop timing, non-finite pose/velocity,
+    path timeout), then `stopAll`.
+  - Settings come in through `configureAuto`, `configureShots` and `drive.configure`.
+- **Each auto** is only: poses from its own constants (static import), `requireCell` checks, its paths, and one
+  `robot.autonomous(...)` block. "Nothing shared" now means between autos; commands belong to the robot.
+- **Behaviour** is the same as before. Builds; not run on the robot.
+
+## 2026-11-07 — Shoot on the move with the flywheel in it (ShotSolver) + per-ball miss gate
+
+- **The physics:** the robot's velocity only adds to the ball's horizontal velocity. How high it climbs, and so its flight
+  time T, comes from the flywheel alone (fixed launch angle, no vertical robot motion). With speeds tuned standing still, a
+  ball at the flywheel speed for still distance D flies T(D) and covers D relative to the turret, plus v·T.
+- **So a moving shot needs** (`Systems/Flywheel/ShotSolver`):
+  - **Flywheel:** the speed of the still distance **D\* = |g − v·T(D\*)|**. The old code effectively used |g| (all flight
+    times were 0). At 75 in and 40 in/s: 1265 ticks/s driving at the goal, 1469 still, 1550 across, 1859 away. 1859 is past
+    the fit, so that shot is gated.
+  - **Turret:** aimed along g − v·T.
+- **Flywheel lag**, handled two ways:
+  1. **Set the target early:** the target is for where the turret will be in `FLYWHEEL_SOTM_LEAD_SECONDS` (0.15 s,
+     estimated).
+  2. **Aim and gate on the actual speed:** once the flywheel is within `SOTM_ACTUAL_SPEED_BAND` (150 ticks/s) of target, T
+     and the aim come from the speed it's really at. `missInches` = reach(actual) − |g − v·T(actual)| is how far long/short a
+     ball fired now lands along the aim.
+- **The gate:** `Shooter.shotWillScore()` keeps the blocker shut unless |miss| ≤ `SHOT_MISS_TOLERANCE_INCHES` (4 in ≈ 29
+  ticks/s). It's in the TeleOp `Blocker` and in the four shooting autos.
+  - **What it catches:** a flywheel still catching up after a direction change, and each ball's dip in a burst (the next
+    ball waits).
+  - **What it blocks on purpose:** shots past the fit's range (NaN miss).
+  - **Stale values:** the value is time-stamped, so an OpMode without a running `Shooter` (a tuner) is never gated by an
+    old one.
+- **Flight time T(D):**
+  - `SHOT_TIMES_OF_FLIGHT` when it's filled (measured).
+  - Otherwise a projectile at `SHOT_LAUNCH_ANGLE_DEGREES` = 72 climbing `SHOT_RISE_INCHES` = 48.05 (CELL opening center
+    1.5126 m − exit 0.292 m, robot profile).
+  - **Where 72° comes from:** it's fitted, not measured. Assuming exit speed ∝ flywheel speed, it fits the 8 tuned points
+    at 13.6 ticks/s RMS. But 68–76° fit almost as well, so T is ±15% uncertain.
+  - **Tuning it:** `SOTM_TIME_SCALE` on the field. Moving shots landing toward where the robot was heading = raise it.
+- **Solving for D\*:** bracketed then bisected (`SOTM_ITERATIONS` removed). Plain fixed-point iteration oscillated when
+  driving fast at a close goal (56 in, 60 in/s); the Sim test caught it.
+- **Code changes:**
+  - `FlywheelVelocityModel.distanceFor` inverts the speed fit.
+  - Old `getVirtualGoalCoordinate`/`getTimeOfFlight`/`lookUp` are gone from `Shooter`.
+  - New Shooter fields: `shotDistance`, `shotTime`, `shotMissInches` (the Temporal Log picks them up).
+- **Tested:** `ShotSolverTest` against simulated ball flight (launcher matching the tuned table when still, robot velocity
+  added, no drag):
+  - every direction up to 60 in/s at 56–96 in lands < 0.05 in from the goal;
+  - the flywheel goes down toward the goal and up away/across;
+  - `missInches` matches the real long/short landing within 0.05 in for flywheels 60 ticks/s off, with no sideways miss.
+
+  The full Sim suite passes. This proves the math against its own model, not the robot: no drag, and the angle is a fit.
+  Not run on the robot.
+- **Switches:** `SOTM_ENABLED` (off = still-robot behaviour, flywheel from |g|) and `SHOT_MISS_GATE`.
+
+## 2026-11-07 — 2 Tip + Park autos removed
+
+- The user asked to remove them. `RedTwoTipPark`, `BlueTwoTipPark`, their constants and `docs/autos/*2tip*.pp` are deleted;
+  four autos are left (Red/Blue Park, Preload + Park).
+- `AthletechRobot.collect()`/`stow()`, `Drive.curve`/`slow` and `FIArm.deploy`/`retract` stay: robot commands, unused by autos for now.
+
+## 2026-11-07 — Autos split: each auto self-contained
+
+- **Why:** the user asked for each autonomous to be its own auto, with nothing shared between them.
+- **What changed:**
+  - `BiobuzzAuto` (the shared base class), `AutoPathConstants`, `RedAutoConstants` and `BlueAutoConstants` are deleted.
+  - Each of the six (`Red`/`Blue` × `Park`/`PreloadPark`/`TwoTipPark`; the 2 Tip pair was removed later) is one standalone `BlazeOpMode` holding only what it
+    uses: its own routine, drive/shoot/collect commands, fault checks and telemetry.
+  - Each reads only its own `Constants/Autos/<Auto>Constants` (poses plus its own copy of the timing/tolerance values,
+    starting from the old shared defaults).
+- **Shared on purpose:** only the robot (`AthletechRobot`, `Autonomous/AutoSubsystems`), because NextFTC wants exactly one
+  `NextRobot`.
+- **Consequence:** a fix to the shoot or drive logic now has to be made in each auto that has it. That's the trade the user
+  chose.
+- **Behaviour:** unchanged from the base-class version. Builds; not run on the robot.
+
+## 2026-11-07 — Flywheel speed from distance again, as a fitted model (not a lookup)
+
+- **What changed:** `Shooter` sets the flywheel target from the distance to the (virtual, SOTM) goal again. It uses
+  `Systems/Flywheel/FlywheelVelocityModel`, a least-squares polynomial through `FLYWHEEL_DISTANCES`/`FLYWHEEL_VELOCITIES`,
+  in place of `5317f7f`'s one speed everywhere and the older piecewise-linear table lookup.
+  - **Smoothing:** it's smooth between points and evens out noisy ones.
+  - **Refitting:** it refits by itself when the points or degree change on the Dashboard, and allocates nothing otherwise.
+  - **Range:** it follows the fit `FLYWHEEL_FIT_EXTRAPOLATE_INCHES` (12) past the tuned distances, then holds.
+  - **Fallback:** with no goal, no fit, or `FLYWHEEL_DISTANCE_FIT` off, it uses `FLYWHEEL_DEFAULT_SHOOT_VELOCITY`.
+- **Degree 1 by default.** On the 2026-11 table, a line misses by 12.6 ticks/s RMS. With each point left out in turn, it
+  predicts that point at 16 RMS, against 18 for a quadratic and 30 for a cubic (the cubic overfits and runs away past the
+  ends). A line through those points is speed = 7.256 d + 925.2.
+- **Time of flight:** SOTM time of flight still uses the table (`lookUp`); all its values are 0 for now.
+- **Hypertuner:** `FlywheelHyperTuner` now restarts its steady window only when the target moves by more than 10 ticks/s.
+  The target follows the distance now, so every tiny change would otherwise restart it.
+- **FlywheelInterpolationTuner:** its dataset view (Y) shows the fit through the collected points next to the one in use.
+- **Tested:** `FlywheelVelocityModelTest` (matches numpy, clamping, refits only on change, degrades safely) and the whole Sim
+  suite pass. Not run on the robot.
+
+## 2026-11-07 — Blaze everywhere (but testers) + Temporal Log Red
+
+The user asked for Blaze on every robot OpMode except testers, with NextFTC's Blaze support, plus a TeleOp that logs
+everything against time. This supersedes "opt-in only" in the entry below.
+
+- **`Utility/Blaze/BlazeSession`:** one lifecycle, used by `TeleOpBaseOpMode` (all TeleOps and most tuners) and by
+  FlywheelTuner, FlywheelVoltageFilterTuner, GeneralVeloMotorTuner and TurretManualTuner.
+  1. `begin` runs `initializeBlazeFTC` and `engageMotorAccel`. It must come before any `hardwareMap.get`.
+  2. `engage` turns on background bulk reads on each hub that's there (RS485 Expansion Hub: 1 packet) and the Pinpoint feed.
+  3. `tick` calls `BlazeFTC.run(0)` on the first loop. From then on it clears only the hubs Blaze doesn't feed: Blaze
+     replaces `LynxModule.lastBulkData` from its own thread, so clearing a fed hub would just force a blocking SDK read.
+  4. `end` closes Blaze.
+  - Every Blaze failure is caught and shown on the `Blaze` telemetry line, and the OpMode carries on without that part.
+- **Clean-up after each OpMode:** `MonitorOpModeHook.onOpModePostStop` calls `end()` after every OpMode, even one that
+  crashed. That matters for three reasons:
+  - **Robot restart:** Blaze needs closing, or the author says the robot restarts.
+  - **Motors:** `engageMotorAccel` swaps the motors in the robot's hardwareMap, which outlives the OpMode. `end()` puts the
+    SDK motors back, so a stock tester afterwards doesn't send power into a closed Blaze.
+  - **Bulk mode:** Blaze forced every hub to MANUAL. `end()` sets OFF again.
+- **Autos:**
+  - `BiobuzzAuto` and `AutoPath` extend NextFTC's `BlazeOpMode`, so NextFTC adds its BlazeHook (init, `run(0)` at start,
+    close in a `finally`).
+  - `BlazeHubHook` wraps NextFTC's `BlazeBulkReadHook` per hub, because Blaze throws on a missing hub.
+  - The constructor calls `BlazeSession.beginNext` first, since NextFTC's hook only runs after the constructor has built
+    the hardware.
+  - `AthletechRobot` attaches the Pinpoint feed and skips clearing fed hubs.
+  - `BlazeConstants.ENABLED` can't turn Blaze off for the autos (the class hierarchy decides). With it off, NextFTC still
+    starts Blaze, but only as an SDK passthrough.
+- **`BlazePinpointLocalizer` instead of Blaze's `Pedro3SingleDataLocalizer`:**
+  - Blaze's version throws on `setPose` (our TeleOp relocalizes).
+  - Blaze's version writes the drive from Blaze's thread.
+  - Blaze's version feeds raw Pinpoint registers, which are mm, to Pedro as if they were inches.
+  - Ours:
+    - takes Blaze's sample under a seqlock;
+    - runs `update()` on the loop thread;
+    - picks mm or inches by checking the first sample against an SDK read at INIT, which needs the robot away from (0, 0);
+      otherwise it uses `PINPOINT_RAW_MM`;
+    - falls back to Pedro's SDK `PinpointLocalizer` when the sample is older than `PINPOINT_STALE_SECONDS` (always during
+      INIT);
+    - does `setPose` as a software offset, so nothing writes the Pinpoint while Blaze polls it.
+  - The `blazeftc_pedro3` dependency was dropped.
+- **Not on Blaze:**
+  - `Testing/` OpModes;
+  - the utility OpModes (HardwareMonitor Viewer and Clear, Limelight Lab);
+  - Pedro's tuning procedures (`Tuners/pedro`).
+
+  Once any Blaze OpMode has run, though, the hub streams stay proxied through Blaze until the app restarts. That's Blaze's
+  design.
+- **Unproven, check on the robot:**
+  1. After a Blaze OpMode stops, does a stock tester (SpinMotor) still move a motor? This tests `end()`'s motor restore, and
+     whether Blaze's proxy still passes SDK packets once closed.
+  2. Do two Blaze OpModes in a row both start? A second `initializeBlazeFTC` only clears telemetry, and Blaze's
+     `opened` flags never reset.
+  3. Blaze's ExHub `find {}!!` with the real hub layout.
+  4. Is the Pinpoint unit guess right? Compare the `blaze.pinpoint.*_raw` and pose values in a temporal log.
+  5. Motor `setPower` during INIT, before `run(0)`, goes to Blaze's native code. Whatever it does with it is unknown.
+- **Temporal log:**
+  - **What's in it:**
+    - `TeleOp/TemporalLogRedTeleOp` extends `RedTeleOp`, so its behaviour is identical, and wraps init, loop and stop with
+      `Utility/TemporalLog`.
+    - **Hardware:** every `Monitored*` read and write calls `tracker.v(value)` before `tracker.read/write`. `DeviceTracker`
+      logs value, duration, and whether it was a cached read or a redundant write. Cache hits log the last real value.
+    - **HardwareMonitor's own samples:** its hub reads (current, voltages, temperature) and its motor current/velocity
+      samples are logged too.
+  - **Variables:** `VariableWatcher` walks the TeleOp's fields once by reflection, through our classes, Pedro and NextFTC,
+    and not the SDK, Java or the monitoring/logging internals.
+    - **What it walks:** it follows each field chain again every sample, so a new object in a field (a Pose made each loop)
+      is followed. A field that was null grows its subtree the first time it holds something.
+    - **What it logs:** primitives, enums (with labels), boxed numbers and primitive arrays of up to 64 entries, plus the
+      static fields of the Constants classes. Each one is logged when it changes, at the end of each loop.
+  - **Decisions:** every boolean or enum change, plus phases. That covers:
+    - shooter on/off, auto-aim;
+    - intake IDLE/INTAKE/REVERSE, blocker, FIArm;
+    - the turret route's flags;
+    - ShotGate.
+  - **Numbers:** drive powers, flywheel target/speed, turret target/error/position, etc. come in as variables and as the
+    motor/servo writes.
+  - **Format:** 24-byte records (int64 ns, int32 key, int32 aux, float64 value) in `events.bin`, keys in `keys.tsv`.
+  - **Threading and memory:** the loop thread fills reused 64 KB buffers (48 of them), and one MIN_PRIORITY daemon thread
+    writes them. If the pool runs dry, records are dropped and the count is logged as `temporal.dropped_records`. The
+    watcher logs its own cost per loop as `temporal.watch_us`: that's the observer effect, so check it before trusting loop
+    times.
+  - **Blaze's thread:** its reads reach the log through per-source `BlazeRing`s (single producer, fixed arrays), drained at
+    the top of each loop with their own timestamps.
+  - **Tested:** a desktop smoke test of TemporalLog + VariableWatcher (late objects, boxed fields, static changes, enums,
+    hidden field names, Pedro Pose) decodes correctly with `tools/temporal_log.py`. Not run on the robot. Expect a few
+    hundred KB/s; check free space.
+- **Build:**
+  - `:TeamCode:assembleDebug` passes. `AutoPath` (the old movement-only route) and `docs/AUTO_PATH.md` were then deleted
+    at the user's request, after they had already deleted its `AutoPathRoutes`.
+  - Nothing has been run on the robot.
+
+## 2026-11-07 — BlazeFTC packaged, opt-in only
+
+- **What it is:** BlazeFTC (github.com/owenpmckenna/blaze_ftc, `dev.anygeneric`) is a Rust rewrite of the hub link (Lynx
+  protocol) that runs inside the SDK through JNI.
+  - The SDK normally waits about 2 ms for each reply before sending the next request. Blaze keeps several reads and writes
+    in flight instead.
+  - It claims bulk reads at 500–1000 Hz, Pinpoint at about 200 Hz and Pedro at 200+ Hz, against about 50 Hz on the stock
+    SDK. Those are the author's numbers, from "lab conditions".
+  - Our loop is 29 ms median and 49 ms p99 (`tuning-data/REPORT.md`), so there's room.
+- **Added:**
+  - `maven.anygeneric.dev`, `blazeftc:0.1.66` and `blazeftc_pedro3:0.1.66` in `build.dependencies.gradle`.
+  - It pulls only `kotlin-stdlib` 2.0.0 (resolves to our 2.4.10) and appcompat 1.2.0. No SDK and no Pedro come with it.
+  - It's built for minSdk 24 and Java 8 bytecode.
+  - The AAR ships `libblaze_ftc_neutrino.so` for armeabi-v7a and arm64-v8a, our two `abiFilters`.
+  - Checked: `:TeamCode:assembleDebug` passes, the APK has both `.so` files, and `BlazeDummyPlug`, `BlazeFTC` and
+    `Pedro3SingleDataLocalizer` are in the dex. This supersedes the 2026-11-03 "Don't extend `BlazeOpMode`" note: that
+    `NoClassDefFoundError` was only because Blaze wasn't packaged.
+- **API pairing:** NextFTC v2 0.3.0 calls Blaze through `BlazeHook` and `BlazeBulkReadHook`:
+  - `BlazeDummyPlug.initializeBlazeFTC(HardwareMap)`
+  - `engageBulkReadAcceleration(hw, Hub, packets, () -> Unit)`
+  - `closeBlazeFTC()`
+  - `BlazeFTC.run(int)`, `BlazeFTC.load()`
+
+  All of these exist in 0.1.66. NextFTC only compiles against Blaze and doesn't declare it, so a mismatch shows up only
+  as `NoSuchMethodError` on the robot. Bump the two together and recheck with `javap`.
+- **What NextFTC wires up:**
+  - Extending `BlazeOpMode` instead of `NextOpMode` turns on `RobotController.blazeEnabled`, which routes `NextMotor`
+    writes through Blaze.
+  - `BlazeBulkReadHook(hub, fastMode)` runs bulk reads for one hub (`fastMode` = 2 packets in flight) and calls
+    `onControlHubBulkData()` / `onExpansionHubBulkData()`. Don't use it alongside `BulkReadHook`.
+  - `onLocalizationData()` exists but nothing calls it. Pinpoint/Pedro speed-up means calling
+    `Pedro3SingleDataLocalizer.setup(follower, runnable)` yourself.
+- **Why it's opt-in and match code stays on `NextOpMode`:**
+  - **Maturity:** beta, one maintainer, started Dec 2025, and the repo has **no license**. The OTOS, other I2C and the
+    Servo Hub aren't parallel or are unstable.
+  - **Threads:**
+    - Blaze runs several native threads and calls Java back from them. The author calls thread safety "up in the air".
+    - `Pedro3SingleDataLocalizer` runs `follower.update()` on Blaze's thread. Our `Drive` mechanism runs the follower on
+      the NextFTC loop, and `Shooter` reads its pose and velocity there every loop, so turning it on means rethinking who
+      owns the follower.
+    - This also breaks the Control Hub rule: one low-priority I/O thread, no hardware off the loop thread.
+  - **Failure:** if `closeBlazeFTC()` isn't called (a crash outside NextFTC's `finally`), the author says the robot may
+    need a restart. It honors the SDK's stop flag only every 60 ms.
+  - **Our wrappers:** `engageMotorAccel` swaps the motors in the hardwareMap, so `Monitored*` wrappers and HardwareMonitor
+    I/O timings no longer see the real I/O.
+  - **Sim:** it can't run Blaze callbacks, so code-in-the-loop tests won't cover a Blaze OpMode.
+  - **Our turret is on servos**, which Blaze doesn't speed up.
+  - **Legality:** the author says "Competition Legal". It intercepts the hub link at runtime, so confirm on the official
+    FTC Q&A before an event.
+- **How to try it:**
+  1. Measure first. HardwareMonitor (`:8080/hwmonitor`) shows per-device I/O time per loop. Blaze only pays if the loop
+     is mostly bulk reads, the Pinpoint read or the RS485 Expansion Hub.
+  2. Then write one `BlazeOpMode` in `Testing/` with `BlazeBulkReadHook(CONTROL_HUB, false)`. Compare loop time and how
+     Pedro holds a path against the same OpMode on `NextOpMode`.
+  3. Watch for Sloth hot reload clashing with the JNI library (a library loads into one classloader only), and for the
+     robot needing a restart after a stop.
+- **Not run on the robot yet.**
+
 ## 2026-11-07 — Auto: user's mirrored export, movement only; strafe flip removed
 
 - The "X flipped" run was `16d5d0d`, whose route an earlier agent had shifted west (path 1 to (20, 17): left 11.4, up 8.8).
@@ -797,7 +1051,7 @@ bandwidth"):
 - Goal switching: `Field/Goal` (RED, BLUE) picks the close or far aim point from the robot pose
   (`y > FAR_ZONE_CLOSE_ZONE_BARRIER` means close). The coordinates live in `FieldConstants` and are NaN
   until measured. While they're NaN, the turret holds home and the flywheel uses
-  `FLYWHEEL_SHOOT_VELOCITY`. Fill all eight goal values (x and y, close and far, per alliance) in the
+  `FLYWHEEL_DEFAULT_SHOOT_VELOCITY`. Fill all eight goal values (x and y, close and far, per alliance) in the
   same frame as `START_POSE`.
 - `FieldConstants.START_POSE` is (0, 0, 0), only so Pedro has a pose. Real aiming needs a real start pose,
   or relocalization at a known spot.

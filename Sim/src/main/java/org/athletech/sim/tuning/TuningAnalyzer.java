@@ -58,11 +58,13 @@ public final class TuningAnalyzer {
         File constantsFile = new File(args.length > 1 ? args[1] : "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Constants/TunedConstants.java");
         File reportFile = new File(args.length > 2 ? args[2] : "tuning-data/REPORT.md");
         File autotuneDir = new File(args.length > 3 ? args[3] : "tuning-data/turret-autotune");
+        File driveDir = new File(args.length > 4 ? args[4] : "tuning-data/drive-autotune");
 
         List<Session> sessions = load(sessionsDir);
         File autotune = latestAutotune(autotuneDir);
-        if (sessions.isEmpty() && autotune == null) {
-            System.out.println("tuning: no TunerTeleOp sessions or Turret Autotuner results, TunedConstants left alone");
+        File drive = latestAutotune(driveDir);
+        if (sessions.isEmpty() && autotune == null && drive == null) {
+            System.out.println("tuning: no TunerTeleOp sessions or Turret / Drivetrain Autotuner results, TunedConstants left alone");
             return;
         }
 
@@ -70,6 +72,7 @@ public final class TuningAnalyzer {
         analyzer.keepCurrent();
         if (!sessions.isEmpty()) analyzer.analyze(sessions);
         analyzer.turretModel(autotune);
+        analyzer.driveModel(drive);
 
         boolean changed = writeIfChanged(constantsFile, analyzer.constantsSource());
         writeIfChanged(reportFile, analyzer.reportText(sessions));
@@ -226,6 +229,28 @@ public final class TuningAnalyzer {
     }
 
     /// older runs didn't measure it: 0 = unknown
+    //Drivetrain Autotuner: feedforward, traction and hold stiffness per axis
+    void driveModel(File folder) throws IOException {
+
+        if (folder == null) {
+            report.add("- Drivetrain model kept: no finished Drivetrain Autotuner run pulled yet.");
+            return;
+        }
+        Map<String, String> r = readKeyValues(new File(folder, "result.csv"));
+        String[][] axes = {{"forward", "FORWARD"}, {"strafe", "STRAFE"}, {"turn", "TURN"}};
+        String[][] fields = {{"ks", "KS"}, {"kv", "KV"}, {"ka", "KA"}, {"max_accel", "MAX_ACCEL"}, {"max_decel", "MAX_DECEL"}, {"bandwidth", "BANDWIDTH"}};
+        for (String[] axis : axes) {
+            for (String[] field : fields) {
+                double v = positiveOrZero(r.get(axis[0] + "_" + field[0]));
+                String key = "DRIVE_" + axis[1] + "_" + field[1];
+                if (v > 0 || field[0].equals("ks")) put(key, fmt(v));
+                else report.add("- " + key + " kept: the autotuner didn't measure it.");
+            }
+        }
+        put("DRIVE_AUTOTUNE", "\"" + folder.getName() + "\"");
+        report.add(String.format(Locale.US, "- **Drivetrain model** from Drivetrain Autotuner %s: top speed %s / %s in/s, %s rad/s; hold bandwidth %s / %s / %s rad/s.", folder.getName(), r.get("forward_max_speed"), r.get("strafe_max_speed"), r.get("turn_max_speed"), r.get("forward_bandwidth"), r.get("strafe_bandwidth"), r.get("turn_bandwidth")));
+    }
+
     static double positiveOrZero(String text) {
 
         try {
@@ -498,12 +523,15 @@ public final class TuningAnalyzer {
                 {"SHOT_GATE_ENTER_BAND"}, {"SHOT_GATE_HOLD_BAND"}, {"SHOT_GATE_DWELL"}, {""},
                 {"TURRET_GAIN"}, {"TURRET_TIME_CONSTANT"}, {"TURRET_DEAD_TIME"}, {"TURRET_KINETIC_FRICTION"}, {"TURRET_BREAKAWAY_FRICTION"},
                 {"TURRET_BANDWIDTH"}, {"TURRET_DAMPING"}, {"TURRET_INTEGRAL_RATIO"}, {"TURRET_FRICTION_SCALE"}, {"TURRET_MAX_SPEED"}, {"TURRET_MAX_ACCELERATION"}, {"TURRET_START_DELAY"}, {"TURRET_MAX_DECELERATION"}, {"TURRET_SHAKE_BANDWIDTH"}, {"TURRET_AUTOTUNE", "String"}, {""},
+                {"DRIVE_FORWARD_KS"}, {"DRIVE_FORWARD_KV"}, {"DRIVE_FORWARD_KA"}, {"DRIVE_FORWARD_MAX_ACCEL"}, {"DRIVE_FORWARD_MAX_DECEL"}, {"DRIVE_FORWARD_BANDWIDTH"},
+                {"DRIVE_STRAFE_KS"}, {"DRIVE_STRAFE_KV"}, {"DRIVE_STRAFE_KA"}, {"DRIVE_STRAFE_MAX_ACCEL"}, {"DRIVE_STRAFE_MAX_DECEL"}, {"DRIVE_STRAFE_BANDWIDTH"},
+                {"DRIVE_TURN_KS"}, {"DRIVE_TURN_KV"}, {"DRIVE_TURN_KA"}, {"DRIVE_TURN_MAX_ACCEL"}, {"DRIVE_TURN_MAX_DECEL"}, {"DRIVE_TURN_BANDWIDTH"}, {"DRIVE_AUTOTUNE", "String"}, {""},
                 {"LOOP_TIME_P95_MS"}, {"FLYWHEEL_VIBRATION_RMS"}, {"TURRET_VIBRATION_RMS"}
         };
 
         StringBuilder b = new StringBuilder();
         b.append("package org.firstinspires.ftc.teamcode.Constants;\n\n");
-        b.append("//written by :Sim:analyzeTuning from TunerTeleOp + Turret Autotuner data on every build, don't edit by hand\n");
+        b.append("//written by :Sim:analyzeTuning from TunerTeleOp + Turret / Drivetrain Autotuner data on every build, don't edit by hand\n");
         b.append("public class TunedConstants {\n\n");
         for (String[] line : layout) {
             if (line[0].isEmpty()) {

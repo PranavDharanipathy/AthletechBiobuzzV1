@@ -56,6 +56,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         device.setDirection(direction);
+        tracker.v(direction);
         tracker.write(HwOp.SET_DIRECTION, t0, direction == lastDirection);
         lastDirection = direction;
     }
@@ -65,6 +66,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         Direction v = device.getDirection();
+        tracker.v(v);
         tracker.read(HwOp.GET_DIRECTION, t0);
         return v;
     }
@@ -74,6 +76,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         device.setPower(power);
+        tracker.v(power);
         tracker.write(HwOp.SET_POWER, t0, power == lastPower, powerSlot, busySlot);
         lastPower = power;
         commandedPower = power;
@@ -87,6 +90,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         long t0 = tracker.start();
         double v = device.getPower();
         powerSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_POWER, t0, powerSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -96,6 +100,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         MotorConfigurationType v = device.getMotorType();
+        tracker.v(v);
         tracker.read(HwOp.GET_MOTOR_TYPE, t0);
         return v;
     }
@@ -105,6 +110,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         device.setMotorType(motorType);
+        tracker.v(motorType);
         tracker.write(HwOp.SET_MOTOR_TYPE, t0, false);
     }
 
@@ -123,6 +129,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         device.setZeroPowerBehavior(zeroPowerBehavior);
+        tracker.v(zeroPowerBehavior);
         tracker.writeKeepCache(HwOp.SET_ZERO_POWER_BEHAVIOR, t0, zeroPowerBehavior == lastZeroPowerBehavior);
         lastZeroPowerBehavior = zeroPowerBehavior;
     }
@@ -132,6 +139,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         ZeroPowerBehavior v = device.getZeroPowerBehavior();
+        tracker.v(v);
         tracker.read(HwOp.GET_ZERO_POWER_BEHAVIOR, t0);
         return v;
     }
@@ -154,6 +162,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         boolean v = device.getPowerFloat();
+        tracker.v(v);
         tracker.read(HwOp.GET_POWER_FLOAT, t0);
         return v;
     }
@@ -163,6 +172,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         device.setTargetPosition(position);
+        tracker.v(position);
         tracker.write(HwOp.SET_TARGET_POSITION, t0, hasTargetPosition && position == lastTargetPosition, busySlot);
         lastTargetPosition = position;
         hasTargetPosition = true;
@@ -173,6 +183,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         int v = device.getTargetPosition();
+        tracker.v(v);
         tracker.read(HwOp.GET_TARGET_POSITION, t0);
         return v;
     }
@@ -184,6 +195,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         long t0 = tracker.start();
         boolean v = device.isBusy();
         busySlot.b = v;
+        tracker.v(v);
         tracker.read(HwOp.IS_BUSY, t0, busySlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -197,6 +209,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         long t0 = tracker.start();
         int v = device.getCurrentPosition();
         positionSlot.i = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_CURRENT_POSITION, t0, positionSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -207,6 +220,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         long t0 = tracker.start();
         device.setMode(mode);
         boolean redundant = mode == lastMode && mode != RunMode.STOP_AND_RESET_ENCODER;
+        tracker.v(mode);
         tracker.write(HwOp.SET_MODE, t0, redundant);
         lastMode = mode;
     }
@@ -216,6 +230,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
 
         long t0 = tracker.start();
         RunMode v = device.getMode();
+        tracker.v(v);
         tracker.read(HwOp.GET_MODE, t0);
         return v;
     }
@@ -262,6 +277,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         double amps = ((DcMotorEx) device).getCurrent(CurrentUnit.AMPS);
         long t1 = System.nanoTime();
         tracker.getStats().recordMonitorRead(t1 - t0);
+        tracker.monitorRead(HwOp.GET_CURRENT, t0, t1, amps);
         observedCurrentAmps = amps;
         observedCurrentNs = t1;
         return amps;
@@ -274,6 +290,7 @@ public class MonitoredDcMotor extends MonitoredDevice<DcMotor> implements DcMoto
         double v = ((DcMotorEx) device).getVelocity();
         long t1 = System.nanoTime();
         tracker.getStats().recordMonitorRead(t1 - t0);
+        tracker.monitorRead(HwOp.GET_VELOCITY, t0, t1, v);
         observedVelocity = v;
         observedVelocityNs = t1;
         return v;

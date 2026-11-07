@@ -32,6 +32,7 @@ public class MonitoredDistanceSensor extends MonitoredDevice<DistanceSensor> imp
         long t0 = tracker.start();
         double mm = device.getDistance(DistanceUnit.MM);
         distanceSlot.d = mm;
+        tracker.v(mm);
         tracker.read(HwOp.GET_DISTANCE, t0, distanceSlot, CacheSlot.NO_KEY);
         return unit.fromMm(mm);
     }

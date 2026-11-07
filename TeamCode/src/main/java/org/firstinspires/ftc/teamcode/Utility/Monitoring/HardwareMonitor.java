@@ -9,6 +9,7 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.hardware.configuration.typecontainers.MotorConfigurationType;
 import com.qualcomm.robotcore.util.RobotLog;
 
+import org.firstinspires.ftc.teamcode.Utility.TemporalLog.TemporalLog;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.TempUnit;
@@ -1231,6 +1232,8 @@ public final class HardwareMonitor {
 
         final HubState hub;
         final int metric;
+        static final String[] METRIC_NAMES = {"getCurrent", "getInputVoltage", "getAuxiliaryVoltage", "getI2cBusCurrent", "getGpioBusCurrent", "getTemperature"};
+        int temporalKey = -1, temporalSession = -1;
 
         HubTask(HubState hub, int metric, long periodMs) {
 
@@ -1245,27 +1248,42 @@ public final class HardwareMonitor {
             if (!allowIo) return SKIPPED;
             LynxModule m = hub.module;
             long t0 = System.nanoTime();
+            double v;
             switch (metric) {
                 case CURRENT:
-                    hub.current.add(m.getCurrent(CurrentUnit.AMPS));
+                    v = m.getCurrent(CurrentUnit.AMPS);
+                    hub.current.add(v);
                     break;
                 case INPUT_V:
-                    hub.inputV.add(m.getInputVoltage(VoltageUnit.VOLTS));
+                    v = m.getInputVoltage(VoltageUnit.VOLTS);
+                    hub.inputV.add(v);
                     break;
                 case AUX_V:
-                    hub.auxV.add(m.getAuxiliaryVoltage(VoltageUnit.VOLTS));
+                    v = m.getAuxiliaryVoltage(VoltageUnit.VOLTS);
+                    hub.auxV.add(v);
                     break;
                 case I2C:
-                    hub.i2cA.add(m.getI2cBusCurrent(CurrentUnit.AMPS));
+                    v = m.getI2cBusCurrent(CurrentUnit.AMPS);
+                    hub.i2cA.add(v);
                     break;
                 case GPIO:
-                    hub.gpioA.add(m.getGpioBusCurrent(CurrentUnit.AMPS));
+                    v = m.getGpioBusCurrent(CurrentUnit.AMPS);
+                    hub.gpioA.add(v);
                     break;
                 default:
-                    hub.tempC.add(m.getTemperature(TempUnit.CELSIUS));
+                    v = m.getTemperature(TempUnit.CELSIUS);
+                    hub.tempC.add(v);
                     break;
             }
-            s.monitorRead(System.nanoTime() - t0);
+            long t1 = System.nanoTime();
+            s.monitorRead(t1 - t0);
+            if (TemporalLog.active) {
+                if (TemporalLog.stale(temporalSession)) {
+                    temporalSession = TemporalLog.session();
+                    temporalKey = TemporalLog.newKey("read", hub.name + "." + METRIC_NAMES[metric], "");
+                }
+                TemporalLog.value(t1, temporalKey, t0, v);
+            }
             if (metric == CURRENT) {
                 if (m.isNotResponding()) hub.notRespondingSamples++;
                 s.onHubCurrent();

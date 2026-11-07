@@ -179,6 +179,7 @@ public final class FlywheelCodeScenario {
                 if (rig.tick()) {
                     boolean ready = !gate || shotGate.update(rig.t, target, rig.code.getCurrentVelocity(), open);
                     open = ready;
+                    rig.code.setFeeding(open);
                     if (open && entered < s.balls && rig.t - lastEntry >= s.feedInterval) {
                         contacts[entered++] = rig.t + travel;
                         lastEntry = rig.t;
@@ -223,7 +224,7 @@ public final class FlywheelCodeScenario {
         RobotParams rp = new RobotParams(ctx.db);
         Setup s = setup(rp, ctx);
         List<Double> table = ShooterConstants.FLYWHEEL_VELOCITIES;
-        double low = table.get(0), high = table.get(table.size() - 1), mid = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY;
+        double low = table.get(0), high = table.get(table.size() - 1), mid = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
         double tired = Math.min(s.batteryVolts, 12.0);
 
         ctx.log.println("== Flywheel (robot's real Flywheel + ShotGate with TeamCode's FlywheelConstants, sim flywheel + battery) ==");

@@ -64,6 +64,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         boolean v = ex.isMotorEnabled();
+        tracker.v(v);
         tracker.read(HwOp.IS_MOTOR_ENABLED, t0);
         return v;
     }
@@ -82,6 +83,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         ex.setVelocity(angularRate);
         boolean redundant = angularRate == lastVelocity && lastVelocityUnit == null;
+        tracker.v(angularRate);
         tracker.write(HwOp.SET_VELOCITY, t0, redundant, powerSlot, busySlot);
         lastVelocity = angularRate;
         lastVelocityUnit = null;
@@ -94,6 +96,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         ex.setVelocity(angularRate, unit);
         boolean redundant = angularRate == lastVelocity && unit == lastVelocityUnit;
+        tracker.v(angularRate);
         tracker.write(HwOp.SET_VELOCITY, t0, redundant, powerSlot, busySlot);
         lastVelocity = angularRate;
         lastVelocityUnit = unit;
@@ -109,6 +112,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         double v = ex.getVelocity();
         velocitySlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_VELOCITY, t0, velocitySlot, CacheSlot.NO_KEY);
         observedVelocity = v;
         observedVelocityNs = System.nanoTime();
@@ -123,6 +127,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         double v = ex.getVelocity(unit);
         velocityUnitSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_VELOCITY, t0, velocityUnitSlot, key);
         return v;
     }
@@ -134,6 +139,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setPIDCoefficients(mode, pidCoefficients);
+        tracker.v(mode);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
     }
 
@@ -142,6 +148,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setPIDFCoefficients(mode, pidfCoefficients);
+        tracker.v(mode);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
     }
 
@@ -150,6 +157,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setVelocityPIDFCoefficients(p, i, d, f);
+        tracker.v(p);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
     }
 
@@ -158,6 +166,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setPositionPIDFCoefficients(p);
+        tracker.v(p);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
     }
 
@@ -168,6 +177,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         PIDCoefficients v = ex.getPIDCoefficients(mode);
+        tracker.v(v);
         tracker.read(HwOp.GET_PIDF, t0);
         return v;
     }
@@ -177,6 +187,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         PIDFCoefficients v = ex.getPIDFCoefficients(mode);
+        tracker.v(v);
         tracker.read(HwOp.GET_PIDF, t0);
         return v;
     }
@@ -186,6 +197,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setTargetPositionTolerance(tolerance);
+        tracker.v(tolerance);
         tracker.write(HwOp.SET_TARGET_POSITION_TOLERANCE, t0, tolerance == lastTolerance, busySlot);
         lastTolerance = tolerance;
     }
@@ -195,6 +207,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         int v = ex.getTargetPositionTolerance();
+        tracker.v(v);
         tracker.read(HwOp.GET_TARGET_POSITION_TOLERANCE, t0);
         return v;
     }
@@ -208,6 +221,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         double amps = ex.getCurrent(CurrentUnit.AMPS);
         currentSlot.d = amps;
+        tracker.v(amps);
         tracker.read(HwOp.GET_CURRENT, t0, currentSlot, CacheSlot.NO_KEY);
         observedCurrentAmps = amps;
         observedCurrentNs = System.nanoTime();
@@ -219,6 +233,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         double v = ex.getCurrentAlert(unit);
+        tracker.v(v);
         tracker.read(HwOp.GET_CURRENT_ALERT, t0);
         return v;
     }
@@ -228,6 +243,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
         long t0 = tracker.start();
         ex.setCurrentAlert(current, unit);
+        tracker.v(current);
         tracker.write(HwOp.SET_CURRENT_ALERT, t0, false, overCurrentSlot);
     }
 
@@ -240,6 +256,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         long t0 = tracker.start();
         boolean v = ex.isOverCurrent();
         overCurrentSlot.b = v;
+        tracker.v(v);
         tracker.read(HwOp.IS_OVER_CURRENT, t0, overCurrentSlot, CacheSlot.NO_KEY);
         return v;
     }

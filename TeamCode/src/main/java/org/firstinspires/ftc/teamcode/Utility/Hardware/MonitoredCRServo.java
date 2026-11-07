@@ -41,6 +41,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
         long t0 = tracker.start();
         device.setDirection(direction);
+        tracker.v(direction);
         tracker.write(HwOp.SET_DIRECTION, t0, direction == lastDirection);
         lastDirection = direction;
     }
@@ -50,6 +51,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
         long t0 = tracker.start();
         Direction v = device.getDirection();
+        tracker.v(v);
         tracker.read(HwOp.GET_DIRECTION, t0);
         return v;
     }
@@ -59,6 +61,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
         long t0 = tracker.start();
         device.setPower(power);
+        tracker.v(power);
         tracker.write(HwOp.SET_POWER, t0, power == lastPower, powerSlot);
         lastPower = power;
         lastPulseWidth = Double.NaN; //the pulse width now follows the power
@@ -71,6 +74,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         long t0 = tracker.start();
         double v = device.getPower();
         powerSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_POWER, t0, powerSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -91,6 +95,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPwmRange(range);
+        tracker.v(range);
         tracker.write(HwOp.SET_PWM_RANGE, t0, false);
         lastPower = Double.NaN;
     }
@@ -101,6 +106,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         PwmControl p = pwm();
         long t0 = tracker.start();
         PwmRange v = p.getPwmRange();
+        tracker.v(v);
         tracker.read(HwOp.GET_PWM_RANGE, t0);
         return v;
     }
@@ -129,6 +135,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         PwmControl p = pwm();
         long t0 = tracker.start();
         boolean v = p.isPwmEnabled();
+        tracker.v(v);
         tracker.read(HwOp.IS_PWM_ENABLED, t0);
         return v;
     }
@@ -139,6 +146,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPulseWidth(usWidth);
+        tracker.v(usWidth);
         tracker.write(HwOp.SET_PULSE_WIDTH, t0, usWidth == lastPulseWidth, powerSlot);
         lastPulseWidth = usWidth;
         lastPower = Double.NaN; //moved without setPower: the next setPower is real
@@ -150,6 +158,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         PwmControl p = pwm();
         long t0 = tracker.start();
         double v = p.getPulseWidth();
+        tracker.v(v);
         tracker.read(HwOp.GET_PULSE_WIDTH, t0);
         return v;
     }

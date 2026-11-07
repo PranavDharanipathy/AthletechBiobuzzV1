@@ -38,6 +38,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
 
         long t0 = tracker.start();
         device.setDirection(direction);
+        tracker.v(direction);
         tracker.write(HwOp.SET_DIRECTION, t0, direction == lastDirection);
         lastDirection = direction;
     }
@@ -47,6 +48,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
 
         long t0 = tracker.start();
         Direction v = device.getDirection();
+        tracker.v(v);
         tracker.read(HwOp.GET_DIRECTION, t0);
         return v;
     }
@@ -56,6 +58,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
 
         long t0 = tracker.start();
         device.setPosition(position);
+        tracker.v(position);
         tracker.write(HwOp.SET_POSITION, t0, position == lastPosition);
         lastPosition = position;
         lastPulseWidth = Double.NaN; //the pulse width now follows the position
@@ -66,6 +69,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
 
         long t0 = tracker.start();
         double v = device.getPosition();
+        tracker.v(v);
         tracker.read(HwOp.GET_POSITION, t0);
         return v;
     }
@@ -75,6 +79,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
 
         long t0 = tracker.start();
         device.scaleRange(min, max);
+        tracker.v(min);
         tracker.write(HwOp.SCALE_RANGE, t0, false);
         lastPosition = Double.NaN; //same number now means a different pulse width
     }
@@ -95,6 +100,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPwmRange(range);
+        tracker.v(range);
         tracker.write(HwOp.SET_PWM_RANGE, t0, false);
         lastPosition = Double.NaN;
     }
@@ -105,6 +111,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         PwmControl p = pwm();
         long t0 = tracker.start();
         PwmRange v = p.getPwmRange();
+        tracker.v(v);
         tracker.read(HwOp.GET_PWM_RANGE, t0);
         return v;
     }
@@ -133,6 +140,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         PwmControl p = pwm();
         long t0 = tracker.start();
         boolean v = p.isPwmEnabled();
+        tracker.v(v);
         tracker.read(HwOp.IS_PWM_ENABLED, t0);
         return v;
     }
@@ -143,6 +151,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPulseWidth(usWidth);
+        tracker.v(usWidth);
         tracker.write(HwOp.SET_PULSE_WIDTH, t0, usWidth == lastPulseWidth);
         lastPulseWidth = usWidth;
         lastPosition = Double.NaN; //moved without setPosition: the next setPosition is real
@@ -154,6 +163,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         PwmControl p = pwm();
         long t0 = tracker.start();
         double v = p.getPulseWidth();
+        tracker.v(v);
         tracker.read(HwOp.GET_PULSE_WIDTH, t0);
         return v;
     }

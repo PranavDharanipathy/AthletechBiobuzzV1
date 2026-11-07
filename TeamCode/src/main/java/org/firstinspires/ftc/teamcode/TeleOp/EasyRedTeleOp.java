@@ -9,6 +9,6 @@ public class EasyRedTeleOp extends RedTeleOp {
     public void init() {
 
         super.init();
-        robotCentricDrive.setRatios(0.85, 0.85, 0.75);
+        drivetrain.setRatios(0.75, 0.75, 0.6);
     }
 }

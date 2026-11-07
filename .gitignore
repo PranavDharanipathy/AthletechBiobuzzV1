@@ -83,3 +83,6 @@ lint/tmp/
 # TunerTeleOp raw sessions (big CSVs); REPORT.md and TunedConstants.java are tracked
 tuning-data/sessions/
 tuning-data/turret-autotune/
+
+# Temporal Log sessions pulled from the robot (tools/temporal_log.py pull): big binaries
+temporal-logs/

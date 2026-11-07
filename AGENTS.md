@@ -23,7 +23,7 @@ added alongside the competition code.
 
 ```
 Autonomous/        Autonomous OpModes
-  Autos/           Full autonomous routines
+  Autos/           Six self-contained autos (Red/Blue Park, Preload + Park, 2 Tip Garden + Park), nothing shared between them
   AutoSubsystems/  Auto-only helpers
 Constants/         Robot + Pedro Pathing constants, hardware maps
 Sim/               Bridge between robot code and the Sim module
@@ -111,6 +111,7 @@ with `=`. Genuine AGP DSL methods (`keyAlias`, `pickFirst`, `abiFilters`,
 | Pedro tuning | `com.pedropathing:tuning:1.0.1` (pulls Sloth) | Maven Central + `https://repo.dairy.foundation/releases/` |
 | NextFTC v2 | `dev.nextftc.v2:control` / `hardware` / `robot`, all `0.3.0` | Maven Central |
 | Ivy Pedro commands | `com.pedropathing.ivy:pedro:1.1.1` (`PedroCommands`) | Maven Central |
+| BlazeFTC (beta, on by default) | `dev.anygeneric:blazeftc:0.1.66` | `https://maven.anygeneric.dev/` |
 | Apache Commons Math | `org.apache.commons:commons-math3:3.6.1` | Maven Central |
 | Kotlin stdlib | `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` | Maven Central |
 
@@ -127,8 +128,44 @@ declared with `exclude group: 'org.firstinspires.ftc'` so it can't drag in an ol
 Autonomous command code uses NextFTC **v2**, with `PedroCommands` from Ivy for path following.
 Never add NextFTC v1 (`dev.nextftc:ftc`, `dev.nextftc:hardware`) or `dev.nextftc.extensions:pedro`:
 v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep exactly one
-`NextRobot` (`Systems/AthletechRobot`) with no hardware access in its constructor, and don't use
-`BlazeOpMode` (Blaze isn't packaged). Details are in DEV_NOTES.
+`NextRobot` (`Systems/AthletechRobot`) with no hardware access in its constructor. Details are in DEV_NOTES.
+
+**BlazeFTC** (`dev.anygeneric:blazeftc` 0.1.66) runs the hub link for every robot OpMode except `Testing/` testers, the
+utility OpModes and Pedro's own tuners. It's a beta Rust runtime with its own native threads. All of it goes through
+`Utility/Blaze/BlazeSession`, switched by `Constants/BlazeConstants`.
+
+- **TeleOps and tuners:**
+  - `TeleOpBaseOpMode` calls `begin` (first thing in `initializeComponents`), `engage` (in `setUpLynxModule`), `tick` (in
+    `clearCacheOfLynxModule`) and `end` (in `stop`).
+  - The four standalone tuners call the same four themselves.
+- **Autos:** they extend NextFTC's `BlazeOpMode` with `BlazeHubHook`s (NextFTC's `BlazeBulkReadHook`, one per hub present).
+  NextFTC starts, runs and closes Blaze.
+- **What Blaze does:**
+  - motor `setPower` goes straight to Blaze;
+  - each hub's bulk data is kept fresh in the background, and `tick` never clears a hub Blaze feeds;
+  - `BlazePinpointLocalizer` gets Pedro its Pinpoint data from Blaze, falling back to an SDK read when Blaze's sample is
+    stale. Its `setPose` is a software offset.
+- **Clean-up:** `MonitorOpModeHook` calls `BlazeSession.end()` after every OpMode, crashed or not. That closes Blaze, puts the
+  SDK motors back in the hardwareMap and sets the hubs back to the SDK's bulk mode.
+- **Rules:**
+  - Blaze callbacks only copy data in; never touch the follower or hardware from them.
+  - Get hardware only after `begin`.
+  - Don't use Blaze's Pedro add-on: its `setPose` throws and it writes the drive from Blaze's thread.
+  - Bump Blaze and NextFTC v2 together.
+
+Details and what's unproven are in DEV_NOTES.
+
+**Temporal Log Red** (`TeleOp/TemporalLogRedTeleOp`) is the RED TeleOp exactly, with everything logged against time by
+`Utility/TemporalLog`:
+
+- every hardware read and write, with its value and duration (`DeviceTracker` and HardwareMonitor's hub samples);
+- every variable of the TeleOp's object graph and of the Constants, whenever it changes (`VariableWatcher`);
+- Blaze's background reads;
+- loops and phases.
+
+Files go to `/sdcard/FIRST/data/TemporalLog/<time>/`. Read them with `python tools/temporal_log.py` (pull, summary, csv,
+decisions, keys). A new wrapper read or write must call `tracker.v(value)` before `tracker.read/write`, or its value logs as
+NaN.
 
 ## Conventions for agents
 
@@ -209,6 +246,54 @@ guess is too high: it slides on less than it takes to start), and the target rat
 noise, so the Pinpoint's heading-rate jitter can't flip the push every loop.
 **Lanyard compensation** (`LanyardMap`, `TURRET_LANYARDS_ENABLED`, off for now) learns the volts the lanyards need at
 each angle (the Manual Tuner's X sweep) and adds them as feedforward. When it's off it must add exactly 0.
+
+## Drivetrain pose hold
+
+Every full TeleOp (match and tuning) drives through `Systems/Drivetrain/Drivetrain`. It shapes the sticks with the
+`QuadraticCurve` (x², finer at every power under full) and moves a reference. `DriveController` (pure Java, the Sim runs
+it) holds the robot to that reference in forward, strafe and turn, using feedforward plus PID from an identified model.
+So shoves, pushes from behind and twists get pushed back against, and slow means slow.
+
+- While the sticks slow it down, only speed is held, so stops are as short as open loop with no rollback.
+- The reference never asks for more than traction allows.
+- A leash stops it lunging after being pinned.
+- Pinpoint relocalization jumps are carried over.
+- The model and hold stiffness come from the **Drivetrain Autotuner** (SD card, build pull, `TunedConstants.DRIVE_*`).
+- `DrivetrainConstants.DRIVE_*` holds the knobs. The hold is optional (`DRIVE_HOLD_ENABLED`, off by default for now); gamepad 1 back turns it on and off.
+- Call `follower.update()` before `drivetrain.update()` every loop.
+
+## Match autos
+
+There are six NextFTC autos (group A_Match): Red and Blue each have Park, Preload + Park and 2 Tip Garden + Park. Each auto is
+one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<Auto>Constants` (poses and timing).
+
+- **Command based (Ivy on NextFTC):** each auto builds its paths, then one Ivy sequence of the robot's commands inside
+  `robot.autonomous(...)`:
+  - `drive.follow(path)` (Ivy's `PedroCommands.follow`, done at the end within tolerance, with a timeout);
+  - `robot.shoot(pose)`, `robot.collect()`, `robot.stow()`;
+  - `shooter.spinUp()`, `waitMs(...)`.
+- **The robot wraps the routine:** `autonomous()` adds the time-limit/fault watchdog (loop timing, localization, a path
+  timeout) and makes everything safe at the end.
+- **Commands live on the robot:** they're on the mechanisms (`Autonomous/AutoSubsystems`) and on `AthletechRobot` for the
+  ones using several mechanisms, never in an auto.
+- **Nothing shared between autos:** no base class, and no auto-to-auto code or constants. A change to one auto touches only
+  its two files.
+
+- **Frame:** all poses are in the turret's frame (`FieldConstants`), which is also the Pedro visualizer's BIOBUZZ field. No
+  mirroring.
+- **CELL choice:** the shooter picks the CELL by the robot's half, so every shot pose is checked at INIT against the CELL it's
+  meant for. Red's first upward CELL is FAR; blue's is CLOSE.
+- **Visualizer projects:** `docs/autos/*.pp`.
+- **Rules, routes and field checks:** `docs/AUTOS.md`.
+
+## Hypertuning and system evolution
+
+**SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp. While it's played it keeps tuning the
+flywheel (stability at speed, power around shots) and the turret (fast, smooth moves, spin cancelling) with `OnlineTuner`.
+It logs everything to the SD card, and `findings.md` names principle candidates. Agents turn those into new or removed
+control features by the protocol in
+[SYSTEM_EVOLUTION.md](./TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md):
+evidence first, switchable, sim-tested, and the robot decides.
 
 ## Simulation and the robot profile
 

@@ -9,6 +9,8 @@ import com.qualcomm.robotcore.eventloop.opmode.OpModeManagerNotifier;
 import com.qualcomm.robotcore.util.RobotLog;
 
 import org.firstinspires.ftc.ftccommon.external.OnCreateEventLoop;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
+import org.firstinspires.ftc.teamcode.Utility.TemporalLog.TemporalLog;
 
 public final class MonitorOpModeHook implements OpModeManagerNotifier.Notifications {
 
@@ -65,6 +67,17 @@ public final class MonitorOpModeHook implements OpModeManagerNotifier.Notificati
             HardwareMonitor.get().onOpModePostStop(opMode);
         } catch (Throwable t) {
             RobotLog.ee(HardwareMonitor.TAG, t, "HardwareMonitor: onOpModePostStop failed");
+        }
+        //after every OpMode, crashed or not: Blaze closed and the SDK motors back, the temporal log flushed
+        try {
+            BlazeSession.end();
+        } catch (Throwable t) {
+            RobotLog.ee(HardwareMonitor.TAG, t, "Blaze: end failed");
+        }
+        try {
+            TemporalLog.close();
+        } catch (Throwable t) {
+            RobotLog.ee(HardwareMonitor.TAG, t, "TemporalLog: close failed");
         }
     }
 }

@@ -29,6 +29,7 @@ public class MonitoredDigitalChannel extends MonitoredDevice<DigitalChannel> imp
 
         long t0 = tracker.start();
         Mode v = device.getMode();
+        tracker.v(v);
         tracker.read(HwOp.GET_MODE, t0);
         return v;
     }
@@ -38,6 +39,7 @@ public class MonitoredDigitalChannel extends MonitoredDevice<DigitalChannel> imp
 
         long t0 = tracker.start();
         device.setMode(mode);
+        tracker.v(mode);
         tracker.write(HwOp.SET_MODE, t0, mode == lastMode);
         lastMode = mode;
     }
@@ -49,6 +51,7 @@ public class MonitoredDigitalChannel extends MonitoredDevice<DigitalChannel> imp
 
         long t0 = tracker.start();
         device.setMode(mode);
+        tracker.v(mode);
         tracker.write(HwOp.SET_MODE, t0, false);
         lastMode = null;
     }
@@ -60,6 +63,7 @@ public class MonitoredDigitalChannel extends MonitoredDevice<DigitalChannel> imp
         long t0 = tracker.start();
         boolean v = device.getState();
         stateSlot.b = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_STATE, t0, stateSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -69,6 +73,7 @@ public class MonitoredDigitalChannel extends MonitoredDevice<DigitalChannel> imp
 
         long t0 = tracker.start();
         device.setState(state);
+        tracker.v(state);
         tracker.write(HwOp.SET_STATE, t0, lastState != null && lastState == state, stateSlot);
         lastState = state;
     }

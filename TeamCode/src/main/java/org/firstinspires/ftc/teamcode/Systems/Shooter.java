@@ -6,11 +6,14 @@ import com.pedropathing.math.Velocity;
 
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
+import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Field.Goal;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelVelocityModel;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotSolver;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretRoute;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
@@ -19,9 +22,6 @@ import org.firstinspires.ftc.teamcode.Utility.Subsystem;
 
 import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.FLYWHEEL_DISTANCES;
 import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.FLYWHEEL_VELOCITIES;
-import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.SHOT_TIMES_OF_FLIGHT;
-
-import java.util.List;
 
 public class Shooter extends Subsystem {
 
@@ -91,6 +91,8 @@ public class Shooter extends Subsystem {
     public Pose virtualGoal;
 
     public double flywheelTargetVelocity;
+    /// NaN = the fitted speed; a number = hold this flywheel speed (ticks/s) instead
+    public double manualFlywheelVelocity = Double.NaN;
 
     private boolean autoAim = true;
 
@@ -133,12 +135,33 @@ public class Shooter extends Subsystem {
         goalCoordinate = goal.getCoordinate(currentRobotPose);
         boolean goalSet = Goal.isSet(goalCoordinate);
 
-        //time table SOTM: aim (and pick the speed) for where the goal is relative to the turret when the ball gets there
-        virtualGoal = goalSet ? getVirtualGoalCoordinate(turretPose, robotVelocity, goalCoordinate) : goalCoordinate;
-        distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
+        //shoot on the move (ShotSolver): the turret point's field velocity, robot's plus its spin swinging the turret round
+        double vx = robotVelocity.vx - robotVelocity.omega * offsetY(turretPose.heading());
+        double vy = robotVelocity.vy + robotVelocity.omega * offsetX(turretPose.heading());
 
-        //flywheel: one speed everywhere (the distance table is still there, unused)
-        flywheelTargetVelocity = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY;
+        //flywheel: the still distance this moving shot needs, for where the turret will be once the flywheel's caught up
+        if (goalSet) {
+            Pose lead = getTurretPoseFromBotPose(getFutureBotPose(ShooterConstants.FLYWHEEL_SOTM_LEAD_SECONDS, currentRobotPose, robotVelocity));
+            shotDistance = shot.equivalentDistance(goalCoordinate.x() - lead.x(), goalCoordinate.y() - lead.y(), vx, vy);
+        }
+        else shotDistance = Double.NaN;
+        double fitted = goalSet && ShooterConstants.FLYWHEEL_DISTANCE_FIT ? getFlywheelTargetVelocityFromInterpolation(shotDistance) : Double.NaN;
+        flywheelTargetVelocity = fitted == fitted ? fitted : ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
+        //tuners (FlywheelInterpolationTuner) hold their own speed while the rest of the shooter aims as in a match
+        if (manualFlywheelVelocity == manualFlywheelVelocity) flywheelTargetVelocity = manualFlywheelVelocity;
+
+        //aim: a ball fired now leaves at the flywheel's actual speed, so its flight time (and whether it scores) come from that
+        double gx = goalSet ? goalCoordinate.x() - turretPose.x() : 0;
+        double gy = goalSet ? goalCoordinate.y() - turretPose.y() : 0;
+        double actual = flywheel.getCurrentVelocity();
+        boolean near = Math.abs(actual - flywheelTargetVelocity) <= ShooterConstants.SOTM_ACTUAL_SPEED_BAND;
+        shotMissInches = goalSet && near ? shot.missInches(gx, gy, vx, vy, actual, ShooterConstants.FLYWHEEL_FIT_EXTRAPOLATE_INCHES) : Double.NaN;
+        //spinning up (or past the fit): aim with the target speed's flight time meanwhile
+        if (shotMissInches != shotMissInches) shot.equivalentDistance(gx, gy, vx, vy);
+        shotTime = shot.time;
+        publishMiss(shotMissInches);
+        virtualGoal = goalSet ? new Pose(goalCoordinate.x() - vx * shotTime, goalCoordinate.y() - vy * shotTime) : goalCoordinate;
+        distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
 
         if (spinUp) flywheel.setVelocity(flywheelTargetVelocity, false);
         else flywheel.setVelocity(0, true);
@@ -160,7 +183,7 @@ public class Shooter extends Subsystem {
             turretAimPosition = ShooterConstants.TURRET_AIM_DIRECTION * tt * ShooterConstants.TURRET_TICKS_PER_DEGREE + turretStartPosition;
 
             //no feedforward while it waits at an end
-            turretAimVelocity = turretRoute.isOutside(min, max) ? 0 : ShooterConstants.TURRET_AIM_DIRECTION * aimRate * ShooterConstants.TURRET_TICKS_PER_DEGREE;
+            turretAimVelocity = turretRoute.isOutside(min, max) ? 0 : ShooterConstants.TURRET_AIM_DIRECTION * TurretConstants.TURRET_RATE_FEEDFORWARD_SCALE * aimRate * ShooterConstants.TURRET_TICKS_PER_DEGREE;
         }
         else {
             turretRoute.reset();
@@ -177,24 +200,36 @@ public class Shooter extends Subsystem {
         turret.update();
     }
 
+    private static final FlywheelVelocityModel FLYWHEEL_MODEL = new FlywheelVelocityModel();
+    private final ShotSolver shot = new ShotSolver(FLYWHEEL_MODEL);
+    /// still distance the flywheel target is for (in), ball flight time used for the aim (s), a ball fired now lands this long
+    /// (+) / short (-) along the aim (in, NaN = can't tell yet: flywheel far off its target or no goal)
+    public double shotDistance, shotTime, shotMissInches = Double.NaN;
+
+    //the blocker reads this; stamped so a stale value (no Shooter running, e.g. a tuner) never gates anything
+    private static double lastMiss = Double.NaN;
+    private static long lastMissNs = Long.MIN_VALUE / 2;
+
+    private static void publishMiss(double miss) {
+
+        lastMiss = miss;
+        lastMissNs = System.nanoTime();
+    }
+
+    /// true when a ball fired now scores by ShotSolver (or the gate is off, or no Shooter has run in the last 0.2 s)
+    public static boolean shotWillScore() {
+
+        if (!ShooterConstants.SHOT_MISS_GATE || System.nanoTime() - lastMissNs > 200_000_000L) return true;
+        return Math.abs(lastMiss) <= ShooterConstants.SHOT_MISS_TOLERANCE_INCHES;
+    }
+
+    /// fitted flywheel speed (ticks/s) for a distance (in), NaN if there's no fit. Loop thread only
     public static double getFlywheelTargetVelocityFromInterpolation(double distanceToGoal) {
-        return lookUp(FLYWHEEL_DISTANCES, FLYWHEEL_VELOCITIES, distanceToGoal);
+        return FLYWHEEL_MODEL.velocity(FLYWHEEL_DISTANCES, FLYWHEEL_VELOCITIES, ShooterConstants.FLYWHEEL_FIT_DEGREE, ShooterConstants.FLYWHEEL_FIT_EXTRAPOLATE_INCHES, distanceToGoal);
     }
 
-    public static double getTimeOfFlight(double distanceToGoal) {
-        return lookUp(FLYWHEEL_DISTANCES, SHOT_TIMES_OF_FLIGHT, distanceToGoal);
-    }
-
-    //linear between the table's points, held at the ends
-    private static double lookUp(List<Double> distances, List<Double> values, double distance) {
-
-        int last = Math.min(distances.size(), values.size()) - 1;
-        if (distance <= distances.get(0)) return values.get(0);
-        if (distance >= distances.get(last)) return values.get(last);
-        int i = 1;
-        while (distances.get(i) < distance) i++;
-        double s = (distance - distances.get(i - 1)) / (distances.get(i) - distances.get(i - 1));
-        return values.get(i - 1) + s * (values.get(i) - values.get(i - 1));
+    public static FlywheelVelocityModel flywheelModel() {
+        return FLYWHEEL_MODEL;
     }
 
     //turret axis from the drive center in polar: TURRET_POSITIONAL_OFFSET along the robot's heading
@@ -212,22 +247,6 @@ public class Shooter extends Subsystem {
 
     public static Pose getFutureBotPose(double t, Pose botPose, Velocity robotVelocity) {
         return new Pose(botPose.x() + robotVelocity.vx * t, botPose.y() + robotVelocity.vy * t, botPose.heading() + robotVelocity.omega * t);
-    }
-
-    /// the goal moved back by the turret's field velocity times the ball's time of flight, which depends on the distance
-    /// to that moved goal, so it goes round SOTM_ITERATIONS times
-    public static Pose getVirtualGoalCoordinate(Pose turretPose, Velocity robotVelocity, Pose goalCoordinate) {
-
-        //the turret swings round the drive center when the robot spins: omega x offset on top of the robot's velocity
-        double vx = robotVelocity.vx - robotVelocity.omega * offsetY(turretPose.heading());
-        double vy = robotVelocity.vy + robotVelocity.omega * offsetX(turretPose.heading());
-        double x = goalCoordinate.x(), y = goalCoordinate.y();
-        for (int k = 0; k < ShooterConstants.SOTM_ITERATIONS; k++) {
-            double t = getTimeOfFlight(Math.hypot(x - turretPose.x(), y - turretPose.y()));
-            x = goalCoordinate.x() - vx * t;
-            y = goalCoordinate.y() - vy * t;
-        }
-        return new Pose(x, y);
     }
 
     /// degrees per second the turret has to turn (relative to the robot) to stay on the goal

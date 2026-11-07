@@ -44,6 +44,23 @@ public class TurretController {
     //flipping while cruising chopped the speed between 100 and 320 deg/s)
     public double brakeBand = 0;
     public int resyncs;
+    //braking ("landing"): on a big move to a still aim it drives on until braking with landingEntry of its reverse volts would only
+    //just stop it on the aim, then every loop runs its own model forward (dead time with what it already sent still acting, lag,
+    //coasting when eased off, friction, hard braking only when reversed, the torque limit) and bisects the braking volts that stop
+    //it exactly there. Close (landingExitDistance) or slow (landingExitSpeed) the hold takes over. How hard it really slowed next
+    //to the model teaches brakeScale. Ticks, ticks/s. Needs maxDeceleration measured
+    public boolean landingEnabled = false, brakeLearning = true;
+    public double landingMinDistance = 680, landingMinSpeed = 2000, landingAimRate = 700, landingEntry = 0.7;
+    public double landingExitDistance = 70, landingExitSpeed = 1400, landingStep = 0.003, landingHorizon = 0.6;
+    public double brakeScale = 1, minBrakeScale = 0.5, maxBrakeScale = 1.6, brakeLearnRate = 0.5;
+    //where it finally comes to rest after a landing (the hold finishes it, through the friction) teaches landingBias: ticks it aims
+    //short of the aim so the whole stop ends on it
+    public double landingBias = 0, maxLandingBias = 700, biasLearnRate = 0.5;
+    public boolean landing;
+    public double landingVolts, lastLandingOvershoot;
+    public int landings;
+    private double landingTarget, landingDir, landingStart, landingEntrySpeed, predictedSlowing, sentVolts, lastLandingTime;
+    private boolean watchingRest;
 
     public double kp, kd, ki;
     public double p, i, d, f, v, volts, lanyard;
@@ -141,6 +158,8 @@ public class TurretController {
         planWasMoving = false;
         lastRate = lastRate2 = rateNoise = lastHoldError = 0;
         resyncs = 0;
+        landing = false;
+        sentVolts = 0;
         learnDirection = Double.NaN;
         historyNewest = -1;
         historyCount = 0;
@@ -188,6 +207,10 @@ public class TurretController {
 
         double aim = target + targetVelocity * lead + 0.5 * targetAcceleration * lead * lead;
         double aimVelocity = targetVelocity + targetAcceleration * lead;
+        if (land(target, aimVelocity, position, velocity, availableVolts, lead)) return volts;
+        //landing brakes with reverse volts, far harder than coasting: to a still aim the plan cruises until it has to stop that way
+        double closeStep = slowStep;
+        if (landingEnabled && !Double.isInfinite(maxDeceleration) && Math.abs(aimVelocity) < landingAimRate) closeStep = Math.max(slowStep, -landingEntry * acceleration(0.5 * maxVelocity, -landingEntry * availableVolts) * loopTime);
         plan += planVelocity * dt;
         double gap = aim - plan;
         //a long loop can carry the plan past a still aim; it stops there instead of swinging back (that flips which way it pushes)
@@ -197,13 +220,13 @@ public class TurretController {
             gap = 0;
         }
         lastGap = gap;
-        double stopping = slowStep * (Math.sqrt(0.25 + 2 * Math.abs(gap) / (slowStep * loopTime)) - 0.5); //fastest speed that still stops in whole loops
+        double stopping = closeStep * (Math.sqrt(0.25 + 2 * Math.abs(gap) / (closeStep * loopTime)) - 0.5); //fastest speed that still stops in whole loops
         double closing = Math.signum(gap) * Math.min(maxVelocity, Math.min(stopping, referenceRate * Math.abs(gap)));
         double wanted = clamp(aimVelocity + closing, -maxVelocity, maxVelocity);
         //a target faster than the turret, coming round from behind, would have the plan keep going and run it off the end
         wanted = clamp(wanted, -stoppingSpeed(plan - travelMin, slowStep), stoppingSpeed(travelMax - plan, slowStep));
         if (updates == 1) wanted = 0; //first dt is junk
-        double limit = (wanted - planVelocity) * planVelocity < 0 ? slowStep : step;
+        double limit = (wanted - planVelocity) * planVelocity < 0 ? closeStep : step;
         double change = clamp(wanted - planVelocity, -limit, limit);
         double startVelocity = planVelocity;
         planVelocity += change;
@@ -336,6 +359,7 @@ public class TurretController {
 
         lastPosition = position;
         volts = clamp(p + i + d + f + v + lanyard, -availableVolts, availableVolts);
+        sentVolts = volts;
         return volts;
     }
 
@@ -358,6 +382,111 @@ public class TurretController {
         lastGap = 0;
         lastError = lastError2 = lastHoldError = 0;
         resyncs++;
+    }
+
+    //true while it's landing (volts set here, the plan kept on the turret so it picks up smoothly after)
+    private boolean land(double target, double aimVelocity, double position, double velocity, double availableVolts, double lead) {
+
+        boolean usable = landingEnabled && !Double.isInfinite(maxDeceleration) && updates > 3;
+        if (watchingRest && !landing) {
+            if (Math.abs(target - landingTarget) > landingExitDistance) watchingRest = false;
+            else if (velocity * landingDir <= 0) {
+                lastLandingOvershoot = (position - landingTarget) * landingDir;
+                if (brakeLearning) landingBias = clamp(landingBias + biasLearnRate * lastLandingOvershoot, -maxLandingBias, maxLandingBias);
+                watchingRest = false;
+            }
+        }
+        if (!landing) {
+            double toward = (target - position) * Math.signum(velocity);
+            if (!usable || Math.abs(aimVelocity) > landingAimRate || Math.abs(velocity) < landingMinSpeed || toward < landingMinDistance) return false;
+            //drive on while braking at landingEntry of full reverse would still stop it short
+            if (stopAt(Math.abs(velocity), sentVolts * Math.signum(velocity), -landingEntry * availableVolts) < toward) return false;
+            landing = true;
+            landings++;
+            landingTarget = target;
+            landingDir = Math.signum(velocity);
+            landingStart = lastLandingTime = time;
+            landingEntrySpeed = Math.abs(velocity);
+            predictedSlowing = 0;
+        }
+        double toward = (landingTarget - position) * landingDir - landingBias;
+        double speed = velocity * landingDir;
+        predictedSlowing += -acceleration(Math.max(speed, 0), sentVolts * landingDir) * (time - lastLandingTime);
+        lastLandingTime = time;
+        boolean done = speed < landingExitSpeed || toward < landingExitDistance || time - landingStart > landingHorizon;
+        if (!usable || done || Math.abs(target - landingTarget) > landingExitDistance || Math.abs(aimVelocity) > 2 * landingAimRate) {
+            //how much it really slowed next to what the model said teaches how hard it brakes
+            double slowed = landingEntrySpeed - Math.max(speed, 0);
+            if (done && brakeLearning && usable && predictedSlowing > 0.2 * landingEntrySpeed && slowed > 0) {
+                brakeScale = clamp(brakeScale * Math.pow(slowed / predictedSlowing, brakeLearnRate), minBrakeScale, maxBrakeScale);
+            }
+            landing = false;
+            watchingRest = done;
+            plan = position + velocity * lead;
+            planVelocity = velocity;
+            historyNewest = -1;
+            historyCount = 0;
+            lastGap = 0;
+            lastError = lastError2 = lastHoldError = 0;
+            return false;
+        }
+        double u = landingVolts(speed, toward, sentVolts * landingDir, availableVolts);
+        landingVolts = u;
+        volts = clamp(landingVolts * landingDir, -availableVolts, availableVolts);
+        p = i = d = v = lanyard = 0;
+        f = volts;
+        sentVolts = volts;
+        plan = position + velocity * lead;
+        planVelocity = velocity;
+        historyNewest = -1;
+        historyCount = 0;
+        remember(plan, planVelocity);
+        reference = position;
+        referenceVelocity = velocity;
+        lastPosition = position;
+        return true;
+    }
+
+    /// braking volts (along the motion, from coasting at 0 to full reverse) that stop it exactly distance on
+    private double landingVolts(double speed, double distance, double sending, double availableVolts) {
+
+        if (stopAt(speed, sending, 0) <= distance) return 0;
+        if (stopAt(speed, sending, -availableVolts) >= distance) return -availableVolts;
+        double lo = -availableVolts, hi = 0;
+        for (int k = 0; k < 14; k++) {
+            double mid = 0.5 * (lo + hi);
+            if (stopAt(speed, sending, mid) > distance) hi = mid;
+            else lo = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    //where it stops (ticks on) holding u after the dead time, with what's already sent acting until then
+    private double stopAt(double speed, double sending, double u) {
+
+        double x = 0, w = speed, t = 0, h = landingStep;
+        while (w > 0 && t < landingHorizon) {
+            double command = t < deadTime ? sending : u;
+            w += acceleration(w, command) * h;
+            x += Math.max(w, 0) * h;
+            t += h;
+        }
+        return x;
+    }
+
+    //the servo model along the motion (w > 0): it speeds up toward gain x (volts - friction), eased off it only coasts down,
+    //reversed past friction it brakes, never past what the torque allows
+    private double acceleration(double w, double u) {
+
+        double coast = maxDeceleration * brakeScale;
+        if (u > kineticFriction) {
+            double target = gain * (u - kineticFriction);
+            if (target >= w) return Math.min((target - w) / timeConstant, maxAcceleration);
+            return -Math.min(coast, (w - target) / timeConstant);
+        }
+        if (u >= -kineticFriction) return -coast;
+        double target = gain * (u + kineticFriction);
+        return -Math.min(Math.max(coast, (w - target) / timeConstant * brakeScale), maxAcceleration * brakeScale + coast);
     }
 
     private void remember(double position, double velocity) {

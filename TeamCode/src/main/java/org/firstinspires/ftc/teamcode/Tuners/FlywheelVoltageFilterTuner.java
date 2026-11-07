@@ -13,6 +13,7 @@ import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredVoltageSensor;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
@@ -38,6 +39,8 @@ public class FlywheelVoltageFilterTuner extends LinearOpMode {
 
         Telemetry telemetry = new MultipleTelemetry(this.telemetry, FtcDashboard.getInstance().getTelemetry());
 
+        BlazeSession.begin(hardwareMap);
+
         Flywheel flywheel = new Flywheel(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.flywheelMotorDeviceName, false));
         flywheel.initVoltageSensor(hardwareMap);
         flywheel.setVelocityPIDVSCoefficients(FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS);
@@ -51,6 +54,8 @@ public class FlywheelVoltageFilterTuner extends LinearOpMode {
         telemetry.addData("Top speed (ticks/s)", spinVelocity);
         telemetry.addLine("Remove all balls and keep clear of the flywheel, then press START.");
         telemetry.update();
+
+        BlazeSession.engage(hardwareMap, null);
 
         waitForStart();
         if (isStopRequested()) return;
@@ -74,6 +79,7 @@ public class FlywheelVoltageFilterTuner extends LinearOpMode {
 
         while (opModeIsActive() && count < MAX_SAMPLES) {
 
+            BlazeSession.tick();
             HardwareMonitor.get().update();
 
             double readStart = seconds();

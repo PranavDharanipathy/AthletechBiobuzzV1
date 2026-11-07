@@ -282,11 +282,11 @@ public class CodeInTheLoopTest {
     public void robotFlywheelCodeSpinsUpAndHoldsSpeed() {
 
         FlywheelCodeScenario.Setup s = FlywheelCodeScenario.setup(new RobotParams(db), ctx);
-        FlywheelCodeScenario.SpinUp r = FlywheelCodeScenario.spinUp(s, ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, s.batteryVolts, null, 1);
+        FlywheelCodeScenario.SpinUp r = FlywheelCodeScenario.spinUp(s, ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY, s.batteryVolts, null, 1);
         assertTrue("never settled", Double.isFinite(r.settleS));
         assertTrue("overshoot " + r.overshoot, r.overshoot < 100);
         assertTrue("ripple " + r.rippleRms, r.rippleRms < 30);
-        FlywheelCodeScenario.Burst b = FlywheelCodeScenario.burst(s, ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, s.batteryVolts, false, null, 1);
+        FlywheelCodeScenario.Burst b = FlywheelCodeScenario.burst(s, ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY, s.batteryVolts, false, null, 1);
         assertEquals(s.balls, b.exitSpeeds.size());
         double now = System.nanoTime() * 1e-9;
         assertEquals("the sim gave the robot clock back", now, Clock.seconds(), 1);

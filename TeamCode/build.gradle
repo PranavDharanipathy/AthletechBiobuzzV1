@@ -41,7 +41,7 @@ dependencies {
     implementation project(':FtcRobotController')
 }
 
-//TunerTeleOp + Turret Autotuner data: whenever a robot is on adb, new runs get pulled into tuning-data before the build,
+//TunerTeleOp, Turret + Drivetrain Autotuner and Shooter HyperTuning data: whenever a robot is on adb, new runs get pulled into tuning-data before the build,
 //then :Sim:analyzeTuning turns them into Constants/TunedConstants.java
 def tuningSdkDir = android.sdkDirectory
 
@@ -49,7 +49,9 @@ tasks.register('pullTuningData') {
     group = 'tuning'
     def sets = [
             [remote: '/sdcard/FIRST/data/TunerTeleOp', file: 'loop.csv', pattern: /\/TunerTeleOp\/(\d{8}-\d{6})\/loop\.csv (\d+)/, local: rootProject.file('tuning-data/sessions')],
-            [remote: '/sdcard/FIRST/data/TurretAutotune', file: 'result.csv', pattern: /\/TurretAutotune\/(\d{8}-\d{6}-[a-z]+)\/result\.csv (\d+)/, local: rootProject.file('tuning-data/turret-autotune')]
+            [remote: '/sdcard/FIRST/data/TurretAutotune', file: 'result.csv', pattern: /\/TurretAutotune\/(\d{8}-\d{6}-[a-z]+)\/result\.csv (\d+)/, local: rootProject.file('tuning-data/turret-autotune')],
+            [remote: '/sdcard/FIRST/data/DriveAutotune', file: 'result.csv', pattern: /\/DriveAutotune\/(\d{8}-\d{6})\/result\.csv (\d+)/, local: rootProject.file('tuning-data/drive-autotune')],
+            [remote: '/sdcard/FIRST/data/ShooterHyperTuning', file: 'gains.csv', pattern: /\/ShooterHyperTuning\/(\d{8}-\d{6})\/gains\.csv (\d+)/, local: rootProject.file('tuning-data/hypertuning')]
     ]
     doLast {
         def isWindows = System.getProperty('os.name').toLowerCase().contains('win')

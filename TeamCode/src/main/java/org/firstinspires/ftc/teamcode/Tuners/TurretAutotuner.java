@@ -6,17 +6,14 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
-import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.TeleOp.TeleOpBaseOpMode;
 import org.firstinspires.ftc.teamcode.Utility.CsvLogger;
@@ -48,7 +45,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
 
     private final Intake intake = new Intake().asSubsystem();
     private final Blocker blocker = new Blocker().asSubsystem();
-    private RobotCentricDrive robotCentricDrive;
+    private Drivetrain drivetrain;
 
     private TurretAutotuneEngine engine;
     private CsvLogger logger;
@@ -68,16 +65,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
         initializeComponents(Alliance.BLUE);
         applyComponentTraits();
 
-        DcMotor[] motors = {
-                hardwareMap.dcMotor.get(DeviceConstants.leftFrontMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.rightFrontMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.leftBackMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.rightBackMotorDeviceName)
-        };
-        for (DcMotor motor : motors) motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motors[1].setDirection(DcMotorSimple.Direction.REVERSE);
-        motors[3].setDirection(DcMotorSimple.Direction.REVERSE);
-        robotCentricDrive = new RobotCentricDrive(motors[0], motors[1], motors[2], motors[3], controller1);
+        drivetrain = createDrivetrain();
 
         intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel);
@@ -142,7 +130,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
 
         follower.update();
         if (drivingAllowed) {
-            robotCentricDrive.update();
+            drivetrain.update();
             intake.update();
             blocker.update();
             if (controller1.left_bumperHasJustBeenPressed) flywheelOn = !flywheelOn;
@@ -154,7 +142,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
             left_back.setPower(0);
             right_back.setPower(0);
         }
-        if (flywheelOn) flywheel.setVelocity(ShooterConstants.FLYWHEEL_SHOOT_VELOCITY, false);
+        if (flywheelOn) flywheel.setVelocity(ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY, false);
         else flywheel.setVelocity(0, true);
         flywheel.update();
 

@@ -18,6 +18,7 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretController;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
@@ -32,7 +33,7 @@ public class TurretManualTuner extends OpMode {
     public static double SINE_AMPLITUDE_DEGREES = 25, SINE_HZ = 0.5;
     public static long LOOP_TIME = 0; //extra ms per loop, set to TunedConstants.LOOP_TIME_MS to act like a match
     public static boolean VOLTAGE_COMPENSATION = TurretConstants.TURRET_VOLTAGE_COMPENSATION;
-    public static double FLYWHEEL_VELOCITY = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY; //B spins it, that's what shakes the turret
+    public static double FLYWHEEL_VELOCITY = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY; //B spins it, that's what shakes the turret
 
     private TurretBase turret;
     private Flywheel flywheel;
@@ -48,11 +49,13 @@ public class TurretManualTuner extends OpMode {
     public void init() {
 
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
+        BlazeSession.begin(hardwareMap);
         turret = new TurretBase(hardwareMap);
         flywheel = new Flywheel(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.flywheelMotorDeviceName, false));
         flywheel.initVoltageSensor(hardwareMap);
         flywheel.setVelocityPIDVSCoefficients(FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS);
         controller1 = new BetterGamepad(gamepad1);
+        BlazeSession.engage(hardwareMap, null);
         TARGET_DEGREES = 0;
         telemetry.addLine("Turret must point straight when you INIT. dpad left/right = step, dpad down = center, A = sine on/off, B = flywheel on/off.");
         telemetry.addLine("Lanyards: X = learning sweep over the whole travel on/off (saves when you stop it), back = forget the map.");
@@ -68,6 +71,7 @@ public class TurretManualTuner extends OpMode {
     @Override
     public void loop() {
 
+        BlazeSession.tick();
         HardwareMonitor.get().update();
         controller1.getInformation();
 
@@ -160,5 +164,6 @@ public class TurretManualTuner extends OpMode {
         turret.setVolts(0, 0);
         flywheel.setVelocity(0, true);
         flywheel.update();
+        BlazeSession.end();
     }
 }

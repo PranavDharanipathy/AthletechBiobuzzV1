@@ -199,6 +199,8 @@ public final class TurretScenario {
         c.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
         c.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
         c.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
+        c.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
+        c.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
         c.setTravel(ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd); //same as TurretBase
         return c;
     }

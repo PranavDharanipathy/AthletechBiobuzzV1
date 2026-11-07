@@ -11,7 +11,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.TeleOp.TeleOpBaseOpMode;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredVoltageSensor;
@@ -30,7 +30,7 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
     private final Intake intake = new Intake().asSubsystem();
     private final Blocker blocker = new Blocker().asSubsystem();
 
-    private RobotCentricDrive robotCentricDrive;
+    private Drivetrain drivetrain;
     private VoltageSensor flywheelHubVoltage;
     private Telemetry telemetry;
 
@@ -59,7 +59,7 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
         initializeComponents(Alliance.BLUE);
         applyComponentTraits();
 
-        robotCentricDrive = new RobotCentricDrive(left_front, right_front, left_back, right_back, controller1);
+        drivetrain = createDrivetrain();
 
         intake.provideComponents(new Intake(super.intake), controller1);
         blocker.provideComponents(super.blocker, controller1);
@@ -102,7 +102,7 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
         follower.update();
         intake.update();
         flywheel.update();
-        robotCentricDrive.update();
+        drivetrain.update();
 
         if (!finished) {
             record();

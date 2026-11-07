@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.Constants;
 
-//written by :Sim:analyzeTuning from TunerTeleOp + Turret Autotuner data on every build, don't edit by hand
+//written by :Sim:analyzeTuning from TunerTeleOp + Turret / Drivetrain Autotuner data on every build, don't edit by hand
 public class TunedConstants {
 
     public static String SESSIONS = "20280507-230429";
@@ -27,21 +27,41 @@ public class TunedConstants {
     public static double SHOT_GATE_HOLD_BAND = 52;
     public static double SHOT_GATE_DWELL = 0.06;
 
-    public static double TURRET_GAIN = 11374.8;
-    public static double TURRET_TIME_CONSTANT = 0.046;
-    public static double TURRET_DEAD_TIME = 0.0361;
-    public static double TURRET_KINETIC_FRICTION = 1.011;
-    public static double TURRET_BREAKAWAY_FRICTION = 1.163;
-    public static double TURRET_BANDWIDTH = 3.2;
+    public static double TURRET_GAIN = 10673.9;
+    public static double TURRET_TIME_CONSTANT = 0.0593;
+    public static double TURRET_DEAD_TIME = 0.0223;
+    public static double TURRET_KINETIC_FRICTION = 1.094;
+    public static double TURRET_BREAKAWAY_FRICTION = 1.217;
+    public static double TURRET_BANDWIDTH = 3.09;
     public static double TURRET_DAMPING = 0.9;
     public static double TURRET_INTEGRAL_RATIO = 0.3;
     public static double TURRET_FRICTION_SCALE = 1;
-    public static double TURRET_MAX_SPEED = 26233.1;
-    public static double TURRET_MAX_ACCELERATION = 118456;
-    public static double TURRET_START_DELAY = 0.0828;
-    public static double TURRET_MAX_DECELERATION = 71701.9;
-    public static double TURRET_SHAKE_BANDWIDTH = 3.2;
-    public static String TURRET_AUTOTUNE = "20280507-210857-driving";
+    public static double TURRET_MAX_SPEED = 25849.1;
+    public static double TURRET_MAX_ACCELERATION = 114305;
+    public static double TURRET_START_DELAY = 0.0734;
+    public static double TURRET_MAX_DECELERATION = 75758.3;
+    public static double TURRET_SHAKE_BANDWIDTH = 3.09;
+    public static String TURRET_AUTOTUNE = "20280508-052931-stationary";
+
+    public static double DRIVE_FORWARD_KS = 0.06;
+    public static double DRIVE_FORWARD_KV = 0.01053;
+    public static double DRIVE_FORWARD_KA = 0.00158;
+    public static double DRIVE_FORWARD_MAX_ACCEL = 150;
+    public static double DRIVE_FORWARD_MAX_DECEL = 170;
+    public static double DRIVE_FORWARD_BANDWIDTH = 5;
+    public static double DRIVE_STRAFE_KS = 0.08;
+    public static double DRIVE_STRAFE_KV = 0.0126;
+    public static double DRIVE_STRAFE_KA = 0.00189;
+    public static double DRIVE_STRAFE_MAX_ACCEL = 120;
+    public static double DRIVE_STRAFE_MAX_DECEL = 135;
+    public static double DRIVE_STRAFE_BANDWIDTH = 4;
+    public static double DRIVE_TURN_KS = 0.07;
+    public static double DRIVE_TURN_KV = 0.155;
+    public static double DRIVE_TURN_KA = 0.0233;
+    public static double DRIVE_TURN_MAX_ACCEL = 25;
+    public static double DRIVE_TURN_MAX_DECEL = 30;
+    public static double DRIVE_TURN_BANDWIDTH = 5;
+    public static String DRIVE_AUTOTUNE = "none yet: starting guesses from Pedro's top speeds";
 
     public static double LOOP_TIME_P95_MS = 41.8;
     public static double FLYWHEEL_VIBRATION_RMS = 13.2;

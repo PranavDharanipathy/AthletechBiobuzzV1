@@ -70,6 +70,7 @@ public class MonitoredAnalogInput extends AnalogInput {
         long t0 = tracker.start();
         double v = device.getVoltage();
         voltageSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_VOLTAGE, t0, voltageSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -79,6 +80,7 @@ public class MonitoredAnalogInput extends AnalogInput {
 
         long t0 = tracker.start();
         double v = device.getMaxVoltage();
+        tracker.v(v);
         tracker.read(HwOp.GET_MAX_VOLTAGE, t0);
         return v;
     }

@@ -4,19 +4,16 @@ import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
-import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.Systems.Shooter;
 import org.firstinspires.ftc.teamcode.Utility.CsvLogger;
@@ -51,7 +48,7 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
     private final Blocker blocker = new Blocker().asSubsystem();
     private final Shooter shooter = new Shooter();
 
-    private RobotCentricDrive robotCentricDrive;
+    private Drivetrain drivetrain;
 
     private VoltageSensor flywheelHubVoltage, turretHubVoltage;
 
@@ -67,19 +64,7 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
 
         applyComponentTraits();
 
-        DcMotor[] motors = {
-                hardwareMap.dcMotor.get(DeviceConstants.leftFrontMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.rightFrontMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.leftBackMotorDeviceName),
-                hardwareMap.dcMotor.get(DeviceConstants.rightBackMotorDeviceName)
-        };
-
-        for (DcMotor motor : motors) motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-
-        motors[1].setDirection(DcMotorSimple.Direction.REVERSE);
-        motors[3].setDirection(DcMotorSimple.Direction.REVERSE);
-
-        robotCentricDrive = new RobotCentricDrive(motors[0], motors[1], motors[2], motors[3], controller1);
+        drivetrain = createDrivetrain();
 
         intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel, turret);
@@ -130,7 +115,7 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
         follower.update();
         intake.update();
         shooter.update();
-        robotCentricDrive.update();
+        drivetrain.update();
 
         log();
 

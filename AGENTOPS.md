@@ -49,6 +49,24 @@ Dashboard and commons-math — it needs network access to Maven Central and
   `@Config` values. Tuning OpModes live in `TeamCode/.../Tuners`.
 - **Pedro Pathing**: path/localizer tuners also surface through Dashboard; keep
   tuned constants in `Constants/`.
+- **Drivetrain Autotuner** (tuning group): the robot drives itself for about a minute (forward/back, strafe, spin, then
+  shoves itself while holding), with about 3 ft clear every way. Any stick or B stops it. The result goes into
+  `TunedConstants.DRIVE_*` on the next build. Run it again after drivetrain changes or if the hold feels soft or twitchy.
+- **SHT Stability Tuner** (tuning group): play it like a match. Flywheel and turret gains keep changing, and sessions land
+  in `tuning-data/hypertuning/` on build. Read `findings.md`, then follow `Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md`.
+  Never change a match default from one session.
+- **Temporal Log Red** (A_Match): the RED TeleOp with everything logged against time (every read/write with value and
+  duration, every variable change, Blaze's background reads, decisions).
+  - **Read a session:**
+    1. `python tools/temporal_log.py pull`
+    2. Then `summary latest`, `decisions latest`, or `csv latest --grep flywheel -o out.csv` (see `--help`).
+  - Sessions are big (hundreds of KB/s) and go to `temporal-logs/`, which is git-ignored.
+  - Its `temporal.watch_us` record is the logging's own cost per loop.
+- **Blaze** runs the hub link for every robot OpMode except testers, utility OpModes and Pedro's tuners. The `Blaze`
+  telemetry line says what's on.
+  - To go back to the stock SDK for TeleOps and tuners, set `BlazeConstants.ENABLED = false` on the Dashboard before INIT.
+  - The autos always go through NextFTC's `BlazeOpMode`.
+  - If a motor won't move in a tester after a Blaze OpMode, restart the robot and tell an agent (see DEV_NOTES).
 - **Limelight Lab** (live vision tuning; moves nothing): run the `Limelight Lab` OpMode
   (Diagnostics). While it runs, the hub forwards ports 5800-5809 to the Limelight, so a laptop
   on the robot's Wi-Fi gets the web UI at `http://192.168.43.1:5801`, the stream at `:5800` and

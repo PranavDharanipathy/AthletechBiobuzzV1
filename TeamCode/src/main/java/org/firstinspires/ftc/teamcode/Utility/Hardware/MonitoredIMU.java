@@ -40,6 +40,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
         long t0 = tracker.start();
         boolean ok = device.initialize(parameters);
+        tracker.v(parameters);
         tracker.write(HwOp.IMU_INITIALIZE, t0, false);
         return ok;
     }
@@ -61,6 +62,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
         long t0 = tracker.start();
         YawPitchRollAngles v = device.getRobotYawPitchRollAngles();
         yprSlot.o = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_YAW_PITCH_ROLL, t0, yprSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -75,6 +77,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
         long t0 = tracker.start();
         Orientation v = device.getRobotOrientation(reference, order, angleUnit);
         orientationSlot.o = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_ORIENTATION, t0, orientationSlot, key);
         return v;
     }
@@ -88,6 +91,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
         long t0 = tracker.start();
         Quaternion v = device.getRobotOrientationAsQuaternion();
         quaternionSlot.o = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_QUATERNION, t0, quaternionSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -102,6 +106,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
         long t0 = tracker.start();
         AngularVelocity v = device.getRobotAngularVelocity(angleUnit);
         angularVelocitySlot.o = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_ANGULAR_VELOCITY, t0, angularVelocitySlot, key);
         return v;
     }

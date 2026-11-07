@@ -17,11 +17,13 @@ import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Intake.FIArm;
 import org.firstinspires.ftc.teamcode.Systems.Shooter;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
@@ -57,7 +59,9 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     //keeps what the turret learned about the lanyards for next time
     @Override
     public void stop() {
+
         if (turret != null) turret.saveLanyards();
+        BlazeSession.end();
     }
 
     /// pose and the relocalize button on the Driver Station. The lines are made once and only filled in when telemetry
@@ -70,6 +74,8 @@ public abstract class TeleOpBaseOpMode extends OpMode {
             Pose pose = follower.pose();
             return String.format(Locale.US, "x %.1f  y %.1f  heading %.0f deg", pose.x(), pose.y(), Math.toDegrees(pose.heading()));
         });
+        telemetry.addData("Blaze", BlazeSession::status);
+        telemetry.addData("Turret", () -> turret.isEncoderFrozen() ? "STOPPED: encoder not changing under a hard push (check its cable, or Blaze). Restart the OpMode" : "ok");
         telemetry.addData("Relocalize (gamepad 1 PS/guide)", () -> (controller1.curr_main_button ? "button DOWN" : "button up") + ", done " + shooter.getRelocalizations() + "x, to the " + Garden.forAlliance(alliance.getAlliance()) + " GARDEN corner");
     }
 
@@ -81,14 +87,15 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         for (LynxModule hub : robotHubs) {
             hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         }
+
+        //Blaze: background bulk reads on each hub and the Pinpoint feed (after the follower's start pose)
+        BlazeSession.engage(hardwareMap, follower);
     }
 
-    //clears lynx cache
+    //clears lynx cache, except on hubs Blaze keeps fresh (starts Blaze on the first loop)
     public void clearCacheOfLynxModule() {
 
-        for (LynxModule hub : robotHubs) {
-            hub.clearBulkCache();
-        }
+        BlazeSession.tick();
 
         HardwareMonitor.get().update();
     }
@@ -97,6 +104,9 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     public void initializeComponents(Alliance alliance) {
 
         this.alliance = new AllianceState(alliance);
+
+        //Blaze first: it swaps the hardwareMap's motors for its own before anything gets them
+        BlazeSession.begin(hardwareMap);
 
         left_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.leftFrontMotorDeviceName, false);
         right_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.rightFrontMotorDeviceName, false);
@@ -120,6 +130,11 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         controller1 = new BetterGamepad(gamepad1);
         controller2 = new BetterGamepad(gamepad2);
+    }
+
+    /// pose-holding TeleOp drive on the base's motors (call after applyComponentTraits: directions and BRAKE)
+    public Drivetrain createDrivetrain() {
+        return new Drivetrain(left_front, right_front, left_back, right_back, follower, controller1, flywheel.getVoltageSensor());
     }
 
     //sets device traits

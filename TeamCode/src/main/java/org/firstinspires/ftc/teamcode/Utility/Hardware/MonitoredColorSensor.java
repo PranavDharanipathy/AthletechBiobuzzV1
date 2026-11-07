@@ -139,6 +139,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         ColorSensor s = raw();
         long t0 = tracker.start();
         s.enableLed(enable);
+        tracker.v(enable);
         tracker.write(HwOp.ENABLE_LED, t0, lastLed != null && lastLed == enable);
         lastLed = enable;
     }
@@ -149,6 +150,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         ColorSensor s = raw();
         long t0 = tracker.start();
         s.setI2cAddress(newAddress);
+        tracker.v(newAddress);
         tracker.write(HwOp.SET_I2C_ADDRESS, t0, false);
     }
 
@@ -158,6 +160,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         ColorSensor s = raw();
         long t0 = tracker.start();
         I2cAddr v = s.getI2cAddress();
+        tracker.v(v);
         tracker.read(HwOp.GET_I2C_ADDRESS, t0);
         return v;
     }
@@ -172,6 +175,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         long t0 = tracker.start();
         NormalizedRGBA v = s.getNormalizedColors();
         normalizedSlot.o = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_NORMALIZED_COLORS, t0, normalizedSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -182,6 +186,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         NormalizedColorSensor s = normalized();
         long t0 = tracker.start();
         float v = s.getGain();
+        tracker.v(v);
         tracker.read(HwOp.GET_GAIN, t0);
         return v;
     }
@@ -192,6 +197,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         NormalizedColorSensor s = normalized();
         long t0 = tracker.start();
         s.setGain(newGain);
+        tracker.v(newGain);
         tracker.write(HwOp.SET_GAIN, t0, newGain == lastGain, normalizedSlot);
         lastGain = newGain;
     }
@@ -206,6 +212,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         long t0 = tracker.start();
         double mm = s.getDistance(DistanceUnit.MM);
         distanceSlot.d = mm;
+        tracker.v(mm);
         tracker.read(HwOp.GET_DISTANCE, t0, distanceSlot, CacheSlot.NO_KEY);
         return unit.fromMm(mm);
     }

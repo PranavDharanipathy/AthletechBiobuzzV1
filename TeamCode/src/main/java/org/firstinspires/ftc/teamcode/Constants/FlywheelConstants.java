@@ -36,6 +36,11 @@ public class FlywheelConstants {
     public static double FLYWHEEL_LOAD_OBSERVER_TIME = 2, FLYWHEEL_MAX_LOAD_VOLTS = 1.5;
     public static double FLYWHEEL_ACCEL_PER_VOLT = 165; //ticks/s^2 per spare volt, same session with the turret quiet
 
+    //shots: while feeding (blocker open) it adds FEED_BOOST volts, and for SHOT_KICK_TIME s after it sees a ball hit (a drop of
+    //SHOT_DETECT_DROP ticks/s in one loop while feeding) SHOT_KICK volts more, so it pushes before the error has to grow.
+    //0 = off. SHT Stability Tuner tunes them
+    public static double FLYWHEEL_FEED_BOOST_VOLTS = 0, FLYWHEEL_SHOT_KICK_VOLTS = 0, FLYWHEEL_SHOT_KICK_TIME = 0.08, FLYWHEEL_SHOT_DETECT_DROP = 25; //TunerTeleOp 20280507-230429: a ball drops it 22-78 per loop, not feeding p99.9 is 19
+
     public static double FLYWHEEL_VELOCITY_MARGIN_OF_ERROR = 50;
     public static double FLYWHEEL_STABILITY_MARGIN_OF_ERROR = 20;
 

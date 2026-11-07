@@ -2,6 +2,7 @@ repositories {
     mavenCentral()
     google() // Needed for androidx
     maven { url = 'https://repo.dairy.foundation/releases/' } // Sloth (Pedro tuning runtime)
+    maven { url = 'https://maven.anygeneric.dev/' } // BlazeFTC
 }
 
 dependencies {
@@ -41,6 +42,12 @@ dependencies {
     // Ivy's Pedro 3 path commands (PedroCommands.follow / hold). The Pedro extension for
     // NextFTC is v1-only, so this is the bridge between the commands and the Follower.
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
+
+    // BlazeFTC: Rust hub-link runtime (background bulk/Pinpoint reads, fast motor writes), run by
+    // Utility/Blaze/BlazeSession and NextFTC's BlazeOpMode. Its API must match what NextFTC v2 calls (checked
+    // for 0.1.66 vs NextFTC 0.3.0); bump the two together. Not blazeftc_pedro3: its localizer can't relocalize
+    // and it writes the drive from Blaze's thread (we have BlazePinpointLocalizer). See DEV_NOTES.
+    implementation 'dev.anygeneric:blazeftc:0.1.66'
 
     // Sloth's FTC Dashboard fork
     implementation('com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0')

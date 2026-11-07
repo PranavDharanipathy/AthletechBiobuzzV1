@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.Autonomous.Mechanisms;
+package org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems;
 
 import com.pedropathing.ivy.Command;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -10,12 +10,12 @@ import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 
 import dev.nextftc.robot.Mechanism;
 
-public final class IntakeMechanism implements Mechanism {
+public final class Intake implements Mechanism {
 
     public final GeneralVeloMotor motor;
     private double velocity;
 
-    public IntakeMechanism(HardwareMap hardwareMap) {
+    public Intake(HardwareMap hardwareMap) {
 
         motor = new GeneralVeloMotor(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.intakeMotorDeviceName, false));
         motor.getMotor().setPower(0);

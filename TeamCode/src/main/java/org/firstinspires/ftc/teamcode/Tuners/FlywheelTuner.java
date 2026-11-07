@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.Tuners;
 
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
@@ -77,6 +78,8 @@ public class FlywheelTuner extends LinearOpMode {
 
         telemetry.setMsTransmissionInterval(12);
 
+        BlazeSession.begin(hardwareMap);
+
         intake = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
         intake.setVelocityPDFCoefficients(
                 IntakeConstants.INTAKE_PDF_COEFFICIENTS[0],
@@ -99,6 +102,8 @@ public class FlywheelTuner extends LinearOpMode {
         TurretBase turret = new TurretBase(hardwareMap);
         turret.setVolts(0, 0);
 
+        BlazeSession.engage(hardwareMap, null);
+
         if (isStopRequested()) return;
         waitForStart();
 
@@ -108,6 +113,7 @@ public class FlywheelTuner extends LinearOpMode {
 
         while (opModeIsActive()) {
 
+            BlazeSession.tick();
             HardwareMonitor.get().update();
 
             coefficients.updateCoefficients(

@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
-import org.firstinspires.ftc.teamcode.Utility.FastSigmoidCurve;
+import org.firstinspires.ftc.teamcode.Utility.QuadraticCurve;
 
 public class RobotCentricDrive {
 
@@ -12,7 +12,7 @@ public class RobotCentricDrive {
 
     private BetterGamepad controller1;
 
-    private final FastSigmoidCurve curve = new FastSigmoidCurve();
+    private final QuadraticCurve curve = new QuadraticCurve();
     private double forwardRatio = 1, strafeRatio = 1, turnRatio = 1;
 
     public RobotCentricDrive(DcMotor left_front, DcMotor right_front, DcMotor left_back, DcMotor right_back, BetterGamepad controller1) {
@@ -32,7 +32,7 @@ public class RobotCentricDrive {
         turnRatio = turn;
     }
 
-    public FastSigmoidCurve getCurve() {
+    public QuadraticCurve getCurve() {
         return curve;
     }
 
@@ -57,8 +57,7 @@ public class RobotCentricDrive {
 
     private double shape(double stick) {
 
-        double size = Math.abs(stick);
-        if (size <= GeneralConstants.JOYSTICK_MINIMUM) return 0;
-        return Math.signum(stick) * Math.max(0, Math.min(1, curve.getOutput(Math.min(size, 1))));
+        if (Math.abs(stick) <= GeneralConstants.JOYSTICK_MINIMUM) return 0;
+        return curve.getOutput(stick);
     }
 }

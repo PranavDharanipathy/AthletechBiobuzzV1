@@ -80,6 +80,23 @@ public final class Flywheel {
     public double v = 0;
 
     public double load = 0;
+
+    //shot power (FlywheelConstants FEED_BOOST / SHOT_KICK): what it adds while feeding and right after a ball hits
+    public double feedBoostVolts = FlywheelConstants.FLYWHEEL_FEED_BOOST_VOLTS, shotKickVolts = FlywheelConstants.FLYWHEEL_SHOT_KICK_VOLTS;
+    public double shotKickTime = FlywheelConstants.FLYWHEEL_SHOT_KICK_TIME, shotDetectDrop = FlywheelConstants.FLYWHEEL_SHOT_DETECT_DROP;
+    public double boost = 0;
+    public int shotsSeen = 0;
+    private boolean feeding = false;
+    private double kickUntil = -1;
+
+    /// the blocker is letting balls through
+    public void setFeeding(boolean feeding) {
+        this.feeding = feeding;
+    }
+
+    public boolean isFeeding() {
+        return feeding;
+    }
     private double lastSentVolts = 0;
     public double s = 0;
 
@@ -232,7 +249,17 @@ public final class Flywheel {
             load = MathUtil.clamp(load, -FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS, FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS);
         }
 
-        power = voltageCompensator.toPower(p + i + d + v + s + load);
+        boost = 0;
+        if (targetVelocity != 0 && feeding) {
+            boost = feedBoostVolts;
+            if (!wasFirstTick && lastCurrentVelocity - currentVelocity > shotDetectDrop) {
+                kickUntil = now + shotKickTime;
+                shotsSeen++;
+            }
+        }
+        if (targetVelocity != 0 && now < kickUntil) boost += shotKickVolts;
+
+        power = voltageCompensator.toPower(p + i + d + v + s + load + boost);
         lastSentVolts = power * voltageCompensator.volts();
 
         if (targetVelocity == 0) power = 0;

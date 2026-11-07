@@ -47,6 +47,15 @@ public class TurretConstants {
     public static double TURRET_RESYNC_DEGREES = 7;
     //moving: the friction push fades to full reverse over this much lead on the plan (0 = flip at 1 deg, which chopped the speed)
     public static double TURRET_BRAKE_DEGREES = 5;
+    //braking ("landing"): on a big move to a still aim it cruises flat out, then predicts its own stop with the model (dead time,
+    //lag, coasting, friction, reverse braking: not v^2/2d) and picks the volts that land it on the aim, learning from where it
+    //rests. Off: in sim it got there ~10% sooner but overshot 3-5 deg (the old stop: 1-2), because how hard these servos brake
+    //reversed has never been measured. SHT Stability Tuner tries it on the robot and keeps it only if it scores better
+    public static boolean TURRET_LANDING_ENABLED = false;
+    public static boolean TURRET_BRAKE_LEARNING = true;
+    //share of the robot's spin the turret is told to cancel (1 = all of it). SHT Stability Tuner learns it from whether the
+    //turret lags the spin or runs ahead of it
+    public static double TURRET_RATE_FEEDFORWARD_SCALE = 1;
     public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.15;
     public static double TURRET_FRICTION_RAMP_DEGREES = 0.5;
     public static double TURRET_MOVING_DEGREES_PER_SECOND = 1;
@@ -79,4 +88,8 @@ public class TurretConstants {
     public static double TURRET_LANYARD_MAX_VOLTS = 6;
     public static double TURRET_LANYARD_SWEEP_DEGREES_PER_SECOND = 30;
     public static double TURRET_LANYARD_SWEEP_DWELL = 1.5; //s stopped at each end, that's how the ends get learned
+
+    //wiring: pushed this hard (V) with the encoder not changing at all for this long (s), the encoder (or its data) is dead and
+    //the travel limit can't work, so the turret stops until the OpMode restarts. A frozen reading wrapped it round and round
+    public static double TURRET_FROZEN_ENCODER_VOLTS = 3, TURRET_FROZEN_ENCODER_SECONDS = 0.5;
 }

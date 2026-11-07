@@ -12,7 +12,7 @@ import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotGate;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.TeleOp.TeleOpBaseOpMode;
@@ -25,7 +25,7 @@ import java.util.List;
 @TeleOp (group = "tuning")
 public class ShotGateTuner extends TeleOpBaseOpMode {
 
-    public static double TARGET_VELOCITY = ShooterConstants.FLYWHEEL_SHOOT_VELOCITY;
+    public static double TARGET_VELOCITY = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
     //run the turret like TeleOp does (holding home), so the flywheel is tuned with its load and control running
     public static boolean RUN_TURRET = true;
 
@@ -62,7 +62,7 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
     private final Stats gateOn = new Stats();
 
     private final Intake intake = new Intake().asSubsystem();
-    private RobotCentricDrive robotCentricDrive;
+    private Drivetrain drivetrain;
     private Telemetry telemetry;
 
     private final ShotGate gate = new ShotGate(ENTER_BAND_BELOW, ENTER_BAND_ABOVE, HOLD_BAND_BELOW, HOLD_BAND_ABOVE, DWELL, MIN_OPEN, PULSE);
@@ -97,7 +97,7 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
         initializeComponents(Alliance.BLUE);
         applyComponentTraits();
 
-        robotCentricDrive = new RobotCentricDrive(left_front, right_front, left_back, right_back, controller1);
+        drivetrain = createDrivetrain();
         intake.provideComponents(new Intake(super.intake), controller1);
 
         setUpLynxModule();
@@ -164,7 +164,7 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
         follower.update();
         intake.update();
         flywheel.update();
-        robotCentricDrive.update();
+        drivetrain.update();
         if (RUN_TURRET) {
             turret.setPosition(turret.startPosition);
             turret.setTargetVelocity(0);

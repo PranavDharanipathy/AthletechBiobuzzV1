@@ -30,6 +30,7 @@ public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implement
         long t0 = tracker.start();
         boolean v = device.isPressed();
         pressedSlot.b = v;
+        tracker.v(v);
         tracker.read(HwOp.IS_PRESSED, t0, pressedSlot, CacheSlot.NO_KEY);
         return v;
     }
@@ -41,6 +42,7 @@ public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implement
         long t0 = tracker.start();
         double v = device.getValue();
         valueSlot.d = v;
+        tracker.v(v);
         tracker.read(HwOp.GET_TOUCH_VALUE, t0, valueSlot, CacheSlot.NO_KEY);
         return v;
     }
