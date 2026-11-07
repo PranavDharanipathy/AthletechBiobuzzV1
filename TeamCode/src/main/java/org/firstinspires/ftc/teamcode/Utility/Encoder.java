@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.Utility;
 
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 public class Encoder {
@@ -33,79 +34,237 @@ public class Encoder {
         return direction;
     }
 
-    /**
-     * Allows you to set the direction of the counts and velocity without modifying the motor's direction state
-     * @param direction either reverse or forward depending on if encoder counts should be negated
-     */
+    /// Allows you to set the direction of the counts and velocity without modifying the motor's direction state
+    /// @param direction either reverse or forward depending on if encoder counts should be negated
     public void setDirection(Direction direction) {
         this.direction = direction;
     }
 
+    private int offset = 0;
+
+    /// zeroes the count on the hub, it keeps the old count between OpModes and that's wrong once the turret moved
+    public void reset() {
+        reset(0);
+    }
+
+    /// zeroes the count on the hub, then the spot it's at now reads as position
+    public void reset(int position) {
+
+        if (motor != null) {
+            DcMotor.RunMode mode = motor.getMode();
+            motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            motor.setMode(mode == DcMotor.RunMode.STOP_AND_RESET_ENCODER ? DcMotor.RunMode.RUN_WITHOUT_ENCODER : mode);
+        }
+        offset = position;
+        resetVelocityFilter();
+    }
+
     public int getCurrentPosition() {
+
         int multiplier = direction.getMultiplier();
-        return motor.getCurrentPosition() * multiplier;
+        return motor.getCurrentPosition() * multiplier + offset;
     }
 
     public double getInternalVelocity() {
+
         int multiplier = direction.getMultiplier();
         return motor.getVelocity() * multiplier;
     }
-    private double filteredVelocity = 0;
+    //velocity filter: bunch of kalman filters at different speeds, whichever fits the hub data best wins
+    private static final int FILTERS = 7;
+    private static final int NOISE_SAMPLES = 64;
 
-    private double kalmanGain = 0;
+    private final double[] filterBandwidths = new double[FILTERS];
+    private double scoreMemory, staleTime;
 
-    private double p = 1; //prediction step
-    private double q = 0; //uncertainty step
-    private double r = 0; //encoder uncertainty
-
-    private double outlierSigma = 1;
-    private double kRInflation = 1; //when outlier is caught
-
-    private boolean velocityKFInitialized = false;
-
-    /// @param parameters should contain 4 values in order of q, r, outlierSigma, kRInflation
-    public void setupVelocityKalmanFilter(double[] parameters) {
-
-        velocityKFInitialized = true;
-
-        if (q != parameters[0] || r != parameters[1]) p = 1;
-
-        q = parameters[0];
-        r = parameters[1];
-
-        outlierSigma = parameters[2];
-        kRInflation = parameters[3];
+    {
+        setVelocityFilterParameters(0.5, 32, 0.9, 0.05);
     }
 
-    /// Uses Kalman Filter.
-    /// @param velocityEstimate (curr_ticks - prev_ticks) / dt
-    public void runVelocityCalculation(double velocityEstimate) {
+    public void setVelocityFilterParameters(double minBandwidth, double maxBandwidth, double scoreMemory, double staleTime) {
 
-        if (!velocityKFInitialized) throw new RuntimeException("Velocity Kalman Filter is not being used!");
+        double ratio = Math.pow(maxBandwidth / minBandwidth, 1.0 / (FILTERS - 1));
+        for (int k = 0; k < FILTERS; k++) filterBandwidths[k] = minBandwidth * Math.pow(ratio, k);
+        this.scoreMemory = scoreMemory;
+        this.staleTime = staleTime;
+    }
 
-        double innovation = velocityEstimate - filteredVelocity;
+    private final double[] filterVelocity = new double[FILTERS], filterAcceleration = new double[FILTERS];
+    private final double[] p00 = new double[FILTERS], p01 = new double[FILTERS], p11 = new double[FILTERS];
+    private final double[] score = new double[FILTERS], weight = new double[FILTERS];
 
-        p += q;
+    private final double[] secondDifferences = new double[NOISE_SAMPLES], sortBuffer = new double[NOISE_SAMPLES];
+    private int secondDifferenceCount = 0, secondDifferenceIndex = 0;
+    private double smallestStep = Double.POSITIVE_INFINITY;
 
-        double jump = p + r;
+    private boolean filterStarted = false;
+    private double lastFilterTime, lastRawChangeTime, samplePeriod = 0.01;
+    private double raw1 = Double.NaN, raw2 = Double.NaN;
+    private double noiseVariance = 100;
 
-        double correctedR = r; //deals with outliers
-        if (Math.abs(innovation) > outlierSigma * Math.sqrt(jump)) {
-            correctedR = kRInflation * r;
+    private double filteredVelocity = 0, filteredAcceleration = 0, filterBandwidth = 0;
+
+    public void resetVelocityFilter() {
+
+        filterStarted = false;
+        secondDifferenceCount = 0;
+        secondDifferenceIndex = 0;
+        smallestStep = Double.POSITIVE_INFINITY;
+        raw1 = raw2 = Double.NaN;
+        noiseVariance = 100;
+    }
+
+    public double updateFilteredVelocity() {
+        return updateFilteredVelocity(Clock.seconds(), getInternalVelocity());
+    }
+
+    public double updateFilteredVelocity(double now, double raw) {
+
+        if (Double.isNaN(raw) || Double.isInfinite(raw)) return filteredVelocity;
+
+        if (!filterStarted || now - lastFilterTime <= 0 || now - lastFilterTime > 0.5) {
+            startFilter(now, raw);
+            return filteredVelocity;
         }
 
-        double kalmanGainDenominator = p + correctedR;
-        kalmanGain = kalmanGainDenominator != 0 ? p / kalmanGainDenominator : 0;
+        double dt = now - lastFilterTime;
+        lastFilterTime = now;
 
-        filteredVelocity += kalmanGain * innovation;
+        boolean newReading = raw != raw1 || now - lastRawChangeTime >= staleTime;
+        if (newReading) {
+            samplePeriod += 0.05 * (now - lastRawChangeTime - samplePeriod);
+            lastRawChangeTime = now;
+            updateNoise(raw);
+        }
 
-        p *= (1 - kalmanGain);
+        double best = Double.NEGATIVE_INFINITY;
+        int bestIndex = 0;
+
+        for (int k = 0; k < FILTERS; k++) {
+
+            double omega = 2 * Math.PI * filterBandwidths[k];
+            double q = omega * omega * omega * omega * noiseVariance * samplePeriod;
+
+            filterVelocity[k] += filterAcceleration[k] * dt;
+            double a00 = p00[k] + 2 * dt * p01[k] + dt * dt * p11[k] + q * dt * dt * dt / 3;
+            double a01 = p01[k] + dt * p11[k] + q * dt * dt / 2;
+            double a11 = p11[k] + q * dt;
+            p00[k] = a00;
+            p01[k] = a01;
+            p11[k] = a11;
+
+            if (newReading) {
+                double s = p00[k] + noiseVariance;
+                double innovation = raw - filterVelocity[k];
+                double k0 = p00[k] / s, k1 = p01[k] / s;
+
+                filterVelocity[k] += k0 * innovation;
+                filterAcceleration[k] += k1 * innovation;
+                p11[k] -= k1 * p01[k];
+                p01[k] *= 1 - k0;
+                p00[k] *= 1 - k0;
+
+                double logLikelihood = -0.5 * (Math.log(2 * Math.PI * s) + innovation * innovation / s);
+                score[k] = scoreMemory * score[k] + Math.max(logLikelihood, -50);
+            }
+
+            if (score[k] > best) {
+                best = score[k];
+                bestIndex = k;
+            }
+        }
+
+        double total = 0;
+        for (int k = 0; k < FILTERS; k++) {
+            weight[k] = Math.exp(score[k] - best);
+            total += weight[k];
+        }
+
+        filteredVelocity = 0;
+        filteredAcceleration = 0;
+        filterBandwidth = 0;
+        for (int k = 0; k < FILTERS; k++) {
+            weight[k] /= total;
+            filteredVelocity += weight[k] * filterVelocity[k];
+            filteredAcceleration += weight[k] * filterAcceleration[k];
+            filterBandwidth += weight[k] * filterBandwidths[k];
+        }
+
+        //filters that fell way behind (like after a ball) snap to the best one
+        for (int k = 0; k < FILTERS; k++) {
+            double gap = filterVelocity[k] - filterVelocity[bestIndex];
+            if (gap * gap > 9 * (p00[k] + p00[bestIndex] + noiseVariance)) {
+                filterVelocity[k] = filterVelocity[bestIndex];
+                filterAcceleration[k] = filterAcceleration[bestIndex];
+            }
+        }
+
+        return filteredVelocity;
     }
 
-    /// In ticks per second.
-    /// Using Kalman Filter.
-    /// @return The filtered velocity -- will return 0 if Kalman Filter wasn't initialized.
+    private void startFilter(double now, double raw) {
+
+        filterStarted = true;
+        lastFilterTime = now;
+        lastRawChangeTime = now;
+
+        for (int k = 0; k < FILTERS; k++) {
+            filterVelocity[k] = raw;
+            filterAcceleration[k] = 0;
+            p00[k] = noiseVariance;
+            p01[k] = 0;
+            p11[k] = 1e6;
+            score[k] = 0;
+        }
+
+        filteredVelocity = raw;
+        filteredAcceleration = 0;
+        raw2 = raw1;
+        raw1 = raw;
+    }
+
+    private void updateNoise(double raw) {
+
+        if (raw == raw1) return;
+
+        if (!Double.isNaN(raw1)) smallestStep = Math.min(smallestStep, Math.abs(raw - raw1));
+
+        if (!Double.isNaN(raw2)) {
+            secondDifferences[secondDifferenceIndex] = Math.abs(raw - 2 * raw1 + raw2);
+            secondDifferenceIndex = (secondDifferenceIndex + 1) % NOISE_SAMPLES;
+            if (secondDifferenceCount < NOISE_SAMPLES) secondDifferenceCount++;
+        }
+
+        raw2 = raw1;
+        raw1 = raw;
+
+        if (secondDifferenceCount < 16) return;
+
+        System.arraycopy(secondDifferences, 0, sortBuffer, 0, secondDifferenceCount);
+        java.util.Arrays.sort(sortBuffer, 0, secondDifferenceCount);
+        double sigma = 1.4826 * sortBuffer[secondDifferenceCount / 2];
+
+        double floor = Double.isInfinite(smallestStep) ? 1 : Math.max(1, smallestStep * smallestStep / 12);
+        noiseVariance = Math.max(floor, sigma * sigma / 6);
+    }
+
+    /// ticks per second
     public double getFilteredVelocity() {
         return filteredVelocity;
+    }
+
+    /// ticks per second squared
+    public double getFilteredAcceleration() {
+        return filteredAcceleration;
+    }
+
+    /// Hz
+    public double getFilterBandwidth() {
+        return filterBandwidth;
+    }
+
+    /// ticks per second
+    public double getVelocityNoise() {
+        return Math.sqrt(noiseVariance);
     }
 }

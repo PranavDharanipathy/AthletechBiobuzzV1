@@ -14,10 +14,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 
-/**
- * Drivetrain sims: full-power runs (forward, strafe, turn, braking), stop-to-stop move times, and
- * how all of it changes as the battery drains. Fills the drive.* derived entries.
- */
 public final class DriveScenario {
     private DriveScenario() {
     }
@@ -27,7 +23,6 @@ public final class DriveScenario {
     static final double[] ANGLES = {15, 30, 45, 60, 90, 120, 150, 180, 270, 360};
     static final double[] SURFACE_DISTANCES = {0.3, 0.6, 1.0, 1.5, 2.0, 3.0};
 
-    /** Results of a full-power run from rest. */
     static final class Run {
         private final double topSpeed;
         private final double timeTo95;
@@ -37,6 +32,7 @@ public final class DriveScenario {
         private final Recorder rec;
 
         Run(double topSpeed, double timeTo95, double peakAccel, double peakCurrent, double cruiseCurrent, Recorder rec) {
+
             this.topSpeed = topSpeed;
             this.timeTo95 = timeTo95;
             this.peakAccel = peakAccel;
@@ -54,15 +50,11 @@ public final class DriveScenario {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Run)) return false;
             Run o = (Run) other;
-            return Double.compare(topSpeed, o.topSpeed) == 0
-                    && Double.compare(timeTo95, o.timeTo95) == 0
-                    && Double.compare(peakAccel, o.peakAccel) == 0
-                    && Double.compare(peakCurrent, o.peakCurrent) == 0
-                    && Double.compare(cruiseCurrent, o.cruiseCurrent) == 0
-                    && java.util.Objects.equals(rec, o.rec);
+            return Double.compare(topSpeed, o.topSpeed) == 0 && Double.compare(timeTo95, o.timeTo95) == 0 && Double.compare(peakAccel, o.peakAccel) == 0 && Double.compare(peakCurrent, o.peakCurrent) == 0 && Double.compare(cruiseCurrent, o.cruiseCurrent) == 0 && java.util.Objects.equals(rec, o.rec);
         }
 
         @Override
@@ -77,6 +69,7 @@ public final class DriveScenario {
     }
 
     static Run fullPower(MecanumDrive.Params p, Battery battery, double otherA, Axis axis, double seconds) {
+
         MecanumDrive d = new MecanumDrive(p);
         d.reset(0, 0, 0);
         Recorder rec = new Recorder(0.01, "t_s", "speed", "motor_current_a", "battery_current_a", "bus_v");
@@ -114,8 +107,8 @@ public final class DriveScenario {
         return new Run(top, t95, peakA, peakI, d.motorCurrentTotal(), rec);
     }
 
-    /** Peak deceleration reversing power at top speed. */
     static double peakDecel(MecanumDrive.Params p, Battery battery, double otherA) {
+
         MecanumDrive d = new MecanumDrive(p);
         d.reset(0, 0, 0);
         for (double t = 0; t < 3; t += DT) {
@@ -133,6 +126,7 @@ public final class DriveScenario {
     }
 
     public static void run(SimContext ctx) throws Exception {
+
         RobotParams rp = new RobotParams(ctx.db);
         MecanumDrive.Params p = rp.drive();
         rp.battery(Double.NaN);
@@ -149,8 +143,7 @@ public final class DriveScenario {
         double decel = peakDecel(p, fresh.get(), other);
         double turnDps = Math.toDegrees(turn.topSpeed());
         ctx.log.printf("  top speed %.2f m/s forward, %.2f m/s strafe, %.0f deg/s turning%n", fwd.topSpeed(), strafe.topSpeed(), turnDps);
-        ctx.log.printf("  peak accel %.2f m/s^2, peak decel %.2f m/s^2, 95%% speed after %.2f s, peak current %.1f A%n",
-                fwd.peakAccel(), decel, fwd.timeTo95(), fwd.peakCurrent());
+        ctx.log.printf("  peak accel %.2f m/s^2, peak decel %.2f m/s^2, 95%% speed after %.2f s, peak current %.1f A%n", fwd.peakAccel(), decel, fwd.timeTo95(), fwd.peakCurrent());
 
         List<double[]> speedVsTime = new ArrayList<>(), currentVsTime = new ArrayList<>(), currentVsSpeed = new ArrayList<>(), busVsTime = new ArrayList<>();
         double[] ts = fwd.rec().column("t_s"), sp = fwd.rec().column("speed"), cur = fwd.rec().column("motor_current_a"), bus = fwd.rec().column("bus_v");
@@ -182,7 +175,7 @@ public final class DriveScenario {
             Run r = fullPower(p, rp.battery(v), other, Axis.FORWARD, 2.5);
             topVsV.add(new double[]{v, r.topSpeed()});
             accelVsV.add(new double[]{v, r.peakAccel()});
-            if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9) { // every 0.5 V for the surface
+            if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9) { //every 0.5 V for the surface
                 for (double dist : SURFACE_DISTANCES) {
                     surface.add(new double[]{dist, v, DriveTimePredictor.timeTo(p, () -> rp.battery(vv), other, Axis.FORWARD, dist).timeS()});
                 }
@@ -211,24 +204,14 @@ public final class DriveScenario {
         HtmlReport r = new HtmlReport("Drive sim");
         Reports.provenance(r, rp, ctx);
         r.heading("Summary");
-        r.table(Arrays.asList("quantity", "value", "unit"), Arrays.asList(
-                Reports.row("top speed forward", fwd.topSpeed(), "m/s"),
-                Reports.row("top speed strafing", strafe.topSpeed(), "m/s"),
-                Reports.row("top turn rate", turnDps, "deg/s"),
-                Reports.row("peak acceleration", fwd.peakAccel(), "m/s^2"),
-                Reports.row("peak deceleration", decel, "m/s^2"),
-                Reports.row("time to 95% speed", fwd.timeTo95(), "s"),
-                Reports.row("peak drive current (4 motors)", fwd.peakCurrent(), "A"),
-                Reports.row("drive current at top speed", fwd.cruiseCurrent(), "A"),
-                Reports.row("theoretical free speed (no losses)", p.theoreticalTopSpeed(), "m/s")));
+        r.table(Arrays.asList("quantity", "value", "unit"), Arrays.asList(Reports.row("top speed forward", fwd.topSpeed(), "m/s"), Reports.row("top speed strafing", strafe.topSpeed(), "m/s"), Reports.row("top turn rate", turnDps, "deg/s"), Reports.row("peak acceleration", fwd.peakAccel(), "m/s^2"), Reports.row("peak deceleration", decel, "m/s^2"), Reports.row("time to 95% speed", fwd.timeTo95(), "s"), Reports.row("peak drive current (4 motors)", fwd.peakCurrent(), "A"), Reports.row("drive current at top speed", fwd.cruiseCurrent(), "A"), Reports.row("theoretical free speed (no losses)", p.theoreticalTopSpeed(), "m/s")));
         r.heading("Full power from rest");
         r.chart(new SvgChart("Speed", "time (s)", "m/s").zeroBased().add(Reports.series("forward", speedVsTime)));
         r.chart(new SvgChart("Drive current", "time (s)", "A").zeroBased().add(Reports.series("4 motors", currentVsTime)));
         r.chart(new SvgChart("Battery voltage", "time (s)", "V").add(Reports.series("bus", busVsTime)));
         r.chart(new SvgChart("Current vs speed", "speed (m/s)", "A").zeroBased().add(Reports.series("full power", currentVsSpeed)));
         r.heading("Stop-to-stop move times (physics limit)");
-        r.chart(new SvgChart("Time to drive a distance", "distance (m)", "s").zeroBased()
-                .add(Reports.series("forward", tFwd)).add(Reports.series("strafe", tStrafe)));
+        r.chart(new SvgChart("Time to drive a distance", "distance (m)", "s").zeroBased().add(Reports.series("forward", tFwd)).add(Reports.series("strafe", tStrafe)));
         r.chart(new SvgChart("Time to turn in place", "angle (deg)", "s").zeroBased().add(Reports.series("turn", tTurn)));
         r.heading("Battery effect");
         r.chart(new SvgChart("Top speed vs battery", "resting voltage (V)", "m/s").add(Reports.series("top speed", topVsV)));
@@ -247,6 +230,7 @@ public final class DriveScenario {
     }
 
     static double interp(List<double[]> pts, double x) {
+
         for (int i = 1; i < pts.size(); i++) {
             double[] a = pts.get(i - 1), b = pts.get(i);
             if (x >= a[0] && x <= b[0]) return a[1] + (x - a[0]) / (b[0] - a[0]) * (b[1] - a[1]);

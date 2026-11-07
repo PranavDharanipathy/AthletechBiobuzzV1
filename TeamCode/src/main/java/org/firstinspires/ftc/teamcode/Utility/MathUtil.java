@@ -237,6 +237,7 @@ public strictfp class MathUtil {
     }
 
     public static double approach(double current, double target, double maxStep) {
+
         double d = target - current;
         if (d > maxStep) return current + maxStep;
         if (d < -maxStep) return current - maxStep;
@@ -246,6 +247,7 @@ public strictfp class MathUtil {
     /// Smooth sign: tanh(x / width). Avoids the discontinuity of sgn() at zero, which otherwise
     /// makes friction feedforward chatter when the velocity estimate hovers around 0.
     public static double smoothSign(double x, double width) {
+
         if (width <= 0) return Math.signum(x);
         double r = x / width;
         if (r > 4) return 1;
@@ -263,6 +265,7 @@ public strictfp class MathUtil {
     }
 
     public static double lowPassAlpha(double dt, double tau) {
+
         if (tau <= 0) return 1;
         return 1.0 - Math.exp(-dt / tau);
     }

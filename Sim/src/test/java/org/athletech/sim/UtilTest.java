@@ -19,6 +19,7 @@ public class UtilTest {
 
     @Test
     public void tableInterpolatesAndClamps() {
+
         Table1D t = new Table1D(new double[]{2, 0, 1}, new double[]{4, 0, 1});
         assertEquals(0.5, t.at(0.5), 1e-12);
         assertEquals(2.5, t.at(1.5), 1e-12);
@@ -28,6 +29,7 @@ public class UtilTest {
 
     @Test
     public void statsBasics() {
+
         Stats.Fit f = Stats.linearFit(new double[]{0, 1, 2, 3}, new double[]{1, 3, 5, 7});
         assertEquals(2, f.slope(), 1e-12);
         assertEquals(1, f.intercept(), 1e-12);
@@ -40,6 +42,7 @@ public class UtilTest {
 
     @Test
     public void jsonRoundTrip() {
+
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("a", Arrays.asList(1.5, "x\"y", true));
         m.put("b", Collections.singletonMap("c", Double.NaN));
@@ -51,6 +54,7 @@ public class UtilTest {
 
     @Test
     public void csvQuotesAndNumbers() {
+
         assertEquals(Arrays.asList("a", "b,c", "d\"e"), Csv.parseLine("a,\"b,c\",\"d\"\"e\""));
         assertEquals("0.1", Csv.fmt(0.1));
         assertEquals("3", Csv.fmt(3.0));

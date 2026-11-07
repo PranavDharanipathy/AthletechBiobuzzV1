@@ -1,9 +1,5 @@
 package org.athletech.sim.robot;
 
-/**
- * Turret slew timing: accelerate at {@code maxAccelDps2} up to {@code maxSpeedDps}, decelerate,
- * then settle. Range-limited turrets that must go "the long way" are the caller's business.
- */
 public final class Turret {
     private final double maxSpeedDps;
     private final double maxAccelDps2;
@@ -11,6 +7,7 @@ public final class Turret {
     private final double rangeDeg;
 
     public Turret(double maxSpeedDps, double maxAccelDps2, double settleS, double rangeDeg) {
+
         if (!(maxSpeedDps > 0) || !(maxAccelDps2 > 0)) throw new IllegalArgumentException("turret speed and acceleration must be positive");
     
         this.maxSpeedDps = maxSpeedDps;
@@ -26,13 +23,11 @@ public final class Turret {
 
     @Override
     public boolean equals(Object other) {
+
         if (this == other) return true;
         if (!(other instanceof Turret)) return false;
         Turret o = (Turret) other;
-        return Double.compare(maxSpeedDps, o.maxSpeedDps) == 0
-                && Double.compare(maxAccelDps2, o.maxAccelDps2) == 0
-                && Double.compare(settleS, o.settleS) == 0
-                && Double.compare(rangeDeg, o.rangeDeg) == 0;
+        return Double.compare(maxSpeedDps, o.maxSpeedDps) == 0 && Double.compare(maxAccelDps2, o.maxAccelDps2) == 0 && Double.compare(settleS, o.settleS) == 0 && Double.compare(rangeDeg, o.rangeDeg) == 0;
     }
 
     @Override
@@ -45,8 +40,8 @@ public final class Turret {
         return "Turret[maxSpeedDps=" + maxSpeedDps + ", maxAccelDps2=" + maxAccelDps2 + ", settleS=" + settleS + ", rangeDeg=" + rangeDeg + "]";
     }
 
-    /** Seconds to rotate {@code deg} degrees and settle. */
     public double timeToTurn(double deg) {
+
         double d = Math.abs(deg);
         if (d == 0) return 0;
         double v = maxSpeedDps, a = maxAccelDps2;

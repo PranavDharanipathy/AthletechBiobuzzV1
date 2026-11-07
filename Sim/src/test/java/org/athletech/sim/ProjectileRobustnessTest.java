@@ -13,9 +13,9 @@ public class ProjectileRobustnessTest {
     private final Vec3 position = new Vec3(0, 0, 2), velocity = new Vec3(0.1, 0, 0);
 
     @Test public void invalidTimestepsAndBallPropertiesAreRejected() {
+
         invalid(() -> fly(Double.NaN));
         invalid(() -> fly(-0.001));
-        // Avoid calling the old zero-dt infinite loop; zero is covered after the finite-dt cases.
         invalid(() -> fly(0));
         invalid(() -> new Projectile.Ball("bad", 0, 0.071, 0.5, 0));
         invalid(() -> new Projectile.Ball("bad", 0.02, Double.POSITIVE_INFINITY, 0.5, 0));
@@ -23,6 +23,7 @@ public class ProjectileRobustnessTest {
     }
 
     @Test public void timeoutDoesNotIntegratePastTheRequestedHorizon() {
+
         Aperture far = Aperture.circleFacingUp("far", new Vec3(100, 0, -100), 0.1);
         Projectile.Result result = Projectile.fly(ball, position, velocity, far, 1.2, 0.01, 0.025);
         assertEquals(Projectile.Outcome.TIMEOUT, result.outcome());
@@ -30,6 +31,7 @@ public class ProjectileRobustnessTest {
     }
 
     @Test public void flightAllocationDoesNotGrowWithIntegrationSteps() {
+
         java.lang.management.ThreadMXBean raw = java.lang.management.ManagementFactory.getThreadMXBean();
         assumeTrue(raw instanceof com.sun.management.ThreadMXBean);
         com.sun.management.ThreadMXBean bean = (com.sun.management.ThreadMXBean) raw;
@@ -39,11 +41,11 @@ public class ProjectileRobustnessTest {
         long coarse = allocated(bean, 0.01);
         long fine = allocated(bean, 0.001);
         System.out.println("Projectile bytes/flight: dt=0.01 " + coarse + ", dt=0.001 " + fine);
-        assertTrue("per-flight allocations should be bounded, coarse=" + coarse + ", fine=" + fine,
-                fine <= coarse * 1.5 + 2048);
+        assertTrue("per-flight allocations should be bounded, coarse=" + coarse + ", fine=" + fine, fine <= coarse * 1.5 + 2048);
     }
 
     @Test public void requestingATraceDoesNotChangeTheFlightSolution() {
+
         java.util.List<Vec3> trace = new java.util.ArrayList<>();
         Projectile.Result plain = fly(0.002);
         Projectile.Result traced = Projectile.fly(ball, position, velocity, target, 1.2, 0.002, 4, trace);
@@ -55,6 +57,7 @@ public class ProjectileRobustnessTest {
     }
 
     private long allocated(com.sun.management.ThreadMXBean bean, double dt) {
+
         long id = Thread.currentThread().getId();
         long start = bean.getThreadAllocatedBytes(id);
         for (int i = 0; i < 20; i++) assertTrue(fly(dt).made());
@@ -64,6 +67,7 @@ public class ProjectileRobustnessTest {
         return Projectile.fly(ball, position, velocity, target, 1.2, dt, 4);
     }
     private static void invalid(Runnable operation) {
+
         try { operation.run(); }
         catch (IllegalArgumentException expected) { return; }
         fail("invalid flight input accepted");

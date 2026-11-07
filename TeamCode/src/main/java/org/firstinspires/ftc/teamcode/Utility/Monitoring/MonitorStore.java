@@ -31,34 +31,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * The monitor's on-robot database: one folder per session under
- * {@code /sdcard/FIRST/data/HardwareMonitor/sessions/}, readable after the OpMode stops and
- * across robot restarts.
- *
- * <pre>
- * HardwareMonitor/
- *   index.csv                 one row per finished session
- *   sessions/&lt;id&gt;/
- *     summary.json            all aggregate statistics (rewritten every few seconds)
- *     devices.csv             device id, name, type, caching, connection
- *     events.csv              every read/write: time, device, op, cached/redundant, latency
- *     system.csv              time series: loop time, I/O time, battery, current, energy, ...
- *     motors.csv              time series per motor: current, velocity, back-EMF, power
- * </pre>
- *
- * Copy it to a laptop with {@code adb pull /sdcard/FIRST/data/HardwareMonitor}, browse it on the
- * robot with the "Hardware Monitor Viewer" OpMode, and delete it with
- * {@link HardwareMonitor#clearDatabase()}.
- *
- * <p>All file I/O for a running session happens on one background thread; the robot loop only
- * enqueues rows.
- */
 public final class MonitorStore {
 
     public static final String ROOT_NAME = "HardwareMonitor";
-    static final String INDEX_HEADER = "session,opmode,start,duration_s,loops,avg_loop_ms,"
-            + "p95_loop_ms,min_battery_v,energy_wh,charge_mah,devices,complete";
+    static final String INDEX_HEADER = "session,opmode,start,duration_s,loops,avg_loop_ms," + "p95_loop_ms,min_battery_v,energy_wh,charge_mah,devices,complete";
 
     private static final String TAG = HardwareMonitor.TAG;
     private static final Object FS_LOCK = new Object();
@@ -77,14 +53,11 @@ public final class MonitorStore {
         return new File(rootDir(), "index.csv");
     }
 
-    /** Supplies session data to the writer thread. */
     interface Provider {
         String summaryJson(boolean complete);
 
         String indexRow();
     }
-
-    // ================================================================== session writer
 
     private final File dir;
     private final EventBuffer events;
@@ -120,9 +93,8 @@ public final class MonitorStore {
         this(dir, events, maxEventBytes, summaryPeriodMs, provider, newWriterExecutor());
     }
 
-    /** Package-level scheduler injection for deterministic storage/lifecycle tests. */
-    MonitorStore(File dir, EventBuffer events, long maxEventBytes, long summaryPeriodMs,
-                 Provider provider, ScheduledExecutorService executor) {
+    MonitorStore(File dir, EventBuffer events, long maxEventBytes, long summaryPeriodMs, Provider provider, ScheduledExecutorService executor) {
+
         this.dir = dir;
         this.events = events;
         this.spare = events == null ? null : new EventBuffer.Batch(events.capacity());
@@ -140,9 +112,11 @@ public final class MonitorStore {
     }
 
     private static ScheduledExecutorService newWriterExecutor() {
+
         return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {
+
                 Thread t = new Thread(r, "HardwareMonitor-writer");
                 t.setDaemon(true);
                 t.setPriority(Thread.MIN_PRIORITY);
@@ -156,6 +130,7 @@ public final class MonitorStore {
     }
 
     void addDevice(int id, String name, String csvRow) {
+
         synchronized (admissionLock) {
             if (finishing.get() || closed) return;
             synchronized (deviceNames) {
@@ -166,7 +141,6 @@ public final class MonitorStore {
         }
     }
 
-    /** Sets the system.csv header (first call wins - columns depend on the hubs present). */
     void setSystemHeader(String header) {
         if (systemHeader == null) systemHeader = header;
     }
@@ -184,9 +158,9 @@ public final class MonitorStore {
     }
 
     private void enqueue(Queue<String> rows, String row) {
+
         synchronized (admissionLock) {
             if (finishing.get() || closed) return;
-            // Monitoring must shed data rather than block a loop or grow without bound.
             if (!rows.offer(row)) droppedRows++;
         }
     }
@@ -211,8 +185,8 @@ public final class MonitorStore {
         return lastError;
     }
 
-    /** Writes everything still queued plus the final summary, then stops the writer thread. */
     void finish() {
+
         synchronized (admissionLock) {
             if (!finishing.compareAndSet(false, true)) return;
         }
@@ -231,6 +205,7 @@ public final class MonitorStore {
     }
 
     private void finishNow() {
+
         flush(true);
         String row = null;
         try {
@@ -253,6 +228,7 @@ public final class MonitorStore {
     }
 
     private void flush(boolean finalFlush) {
+
         if (closed) return;
         long now = System.nanoTime();
         String summary = null;
@@ -291,14 +267,14 @@ public final class MonitorStore {
     }
 
     private void openIfNeeded() throws IOException {
+
         if (devicesOut != null) return;
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
         Writer devices = null, system = null, motors = null, eventLog = null;
         try {
             devices = open("devices.csv", "id,name,type,device_class,cache_reads,connection");
             system = open("system.csv", null);
-            motors = open("motors.csv", "t_s,motor,commanded_power,current_a,velocity_tps,"
-                    + "bemf_v,bemf_electrical_v,bemf_to_battery,input_power_w,energy_wh");
+            motors = open("motors.csv", "t_s,motor,commanded_power,current_a,velocity_tps," + "bemf_v,bemf_electrical_v,bemf_to_battery,input_power_w,energy_wh");
             if (events != null) eventLog = open("events.csv", "t_s,device_id,device,op,kind,flag,latency_us");
         } catch (IOException | RuntimeException e) {
             closeQuietly(devices);
@@ -307,7 +283,6 @@ public final class MonitorStore {
             closeQuietly(eventLog);
             throw e;
         }
-        // Publish only a complete set. A later flush can retry after any partial failure.
         devicesOut = devices;
         systemOut = system;
         motorsOut = motors;
@@ -315,6 +290,7 @@ public final class MonitorStore {
     }
 
     private Writer open(String name, String header) throws IOException {
+
         File f = new File(dir, name);
         boolean fresh = !f.exists() || f.length() == 0;
         Writer w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f, true), "UTF-8"), 1 << 16);
@@ -331,6 +307,7 @@ public final class MonitorStore {
     }
 
     private static void drain(Queue<String> q, Writer out) throws IOException {
+
         String row;
         while ((row = q.poll()) != null) {
             out.write(row);
@@ -339,6 +316,7 @@ public final class MonitorStore {
     }
 
     private void drainEvents() throws IOException {
+
         if (events == null || eventsOut == null) return;
         EventBuffer.Batch full = events.swap(spare);
         spare = full;
@@ -350,7 +328,7 @@ public final class MonitorStore {
         StringBuilder sb = line;
         for (int i = 0; i < full.size; i++) {
             sb.setLength(0);
-            appendFixed(sb, full.timeNs[i] / 1000, 6);            // seconds, microsecond resolution
+            appendFixed(sb, full.timeNs[i] / 1000, 6);            //seconds, microsecond resolution
             int id = full.deviceId[i];
             int op = full.op[i];
             sb.append(',').append(id).append(',')
@@ -359,7 +337,7 @@ public final class MonitorStore {
                     .append(',')
                     .append(HwOp.fromOrdinal(op).isRead() ? 'R' : 'W')
                     .append(',').append(full.flag[i] ? '1' : '0').append(',');
-            appendFixed(sb, full.latencyNs[i] / 100, 1);          // microseconds, 0.1 us resolution
+            appendFixed(sb, full.latencyNs[i] / 100, 1);          //microseconds, 0.1 us resolution
             sb.append('\n');
             eventsOut.append(sb);
             eventBytes += sb.length();
@@ -372,8 +350,8 @@ public final class MonitorStore {
         }
     }
 
-    /** Appends {@code value / 10^decimals} with exactly {@code decimals} digits after the point. */
     static void appendFixed(StringBuilder sb, long value, int decimals) {
+
         if (value < 0) {
             sb.append('-');
             value = -value;
@@ -389,6 +367,7 @@ public final class MonitorStore {
     }
 
     private static void writeAtomically(File target, String content) throws IOException {
+
         File tmp = new File(target.getPath() + ".tmp");
         Writer w = new OutputStreamWriter(new FileOutputStream(tmp, false), "UTF-8");
         try {
@@ -397,7 +376,6 @@ public final class MonitorStore {
             w.close();
         }
         if (!tmp.renameTo(target)) {
-            // some filesystems refuse to rename over an existing file
             //noinspection ResultOfMethodCallIgnored
             target.delete();
             if (!tmp.renameTo(target)) throw new IOException("cannot replace " + target);
@@ -405,6 +383,7 @@ public final class MonitorStore {
     }
 
     private static void appendIndexRow(String row) throws IOException {
+
         File root = rootDir();
         if (!root.isDirectory() && !root.mkdirs()) throw new IOException("cannot create " + root);
         File index = indexFile();
@@ -420,23 +399,20 @@ public final class MonitorStore {
     }
 
     private static void closeQuietly(Writer w) {
+
         if (w == null) return;
         try {
             w.close();
         } catch (IOException ignored) {
-            // nothing useful to do
         }
     }
 
-    /** Makes a value safe for a CSV cell. */
     static String csv(String s) {
+
         if (s == null) return "";
         return s.replace(',', ';').replace('\n', ' ').replace('\r', ' ');
     }
 
-    // ================================================================== reading / clearing
-
-    /** One stored session as listed by {@link #listSessions()}. */
     public static final class SessionInfo {
         public final String id;
         public final File dir;
@@ -449,11 +425,11 @@ public final class MonitorStore {
         public final double minBatteryV;
         public final double energyWh;
         public final int devices;
-        /** False while recording, or if the robot lost power before the session ended. */
         public final boolean complete;
         public final long sizeBytes;
 
         SessionInfo(String id, File dir, String[] row, long sizeBytes) {
+
             this.id = id;
             this.dir = dir;
             this.sizeBytes = sizeBytes;
@@ -468,7 +444,8 @@ public final class MonitorStore {
                 energyWh = parse(row[8]);
                 devices = (int) parse(row[10]);
                 complete = "true".equals(row[11]);
-            } else {
+            }
+            else {
                 int us = id.indexOf('_');
                 opMode = us >= 0 ? id.substring(us + 1) : id;
                 start = us >= 0 ? id.substring(0, us) : "";
@@ -480,6 +457,7 @@ public final class MonitorStore {
         }
 
         private static double parse(String s) {
+
             try {
                 return Double.parseDouble(s);
             } catch (NumberFormatException e) {
@@ -488,8 +466,8 @@ public final class MonitorStore {
         }
     }
 
-    /** All stored sessions, newest first. */
     public static List<SessionInfo> listSessions() {
+
         synchronized (FS_LOCK) {
             Map<String, String[]> index = readIndex();
             File[] dirs = sessionsDir().listFiles();
@@ -504,8 +482,8 @@ public final class MonitorStore {
         }
     }
 
-    /** Parsed summary.json of a session. */
     public static JSONObject readSummary(String sessionId) throws IOException, JSONException {
+
         File f = new File(new File(sessionsDir(), sessionId), "summary.json");
         String text;
         synchronized (FS_LOCK) {
@@ -514,11 +492,8 @@ public final class MonitorStore {
         return new JSONObject(text);
     }
 
-    /**
-     * Deletes every stored session except {@code keepSessionId} (the one being recorded, may be
-     * null) and the index. Returns how many sessions were deleted.
-     */
     public static int clearAll(String keepSessionId) {
+
         synchronized (FS_LOCK) {
             int deleted = 0;
             File[] dirs = sessionsDir().listFiles();
@@ -535,8 +510,8 @@ public final class MonitorStore {
         }
     }
 
-    /** Deletes one stored session and its index row. */
     public static boolean deleteSession(String sessionId) {
+
         synchronized (FS_LOCK) {
             boolean ok = deleteRecursively(new File(sessionsDir(), sessionId));
             Map<String, String[]> index = readIndex();
@@ -545,14 +520,15 @@ public final class MonitorStore {
         }
     }
 
-    /** Total bytes used by the database. */
     public static long totalSizeBytes() {
+
         synchronized (FS_LOCK) {
             return sizeOf(rootDir());
         }
     }
 
     private static Map<String, String[]> readIndex() {
+
         Map<String, String[]> map = new HashMap<>();
         File f = indexFile();
         if (!f.exists()) return map;
@@ -569,6 +545,7 @@ public final class MonitorStore {
     }
 
     private static void rewriteIndex(Map<String, String[]> index) {
+
         List<String> ids = new ArrayList<>(index.keySet());
         Collections.sort(ids);
         StringBuilder sb = new StringBuilder(INDEX_HEADER).append('\n');
@@ -588,6 +565,7 @@ public final class MonitorStore {
     }
 
     private static String readText(File f) throws IOException {
+
         StringBuilder sb = new StringBuilder((int) Math.min(Integer.MAX_VALUE, Math.max(16, f.length())));
         BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
         try {
@@ -601,6 +579,7 @@ public final class MonitorStore {
     }
 
     private static boolean deleteRecursively(File f) {
+
         File[] children = f.listFiles();
         if (children != null) {
             for (File c : children) deleteRecursively(c);
@@ -609,6 +588,7 @@ public final class MonitorStore {
     }
 
     private static long sizeOf(File f) {
+
         if (f.isFile()) return f.length();
         long total = 0;
         File[] children = f.listFiles();

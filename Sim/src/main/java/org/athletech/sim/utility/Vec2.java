@@ -1,11 +1,11 @@
 package org.athletech.sim.utility;
 
-/** Immutable 2D vector (meters unless stated otherwise). */
 public final class Vec2 {
     private final double x;
     private final double y;
 
     public Vec2(double x, double y) {
+
         this.x = x;
         this.y = y;
     }
@@ -15,11 +15,11 @@ public final class Vec2 {
 
     @Override
     public boolean equals(Object other) {
+
         if (this == other) return true;
         if (!(other instanceof Vec2)) return false;
         Vec2 o = (Vec2) other;
-        return Double.compare(x, o.x) == 0
-                && Double.compare(y, o.y) == 0;
+        return Double.compare(x, o.x) == 0 && Double.compare(y, o.y) == 0;
     }
 
     @Override
@@ -46,8 +46,8 @@ public final class Vec2 {
     public double norm() { return Math.hypot(x, y); }
     public double angle() { return Math.atan2(y, x); }
 
-    /** Rotates counter-clockwise by {@code angleRad}. */
     public Vec2 rotate(double angleRad) {
+
         double c = Math.cos(angleRad), s = Math.sin(angleRad);
         return new Vec2(c * x - s * y, s * x + c * y);
     }

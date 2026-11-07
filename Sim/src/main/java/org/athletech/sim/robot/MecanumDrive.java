@@ -5,26 +5,6 @@ import org.athletech.sim.physics.Battery;
 import org.athletech.sim.physics.DcMotor;
 import org.athletech.sim.physics.MotorSpec;
 
-/**
- * Mecanum drivetrain dynamics: four motors driven from a sagging battery, traction-limited wheel
- * forces, rolling resistance, and strafing losses. Robot frame: +x forward, +y left, yaw CCW.
- *
- * <p>Wheel order FL, FR, BL, BR, rollers in the usual X pattern seen from above. Wheel surface
- * speeds and forces follow the standard mecanum Jacobian:
- * <pre>
- *   wheel speed FL = vx - vy/eta - k*w     forces:  Fx = fFL + fFR + fBL + fBR
- *               FR = vx + vy/eta + k*w              Fy = eta * (-fFL + fFR + fBL - fBR)
- *               BL = vx + vy/eta - k*w              Tz = k   * (-fFL + fFR - fBL + fBR)
- *               BR = vx - vy/eta + k*w              k  = (trackWidth + wheelbase) / 2
- * </pre>
- * {@code eta} (strafe efficiency) lumps roller slip/friction: strafing needs 1/eta more wheel
- * speed and gives eta of the force. Each wheel's force is capped by traction, mu*N/sqrt(2) (the
- * 45-degree rollers push diagonally). A wheel whose motor pushes harder than that slips: it spins
- * (or skids) until the motor's torque falls to the traction limit (quasi-static: wheel and gearbox
- * inertia are small), so a slipping motor draws the current of that faster or slower speed, not
- * stall current, and {@link #slipSpeedMean()} says how fast the rollers rub the tiles (static
- * charging).
- */
 public final class MecanumDrive {
     public static final int FL = 0, FR = 1, BL = 2, BR = 3;
 
@@ -44,6 +24,7 @@ public final class MecanumDrive {
         private final boolean brake;
 
         public Params(double massKg, double moiKgm2, double wheelRadiusM, double trackWidthM, double wheelbaseM, double gearRatio, MotorSpec motor, double frictionCoeff, double strafeEfficiency, double rollingResistanceCoeff, double currentLimitA, double maxPower, boolean brake) {
+
             if (!(massKg > 0) || !(moiKgm2 > 0) || !(wheelRadiusM > 0) || !(gearRatio > 0)) {
                 throw new IllegalArgumentException("mass, inertia, wheel radius and gear ratio must be positive");
             }
@@ -80,22 +61,11 @@ public final class MecanumDrive {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Params)) return false;
             Params o = (Params) other;
-            return Double.compare(massKg, o.massKg) == 0
-                    && Double.compare(moiKgm2, o.moiKgm2) == 0
-                    && Double.compare(wheelRadiusM, o.wheelRadiusM) == 0
-                    && Double.compare(trackWidthM, o.trackWidthM) == 0
-                    && Double.compare(wheelbaseM, o.wheelbaseM) == 0
-                    && Double.compare(gearRatio, o.gearRatio) == 0
-                    && java.util.Objects.equals(motor, o.motor)
-                    && Double.compare(frictionCoeff, o.frictionCoeff) == 0
-                    && Double.compare(strafeEfficiency, o.strafeEfficiency) == 0
-                    && Double.compare(rollingResistanceCoeff, o.rollingResistanceCoeff) == 0
-                    && Double.compare(currentLimitA, o.currentLimitA) == 0
-                    && Double.compare(maxPower, o.maxPower) == 0
-                    && brake == o.brake;
+            return Double.compare(massKg, o.massKg) == 0 && Double.compare(moiKgm2, o.moiKgm2) == 0 && Double.compare(wheelRadiusM, o.wheelRadiusM) == 0 && Double.compare(trackWidthM, o.trackWidthM) == 0 && Double.compare(wheelbaseM, o.wheelbaseM) == 0 && Double.compare(gearRatio, o.gearRatio) == 0 && java.util.Objects.equals(motor, o.motor) && Double.compare(frictionCoeff, o.frictionCoeff) == 0 && Double.compare(strafeEfficiency, o.strafeEfficiency) == 0 && Double.compare(rollingResistanceCoeff, o.rollingResistanceCoeff) == 0 && Double.compare(currentLimitA, o.currentLimitA) == 0 && Double.compare(maxPower, o.maxPower) == 0 && brake == o.brake;
         }
 
         @Override
@@ -108,7 +78,6 @@ public final class MecanumDrive {
             return "Params[massKg=" + massKg + ", moiKgm2=" + moiKgm2 + ", wheelRadiusM=" + wheelRadiusM + ", trackWidthM=" + trackWidthM + ", wheelbaseM=" + wheelbaseM + ", gearRatio=" + gearRatio + ", motor=" + motor + ", frictionCoeff=" + frictionCoeff + ", strafeEfficiency=" + strafeEfficiency + ", rollingResistanceCoeff=" + rollingResistanceCoeff + ", currentLimitA=" + currentLimitA + ", maxPower=" + maxPower + ", brake=" + brake + "]";
         }
 
-        /** Free speed of the robot driving forward, ignoring every loss, m/s. */
         public double theoreticalTopSpeed() {
             return motor.freeSpeedRadPerSec() / gearRatio * wheelRadiusM;
         }
@@ -120,7 +89,6 @@ public final class MecanumDrive {
     private final double k;
     private final double tractionLimit;
 
-    // field-frame state
     private double x, y, heading, vx, vy, omega;
     private final double[] wheelCurrent = new double[4];
     private final boolean[] slipping = new boolean[4];
@@ -128,6 +96,7 @@ public final class MecanumDrive {
     private double busVolts, batteryCurrent;
 
     public MecanumDrive(Params p) {
+
         this.p = p;
         for (int i = 0; i < 4; i++) {
             motors[i] = new DcMotor(p.motor());
@@ -135,22 +104,21 @@ public final class MecanumDrive {
             motors[i].setCurrentLimit(p.currentLimitA());
         }
         this.k = (p.trackWidthM() + p.wheelbaseM()) / 2;
-        this.tractionLimit = p.frictionCoeff() > 0
-                ? p.frictionCoeff() * p.massKg() * Physics.G / 4 / Math.sqrt(2)
-                : Double.POSITIVE_INFINITY;
+        this.tractionLimit = p.frictionCoeff() > 0 ? p.frictionCoeff() * p.massKg() * Physics.G / 4 / Math.sqrt(2) : Double.POSITIVE_INFINITY;
     }
 
     public Params params() { return p; }
 
     public void reset(double x, double y, double heading) {
+
         this.x = x;
         this.y = y;
         this.heading = heading;
         vx = vy = omega = 0;
     }
 
-    /** Raw wheel powers in [-1, 1], scaled by the configured max power. */
     public void setPowers(double fl, double fr, double bl, double br) {
+
         double cap = p.maxPower() > 0 ? p.maxPower() : 1;
         motors[FL].setDuty(fl * cap);
         motors[FR].setDuty(fr * cap);
@@ -158,8 +126,8 @@ public final class MecanumDrive {
         motors[BR].setDuty(br * cap);
     }
 
-    /** Robot-centric drive with the usual TeleOp mixing. Inputs in [-1, 1]. */
     public void drive(double forward, double strafeLeft, double turnCcw) {
+
         double fl = forward - strafeLeft - turnCcw;
         double fr = forward + strafeLeft + turnCcw;
         double bl = forward + strafeLeft - turnCcw;
@@ -168,8 +136,8 @@ public final class MecanumDrive {
         setPowers(fl / m, fr / m, bl / m, br / m);
     }
 
-    /** Advances the simulation by {@code dt}. {@code otherBatteryCurrentA} = everything else on the battery. */
     public void step(double dt, Battery battery, double otherBatteryCurrentA) {
+
         double c = Math.cos(heading), s = Math.sin(heading);
         double vxr = c * vx + s * vy, vyr = -s * vx + c * vy;
         double eta = p.strafeEfficiency();
@@ -205,18 +173,19 @@ public final class MecanumDrive {
         double fy = eta * (-f[FL] + f[FR] + f[BL] - f[BR]);
         double tz = k * (-f[FL] + f[FR] - f[BL] + f[BR]);
 
-        // rolling resistance: opposes motion, never reverses it, holds the robot when the push is small
         double rr = p.rollingResistanceCoeff() * p.massKg() * Physics.G;
         double sp = Math.hypot(vxr, vyr);
         if (sp > 1e-4) {
             double cap = Math.min(rr, p.massKg() * sp / dt);
             fx -= cap * vxr / sp;
             fy -= cap * vyr / sp;
-        } else {
+        }
+        else {
             double fn = Math.hypot(fx, fy);
             if (fn <= rr) {
                 fx = fy = 0;
-            } else {
+            }
+            else {
                 fx -= rr * fx / fn;
                 fy -= rr * fy / fn;
             }
@@ -224,9 +193,11 @@ public final class MecanumDrive {
         double rrT = rr * k / 2;
         if (Math.abs(omega) > 1e-4) {
             tz -= Math.copySign(Math.min(rrT, p.moiKgm2() * Math.abs(omega) / dt), omega);
-        } else if (Math.abs(tz) <= rrT) {
+        }
+        else if (Math.abs(tz) <= rrT) {
             tz = 0;
-        } else {
+        }
+        else {
             tz -= Math.copySign(rrT, tz);
         }
 
@@ -241,31 +212,22 @@ public final class MecanumDrive {
         battery.drain(dt);
     }
 
-    /**
-     * Output-shaft speed of wheel {@code i} at bus voltage {@code v}: the no-slip speed, or, when the
-     * motor would push harder than traction allows, the speed where its force equals the limit.
-     */
     private double shaftSpeed(int i, double v, double noSlip) {
+
         double f0 = motors[i].torque(motors[i].current(v, noSlip), noSlip) * p.gearRatio() / p.wheelRadiusM();
         if (!(Math.abs(f0) > tractionLimit)) return noSlip;
         double dir = Math.signum(f0);
         return motors[i].speedForTorque(v, dir * tractionLimit * p.wheelRadiusM() / p.gearRatio(), noSlip, dir);
     }
 
-    // ------------------------------------------------------------------ contacts
-
-    /** Moves the robot without changing its velocity (used to keep it inside the field walls). */
     public void moveTo(double x, double y) {
+
         this.x = x;
         this.y = y;
     }
 
-    /**
-     * Hits a surface whose normal (nx, ny) points back into the field: the velocity component into
-     * the surface reverses and shrinks by {@code restitution}. Returns the change in speed along
-     * the normal (m/s, 0 if the robot was moving away).
-     */
     public double collide(double nx, double ny, double restitution) {
+
         double n = Math.hypot(nx, ny);
         if (n == 0) return 0;
         nx /= n;
@@ -278,42 +240,37 @@ public final class MecanumDrive {
         return dv;
     }
 
-    // ------------------------------------------------------------------ state
-
     public double x() { return x; }
     public double y() { return y; }
     public double heading() { return heading; }
-    /** Field-frame velocity. */
     public double vx() { return vx; }
     public double vy() { return vy; }
     public double omega() { return omega; }
 
-    /** Robot-frame velocity: forward and left components. */
     public double forwardSpeed() { return Math.cos(heading) * vx + Math.sin(heading) * vy; }
     public double leftSpeed() { return -Math.sin(heading) * vx + Math.cos(heading) * vy; }
     public double speed() { return Math.hypot(vx, vy); }
 
     public double busVolts() { return busVolts; }
-    /** Total battery current of the last step (drive + other loads), A. */
     public double batteryCurrent() { return batteryCurrent; }
 
-    /** Sum of |winding current| over the four drive motors, A. */
     public double motorCurrentTotal() {
+
         double t = 0;
         for (double c : wheelCurrent) t += Math.abs(c);
         return t;
     }
 
     public boolean anySlipping() {
+
         for (boolean b : slipping) if (b) return true;
         return false;
     }
 
-    /** How fast wheel {@code i}'s surface slides over the tiles in the last step, m/s (0 = rolling). */
     public double wheelSlip(int i) { return Math.abs(wheelSlip[i]); }
 
-    /** Average sliding speed of the four wheels against the tiles, m/s. */
     public double slipSpeedMean() {
+
         double t = 0;
         for (double s : wheelSlip) t += Math.abs(s);
         return t / 4;

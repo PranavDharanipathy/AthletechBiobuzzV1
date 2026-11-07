@@ -5,11 +5,6 @@ import org.athletech.sim.robot.MecanumDrive;
 
 import java.util.function.Supplier;
 
-/**
- * Physics-limited move times: full power toward the goal, then full reverse power to stop exactly
- * on it ("bang-bang", the fastest any controller could do). The switch point is found by
- * bisection. Real path followers are slower; scale by {@code drive.path_overhead_factor}.
- */
 public final class DriveTimePredictor {
     private DriveTimePredictor() {
     }
@@ -18,7 +13,6 @@ public final class DriveTimePredictor {
 
     public static final double DT = 0.002;
 
-    /** Result of one stop-to-stop move. */
     public static final class Move {
         private final double timeS;
         private final double peakSpeed;
@@ -26,6 +20,7 @@ public final class DriveTimePredictor {
         private final double minBusV;
 
         public Move(double timeS, double peakSpeed, double peakCurrentA, double minBusV) {
+
             this.timeS = timeS;
             this.peakSpeed = peakSpeed;
             this.peakCurrentA = peakCurrentA;
@@ -39,13 +34,11 @@ public final class DriveTimePredictor {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Move)) return false;
             Move o = (Move) other;
-            return Double.compare(timeS, o.timeS) == 0
-                    && Double.compare(peakSpeed, o.peakSpeed) == 0
-                    && Double.compare(peakCurrentA, o.peakCurrentA) == 0
-                    && Double.compare(minBusV, o.minBusV) == 0;
+            return Double.compare(timeS, o.timeS) == 0 && Double.compare(peakSpeed, o.peakSpeed) == 0 && Double.compare(peakCurrentA, o.peakCurrentA) == 0 && Double.compare(minBusV, o.minBusV) == 0;
         }
 
         @Override
@@ -59,11 +52,8 @@ public final class DriveTimePredictor {
         }
     }
 
-    /**
-     * @param amount  meters for FORWARD/STRAFE, radians for TURN (positive)
-     * @param battery makes a fresh battery for each trial run
-     */
     public static Move timeTo(MecanumDrive.Params p, Supplier<Battery> battery, double otherCurrentA, Axis axis, double amount) {
+
         if (amount <= 0) return new Move(0, 0, 0, Double.NaN);
         double lo = 0, hi = amount;
         Move best = null;
@@ -84,8 +74,8 @@ public final class DriveTimePredictor {
         return best;
     }
 
-    /** Accelerate until {@code switchAt}, then reverse until stopped. out[0] = where it stopped. */
     private static Move run(MecanumDrive.Params p, Battery battery, double otherCurrentA, Axis axis, double switchAt, double[] out) {
+
         MecanumDrive d = new MecanumDrive(p);
         d.reset(0, 0, 0);
         double t = 0, peakV = 0, peakI = 0, minV = Double.POSITIVE_INFINITY;
@@ -117,6 +107,7 @@ public final class DriveTimePredictor {
     }
 
     public static double positionOf(MecanumDrive d, Axis axis) {
+
         switch (axis) {
             case FORWARD: return d.x();
             case STRAFE: return d.y();
@@ -125,6 +116,7 @@ public final class DriveTimePredictor {
     }
 
     public static double velocityOf(MecanumDrive d, Axis axis) {
+
         switch (axis) {
             case FORWARD: return d.forwardSpeed();
             case STRAFE: return d.leftSpeed();

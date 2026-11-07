@@ -8,21 +8,21 @@ public class FlywheelConstants {
 
     public static DcMotorSimple.Direction FLYWHEEL_MOTOR_DIRECTION = DcMotorSimple.Direction.FORWARD;
 
-    public static double FLYWHEEL_VOLTAGE_SAMPLE_PERIOD = 0.02;
-    public static double FLYWHEEL_VOLTAGE_FILTER_TAU = 0.1;
+    public static double FLYWHEEL_VOLTAGE_SAMPLE_PERIOD = TunedConstants.FLYWHEEL_VOLTAGE_SAMPLE_PERIOD;
+    public static double FLYWHEEL_VOLTAGE_FILTER_TAU = TunedConstants.FLYWHEEL_VOLTAGE_FILTER_TAU;
     public static double FLYWHEEL_NOMINAL_VOLTS = 12.0;
 
     public static FlywheelPIDVSCoefficients FLYWHEEL_PIDVS_COEFFICIENTS = new FlywheelPIDVSCoefficients(
-            0.024,
-            0.009,
+            0.068,
+            0.07025,
             0,
             0.002,
-            0.00035,
-            0.00478,
+            0.0003,
+            0.00474,
             0.4,
             35,
-            100,
-            80,
+            110,
+            120,
             0.05,
             -2, 3,
             -0.3, 0.3,
@@ -31,5 +31,15 @@ public class FlywheelConstants {
 
     public static double FLYWHEEL_VELOCITY_MARGIN_OF_ERROR = 50;
     public static double FLYWHEEL_STABILITY_MARGIN_OF_ERROR = 20;
+
+    public static double FLYWHEEL_TICKS_PER_REV = 28;
+
+    public static boolean SHOT_GATE_ENABLED = false;
+
+    public static double SHOT_GATE_ENTER_BAND_BELOW = TunedConstants.SHOT_GATE_ENTER_BAND, SHOT_GATE_ENTER_BAND_ABOVE = TunedConstants.SHOT_GATE_ENTER_BAND;
+    public static double SHOT_GATE_HOLD_BAND_BELOW = TunedConstants.SHOT_GATE_HOLD_BAND, SHOT_GATE_HOLD_BAND_ABOVE = TunedConstants.SHOT_GATE_HOLD_BAND;
+    public static double SHOT_GATE_DWELL = TunedConstants.SHOT_GATE_DWELL;
+    public static double SHOT_GATE_MIN_OPEN = 0.05;
+    public static double SHOT_GATE_PULSE = 0;
 
 }

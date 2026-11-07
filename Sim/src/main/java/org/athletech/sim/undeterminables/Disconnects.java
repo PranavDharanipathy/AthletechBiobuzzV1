@@ -7,18 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Turns one match's stresses into disconnects. Each way of failing ({@link Mode}) has a
- * "50% point" per stress - discharge energy reaching the electronics, impact g, current rise or
- * drop rate - and fails a single event with probability {@code Phi(ln(stress / stress50) / spread)}
- * (a lognormal fragility curve, the usual model for "how hard until it breaks"). A battery dip
- * under a device's reset voltage for longer than the hold time always resets it. Motor noise and
- * unexplained failures are random rates (noise grows with current squared).
- *
- * <p>Two answers per match: the exact chance of at least one failure per mode (assuming
- * independent events), and one sampled timeline with outages - a device that is down cannot fail
- * again, and a Control Hub reboot takes everything down.
- */
 public final class Disconnects {
     private Disconnects() {
     }
@@ -26,15 +14,14 @@ public final class Disconnects {
     public static final String[] CAUSES = {"static discharge", "brownout", "impact", "current surge", "current drop", "motor noise", "random"};
     public static final int ESD = 0, BROWNOUT = 1, IMPACT = 2, SURGE = 3, DROP = 4, EMI = 5, RANDOM = 6;
 
-    /** One way to fail. Empty sensitivities are NaN (not affected). */
     public static final class Mode {
         public final String id;
         public final boolean stopsRobot;
         public final double esd50J, brownoutV, impactG50, surge50, drop50, emiPerSecAt40A, randomPerSec;
         public final Distribution outageS;
 
-        public Mode(String id, boolean stopsRobot, double esd50J, double brownoutV, double impactG50, double surge50, double drop50,
-                    double emiPerSecAt40A, double randomPerSec, Distribution outageS) {
+        public Mode(String id, boolean stopsRobot, double esd50J, double brownoutV, double impactG50, double surge50, double drop50, double emiPerSecAt40A, double randomPerSec, Distribution outageS) {
+
             this.id = id;
             this.stopsRobot = stopsRobot;
             this.esd50J = esd50J;
@@ -48,16 +35,15 @@ public final class Disconnects {
         }
     }
 
-    /** Stresses seen in one match. */
     public static final class Stress {
         public final double matchS, activeS;
         public final List<double[]> esd;       // {t, energy into the electronics (J)}
         public final List<double[]> impacts;   // {t, g}
-        public final float[] busV, current;    // every dt
+        public final float[] busV, current;    //every dt
         public final double dt, holdS, didtWindowS;
 
-        public Stress(double matchS, double activeS, List<double[]> esd, List<double[]> impacts, float[] busV, float[] current,
-                      double dt, double holdS, double didtWindowS) {
+        public Stress(double matchS, double activeS, List<double[]> esd, List<double[]> impacts, float[] busV, float[] current, double dt, double holdS, double didtWindowS) {
+
             this.matchS = matchS;
             this.activeS = activeS;
             this.esd = esd;
@@ -72,14 +58,14 @@ public final class Disconnects {
 
     public static final class Result {
         public final double[] expected, atLeastOne;
-        public final double[][] byCause;          // [mode][cause] expected events
+        public final double[][] byCause;          //[mode][cause] expected events
         public final double anyProb;
         public final List<double[]> timeline;     // sampled {t, mode, outage s, cause}
         public final double downtimeS, partialDowntimeS;
-        public final double[] hazardPerBin;       // expected events per 10 s bin (all modes)
+        public final double[] hazardPerBin;       //expected events per 10 s bin (all modes)
 
-        Result(double[] expected, double[] atLeastOne, double[][] byCause, double anyProb, List<double[]> timeline,
-               double downtimeS, double partialDowntimeS, double[] hazardPerBin) {
+        Result(double[] expected, double[] atLeastOne, double[][] byCause, double anyProb, List<double[]> timeline, double downtimeS, double partialDowntimeS, double[] hazardPerBin) {
+
             this.expected = expected;
             this.atLeastOne = atLeastOne;
             this.byCause = byCause;
@@ -93,14 +79,14 @@ public final class Disconnects {
 
     public static final double BIN_S = 10;
 
-    /** Lognormal fragility: chance one event of size {@code x} causes a failure. */
     public static double fragility(double x, double x50, double spread) {
+
         if (!(x > 0) || !(x50 > 0) || !Double.isFinite(x50)) return 0;
         return Stats.normalCdf(Math.log(x / x50) / Math.max(1e-6, spread));
     }
 
-    /** Peaks of the current slope (A/ms) above {@code floor}: {t, rate}. {@code rising} = surges, else drops. */
     public static List<double[]> slopePeaks(float[] current, double dt, double windowS, double floor, boolean rising) {
+
         List<double[]> out = new ArrayList<>();
         int w = Math.max(1, (int) Math.round(windowS / dt));
         double peak = 0, tPeak = 0;
@@ -114,7 +100,8 @@ public final class Disconnects {
                     tPeak = i * dt;
                 }
                 in = true;
-            } else if (in && s < floor / 2) {
+            }
+            else if (in && s < floor / 2) {
                 out.add(new double[]{tPeak, peak});
                 in = false;
                 peak = 0;
@@ -124,8 +111,8 @@ public final class Disconnects {
         return out;
     }
 
-    /** Times the bus stayed under {@code v} for at least {@code holdS} (one per dip). */
     public static List<Double> brownouts(float[] busV, double dt, double v, double holdS) {
+
         List<Double> out = new ArrayList<>();
         if (!(v > 0)) return out;
         int need = Math.max(1, (int) Math.ceil(holdS / dt)), run = 0;
@@ -137,7 +124,8 @@ public final class Disconnects {
                     out.add(i * dt);
                     fired = true;
                 }
-            } else {
+            }
+            else {
                 run = 0;
                 fired = false;
             }
@@ -146,6 +134,7 @@ public final class Disconnects {
     }
 
     public static Result evaluate(List<Mode> modes, Stress s, double spread, Rng rng) {
+
         int nm = modes.size();
         double[] expected = new double[nm], atLeast = new double[nm];
         double[][] byCause = new double[nm][CAUSES.length];
@@ -158,11 +147,9 @@ public final class Disconnects {
             if (m.surge50 > 0) minSurge = Math.min(minSurge, m.surge50);
             if (m.drop50 > 0) minDrop = Math.min(minDrop, m.drop50);
         }
-        // below 5 spreads under the most sensitive 50% point the chance is negligible
         List<double[]> surges = Double.isFinite(minSurge) ? slopePeaks(s.current, s.dt, s.didtWindowS, minSurge * Math.exp(-5 * spread), true) : new ArrayList<double[]>();
         List<double[]> drops = Double.isFinite(minDrop) ? slopePeaks(s.current, s.dt, s.didtWindowS, minDrop * Math.exp(-5 * spread), false) : new ArrayList<double[]>();
 
-        // motor-noise exposure per bin: integral of (I / 40 A)^2 dt
         double[] emiExposure = new double[bins];
         for (int i = 0; i < s.current.length; i++) {
             double r = s.current[i] / 40.0;
@@ -190,7 +177,6 @@ public final class Disconnects {
                 byCause[mi][EMI] += emi;
                 byCause[mi][RANDOM] += rnd;
                 hazard[b] += emi + rnd;
-                // sample: Poisson events in this bin (rare: at most a couple)
                 double tot = emi + rnd;
                 double u = rng.uniform(), pk = Math.exp(-tot), cum = pk;
                 int count = 0;
@@ -209,7 +195,6 @@ public final class Disconnects {
         double none = 1;
         for (double p : atLeast) none *= 1 - p;
 
-        // sampled timeline with outages
         Collections.sort(candidates, (a, b) -> Double.compare(a[0], b[0]));
         double[] downUntil = new double[nm];
         int hub = -1;
@@ -233,8 +218,8 @@ public final class Disconnects {
         return new Result(expected, atLeast, byCause, 1 - none, timeline, fullS, partialS, hazard);
     }
 
-    /** Records an event's chance; adds a sampled occurrence; returns ln(1 - p) for the exact product. */
     private static double add(double p, double t, int mi, int cause, double[][] byCause, double[] hazard, List<double[]> cand, Rng rng) {
+
         if (p <= 0) return 0;
         byCause[mi][cause] += p;
         int b = Math.min(hazard.length - 1, Math.max(0, (int) (t / BIN_S)));
@@ -244,12 +229,14 @@ public final class Disconnects {
     }
 
     private static List<double[]> concat(List<double[]> a, List<double[]> b) {
+
         List<double[]> out = new ArrayList<>(a);
         out.addAll(b);
         return out;
     }
 
     static double unionLength(List<double[]> intervals) {
+
         List<double[]> s = new ArrayList<>(intervals);
         Collections.sort(s, (a, b) -> Double.compare(a[0], b[0]));
         double total = 0, curS = Double.NaN, curE = Double.NaN;
@@ -258,7 +245,8 @@ public final class Disconnects {
                 if (!Double.isNaN(curS)) total += curE - curS;
                 curS = iv[0];
                 curE = iv[1];
-            } else {
+            }
+            else {
                 curE = Math.max(curE, iv[1]);
             }
         }

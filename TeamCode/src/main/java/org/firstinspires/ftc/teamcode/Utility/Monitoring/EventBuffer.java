@@ -1,14 +1,7 @@
 package org.firstinspires.ftc.teamcode.Utility.Monitoring;
 
-/**
- * Double-buffered queue of hardware I/O events, stored as primitive arrays so logging an event
- * from the OpMode thread never allocates. The writer thread periodically swaps in an empty
- * buffer and writes the full one to disk. If the writer falls behind and the buffer fills,
- * new events are dropped and counted rather than blocking the robot loop.
- */
 final class EventBuffer {
 
-    /** One batch of events, owned by the writer thread between swaps. */
     static final class Batch {
         long[] timeNs;
         int[] deviceId;
@@ -18,6 +11,7 @@ final class EventBuffer {
         int size;
 
         Batch(int capacity) {
+
             timeNs = new long[capacity];
             deviceId = new int[capacity];
             op = new short[capacity];
@@ -32,6 +26,7 @@ final class EventBuffer {
     private long accepted;
 
     EventBuffer(int capacity) {
+
         this.capacity = capacity;
         this.active = new Batch(capacity);
     }
@@ -40,7 +35,6 @@ final class EventBuffer {
         return capacity;
     }
 
-    /** @param timeNs nanoseconds since the session started */
     synchronized void add(long timeNs, int deviceId, int op, int latencyNs, boolean flag) {
         Batch b = active;
         if (b.size >= capacity) {
@@ -56,10 +50,6 @@ final class EventBuffer {
         accepted++;
     }
 
-    /**
-     * Hands the filled batch to the caller and takes {@code empty} (whose size is reset) as the
-     * new active buffer. Returns the filled batch.
-     */
     synchronized Batch swap(Batch empty) {
         Batch full = active;
         empty.size = 0;

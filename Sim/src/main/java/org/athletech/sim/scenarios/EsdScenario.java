@@ -20,23 +20,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
 
-/**
- * Static electricity and disconnects. Plays matches with the full drive (and flywheel) physics to
- * get the robot's motion, battery voltage, current and hits; runs the field's static charge
- * through each match ({@link ChargeSim}); then turns discharges, brownouts, current surges and
- * drops, impacts and motor noise into disconnects ({@link Disconnects}). Repeats across humidity
- * with and without a grounding strap, and plays a whole competition day on one field so the
- * field's charge carries over. Fills esd.*, electrical.* and disconnect.* derived entries.
- */
 public final class EsdScenario {
     private EsdScenario() {
     }
 
     static final double[] RH = {10, 20, 30, 40, 50, 60, 70};
-    /** Charge-sim repeats per physics match (the other robots and contacts are re-drawn): cheap, and smooths the curves. */
     static final int REPS = 2;
 
-    /** Everything read from the profile. */
     static final class Setup {
         MecanumDrive.Params drive;
         Launcher.Params launcher;
@@ -51,6 +41,7 @@ public final class EsdScenario {
     }
 
     static Setup read(RobotParams rp) {
+
         Setup s = new Setup();
         s.drive = rp.drive();
         rp.battery(Double.NaN);
@@ -145,9 +136,7 @@ public final class EsdScenario {
             double esd = rp.opt(pre + "esd_energy_50_mj", Double.NaN);
             double emi = rp.opt(pre + "emi_rate_per_min_at_40a", Double.NaN), rnd = rp.opt(pre + "random_rate_per_min", Double.NaN);
             Distribution outage = rp.dist(pre + "outage_s");
-            s.modes.add(new Disconnects.Mode(m[0], stops, esd / 1000, rp.opt(pre + "brownout_v", Double.NaN), rp.opt(pre + "impact_g_50", Double.NaN),
-                    rp.opt(pre + "surge_50_a_per_ms", Double.NaN), rp.opt(pre + "drop_50_a_per_ms", Double.NaN),
-                    Double.isNaN(emi) ? 0 : emi / 60, Double.isNaN(rnd) ? 0 : rnd / 60, outage));
+            s.modes.add(new Disconnects.Mode(m[0], stops, esd / 1000, rp.opt(pre + "brownout_v", Double.NaN), rp.opt(pre + "impact_g_50", Double.NaN), rp.opt(pre + "surge_50_a_per_ms", Double.NaN), rp.opt(pre + "drop_50_a_per_ms", Double.NaN), Double.isNaN(emi) ? 0 : emi / 60, Double.isNaN(rnd) ? 0 : rnd / 60, outage));
         }
         s.matchesPerField = (int) Math.round(rp.opt("event.matches_per_field", 40));
         s.cycleMin = rp.opt("event.match_cycle_min", 7);
@@ -155,13 +144,14 @@ public final class EsdScenario {
     }
 
     private static Distribution known(Distribution d, Distribution fallback, RobotParams rp, String key, String text) {
+
         if (d.isKnown()) return d;
         rp.assumptions().add(key + " not set: using " + text);
         return fallback;
     }
 
-    /** The robot's matches with full physics, in parallel (battery somewhere between full and 0.8 V down). */
     static MatchDriver.Trace[] traces(Setup s, int n, long seed) {
+
         MatchDriver.Trace[] out = new MatchDriver.Trace[n];
         IntStream.range(0, n).parallel().forEach(i -> {
             Rng rng = new Rng(seed * 7919 + i);
@@ -171,13 +161,13 @@ public final class EsdScenario {
         return out;
     }
 
-    /** Result of one match of this robot under one configuration. */
     static final class Outcome {
         ChargeSim.MatchResult charge;
         Disconnects.Result disc;
     }
 
     static Outcome play(Setup s, ChargeSim.Params cp, MatchDriver.Trace tr, Rng rng, boolean series, int warmMatches) {
+
         ChargeSim.Field field = new ChargeSim.Field(cp.fieldSize);
         double gap = Math.max(0, s.cycleMin * 60 - cp.matchS());
         for (int w = 0; w < warmMatches; w++) {
@@ -188,19 +178,20 @@ public final class EsdScenario {
     }
 
     static Outcome evaluate(Setup s, ChargeSim.Params cp, MatchDriver.Trace tr, ChargeSim.Field field, Rng rng, boolean series) {
+
         Outcome o = new Outcome();
         o.charge = ChargeSim.runMatch(cp, tr, field, rng, series);
         List<double[]> esd = new ArrayList<>(), impacts = new ArrayList<>();
         for (ChargeSim.Event e : o.charge.events) esd.add(new double[]{e.t, e.coupledJ});
         for (double[] h : tr.wallHits) impacts.add(new double[]{h[0], h[2]});
         for (double[] h : tr.robotContacts) impacts.add(new double[]{h[0], h[2]});
-        Disconnects.Stress st = new Disconnects.Stress(cp.matchS(), cp.autoS + cp.teleopS, esd, impacts, tr.busV, tr.current,
-                MatchDriver.PHYSICS_DT, s.holdS, s.didtS);
+        Disconnects.Stress st = new Disconnects.Stress(cp.matchS(), cp.autoS + cp.teleopS, esd, impacts, tr.busV, tr.current, MatchDriver.PHYSICS_DT, s.holdS, s.didtS);
         o.disc = Disconnects.evaluate(s.modes, st, s.spread, rng);
         return o;
     }
 
     public static void run(SimContext ctx) throws Exception {
+
         RobotParams rp = new RobotParams(ctx.db);
         Setup s = read(rp);
         rp.requireAll();
@@ -209,15 +200,12 @@ public final class EsdScenario {
         s.drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
         if (s.capEstimated) rp.assumptions().add("esd.robot_capacitance_pf not set: estimated " + Reports.round(s.capEstimatePf) + " pF from the robot's size and ground clearance");
         if (s.launcher == null) rp.assumptions().add("Launcher inputs incomplete: the flywheel's current is left out of the electrical stress");
-        rp.assumptions().add("Every robot starts a match at 0 V (people handle robots between matches); the other three robots charge like this one, "
-                + "varied by esd.other_robot_spread");
+        rp.assumptions().add("Every robot starts a match at 0 V (people handle robots between matches); the other three robots charge like this one, " + "varied by esd.other_robot_spread");
         SimContext.Saver save = ctx.saver(rp, "sim esd");
         ChargeSim.Params cp = s.charge;
         int n = Math.max(6, Math.min(48, ctx.trials / 60));
-        ctx.log.printf("ESD + disconnect sim  (%.0f%% RH, frame %.0f pF, grounding strap %s, %d simulated matches)%n",
-                cp.rh, cp.cFrame * 1e12, cp.strap ? "yes" : "no", n);
+        ctx.log.printf("ESD + disconnect sim  (%.0f%% RH, frame %.0f pF, grounding strap %s, %d simulated matches)%n", cp.rh, cp.cFrame * 1e12, cp.strap ? "yes" : "no", n);
 
-        // ---- the robot's matches (physics), reused for every humidity / strap setting
         MatchDriver.Trace[] tr = traces(s, n, ctx.seed);
         cp.otherSlipMps = otherSlip(tr, cp);
         double[] minV = new double[n], peakI = new double[n], peakG = new double[n], surge = new double[n], dropR = new double[n], voc = new double[n];
@@ -234,10 +222,8 @@ public final class EsdScenario {
             if (maxBrown > 0) brownouts += Disconnects.brownouts(tr[i].busV, MatchDriver.PHYSICS_DT, maxBrown, s.holdS).size();
         }
         brownouts /= n;
-        ctx.log.printf("  electrical: battery dips to %.2f V (5th pct), peak %.0f A, surge %.1f A/ms, drop %.1f A/ms, hits up to %.0f g%n",
-                Stats.percentile(minV, 5), Stats.percentile(peakI, 50), Stats.percentile(surge, 50), Stats.percentile(dropR, 50), Stats.percentile(peakG, 50));
+        ctx.log.printf("  electrical: battery dips to %.2f V (5th pct), peak %.0f A, surge %.1f A/ms, drop %.1f A/ms, hits up to %.0f g%n", Stats.percentile(minV, 5), Stats.percentile(peakI, 50), Stats.percentile(surge, 50), Stats.percentile(dropR, 50), Stats.percentile(peakG, 50));
 
-        // ---- at the profile's humidity
         Outcome[] base = new Outcome[n];
         IntStream.range(0, n).parallel().forEach(i -> base[i] = play(s, cp, tr[i], new Rng(ctx.seed * 131 + i), true, 2));
         int nm = s.modes.size();
@@ -279,14 +265,10 @@ public final class EsdScenario {
             worstResidual = Math.max(worstResidual, Math.abs(cr.ledger.residual()) / Math.max(1e-30, cr.globalTurnoverC));
         }
         List<double[]> chargeVsI = chargingVsCurrent(tr, cp);
-        ctx.log.printf("  charge: %.2f uC generated per match, %.0f%% of it from wheel slip; bookkeeping error %.1g of the charge moved%n",
-                generated * 1e6, 100 * slipShare, worstResidual);
-        ctx.log.printf("  static: frame reaches %.1f kV (median peak), %.1f discharges per match, %.2f internal arcs per match%n",
-                Stats.percentile(peakKv, 50), Stats.mean(discharges), arcs);
-        ctx.log.printf("  disconnects: %.1f%% chance per match, %.1f s fully stopped + %.1f s partly down per match on average%n",
-                100 * anyProb, down, partial);
+        ctx.log.printf("  charge: %.2f uC generated per match, %.0f%% of it from wheel slip; bookkeeping error %.1g of the charge moved%n", generated * 1e6, 100 * slipShare, worstResidual);
+        ctx.log.printf("  static: frame reaches %.1f kV (median peak), %.1f discharges per match, %.2f internal arcs per match%n", Stats.percentile(peakKv, 50), Stats.mean(discharges), arcs);
+        ctx.log.printf("  disconnects: %.1f%% chance per match, %.1f s fully stopped + %.1f s partly down per match on average%n", 100 * anyProb, down, partial);
 
-        // frame voltage through a match (median |V| per 1 s)
         List<double[]> kvVsT = new ArrayList<>();
         int sPts = base[0].charge.series.size();
         for (int j = 0; j < sPts; j += 2) {
@@ -297,12 +279,11 @@ public final class EsdScenario {
         List<double[]> rateVsT = new ArrayList<>();
         for (int b = 0; b < hazard.length; b++) rateVsT.add(new double[]{(b + 0.5) * Disconnects.BIN_S, hazard[b] / Disconnects.BIN_S * 60});
 
-        // ---- humidity sweeps: as built, with and without a strap
         double[][] sweepProb = new double[3][RH.length], sweepKv = new double[3][RH.length], sweepDis = new double[3][RH.length];
         boolean[] straps = {cp.strap, true, false};
         IntStream.range(0, 3 * RH.length).parallel().forEach(k -> {
             int v = k / RH.length, j = k % RH.length;
-            if (v > 0 && straps[v] == cp.strap) return; // same as "as built": copied below
+            if (v > 0 && straps[v] == cp.strap) return; //same as "as built": copied below
             ChargeSim.Params q = cp.withRh(RH[j]).withStrap(straps[v]);
             double prob = 0, dis = 0;
             double[] pk = new double[n * REPS];
@@ -332,7 +313,6 @@ public final class EsdScenario {
             disVsRh.add(new double[]{RH[j], sweepDis[0][j]});
         }
 
-        // ---- a competition day on one field
         int days = Math.max(2, ctx.trials / 250);
         int mpf = Math.max(6, s.matchesPerField);
         double gap = Math.max(0, s.cycleMin * 60 - cp.matchS());
@@ -349,7 +329,8 @@ public final class EsdScenario {
                     Outcome o = evaluate(s, cp, tr[(dIdx * 7 + m) % n], field, rng, false);
                     dayProbAcc[m][0] += o.disc.anyProb;
                     dayProbAcc[m][1]++;
-                } else {
+                }
+                else {
                     ChargeSim.runMatch(cp, null, field, rng, false);
                 }
                 perimKv[m] += field.perimeterV(cp) / 1000 / days;
@@ -366,7 +347,6 @@ public final class EsdScenario {
             if (dayProbAcc[m][1] > 0) dayProb.add(new double[]{m + 1, dayProbAcc[m][0] / dayProbAcc[m][1], Double.NaN, dayProbAcc[m][1]});
         }
 
-        // ---- electrical: lowest voltage vs resting voltage
         List<double[]> minVsVoc = new ArrayList<>();
         Integer[] order = new Integer[n];
         for (int i = 0; i < n; i++) order[i] = i;
@@ -382,7 +362,6 @@ public final class EsdScenario {
             minVsVoc.add(new double[]{sx / (hi - lo), sy / (hi - lo), Double.NaN, hi - lo});
         }
 
-        // ---- save
         save.param("esd.robot_capacitance_estimate_pf", s.capEstimatePf);
         save.param("esd.charge_generated_uc_per_match", generated * 1e6);
         save.param("esd.slip_charge_share", slipShare);
@@ -404,7 +383,8 @@ public final class EsdScenario {
         save.param("disconnect.partial_downtime_s_per_match", partial);
         if (en.length > 2) {
             save.dist("esd.discharge_energy_mj", "lognormal", Stats.mean(en), Stats.std(en));
-        } else {
+        }
+        else {
             save.dist("esd.discharge_energy_mj", "lognormal", Double.NaN, Double.NaN);
         }
         save.curve("esd.robot_kv_vs_match_time", kvVsT);
@@ -419,29 +399,11 @@ public final class EsdScenario {
         save.curve("disconnect.rate_vs_match_time", rateVsT);
         save.curve("disconnect.prob_vs_event_match", dayProb);
 
-        // ---- report
         HtmlReport r = new HtmlReport("Static electricity and disconnects");
         Reports.provenance(r, rp, ctx);
-        r.paragraph("Each simulated match plays the drive (and flywheel) physics for the robot's motion, battery voltage, current and hits, "
-                + "then runs the static charge on the robot, three other robots, the field perimeter, metal structures and the tiles, "
-                + "and turns every discharge, brownout, current surge or drop, impact and stretch of motor noise into disconnect chances. "
-                + n + " matches per setting.");
+        r.paragraph("Each simulated match plays the drive (and flywheel) physics for the robot's motion, battery voltage, current and hits, " + "then runs the static charge on the robot, three other robots, the field perimeter, metal structures and the tiles, " + "and turns every discharge, brownout, current surge or drop, impact and stretch of motor noise into disconnect chances. " + n + " matches per setting.");
         r.heading("Summary at " + Reports.round(cp.rh) + "% humidity");
-        r.table(Arrays.asList("quantity", "value", "unit"), Arrays.asList(
-                Reports.row("chance of at least one disconnect", 100 * anyProb, "% per match"),
-                Reports.row("robot fully stopped (Control Hub reboot, Wi-Fi)", down, "s per match"),
-                Reports.row("part of the robot down (Expansion Hub, I2C, camera)", partial, "s per match"),
-                Reports.row("frame capacitance" + (s.capEstimated ? " (estimated)" : ""), cp.cFrame * 1e12, "pF"),
-                Reports.row("highest frame voltage (median match)", Stats.percentile(peakKv, 50), "kV"),
-                Reports.row("discharges per match (> 1 uJ)", Stats.mean(discharges), "count"),
-                Reports.row("discharge energy, 95th percentile", en.length > 0 ? Stats.percentile(en, 95) : Double.NaN, "mJ"),
-                Reports.row("arcs inside the robot", arcs, "per match"),
-                Reports.row("field perimeter after a full day (median)", Stats.percentile(endKv, 50), "kV"),
-                Reports.row("lowest battery voltage (5th percentile match)", Stats.percentile(minV, 5), "V"),
-                Reports.row("peak current (median match)", Stats.percentile(peakI, 50), "A"),
-                Reports.row("fastest current rise / drop (median match)", Reports.round(Stats.percentile(surge, 50)) + " / " + Reports.round(Stats.percentile(dropR, 50)), "A/ms"),
-                Reports.row("hardest hit (median match)", Stats.percentile(peakG, 50), "g"),
-                Reports.row("brownouts below " + (Double.isNaN(maxBrown) ? "-" : Reports.round(maxBrown) + " V"), brownouts, "per match")));
+        r.table(Arrays.asList("quantity", "value", "unit"), Arrays.asList(Reports.row("chance of at least one disconnect", 100 * anyProb, "% per match"), Reports.row("robot fully stopped (Control Hub reboot, Wi-Fi)", down, "s per match"), Reports.row("part of the robot down (Expansion Hub, I2C, camera)", partial, "s per match"), Reports.row("frame capacitance" + (s.capEstimated ? " (estimated)" : ""), cp.cFrame * 1e12, "pF"), Reports.row("highest frame voltage (median match)", Stats.percentile(peakKv, 50), "kV"), Reports.row("discharges per match (> 1 uJ)", Stats.mean(discharges), "count"), Reports.row("discharge energy, 95th percentile", en.length > 0 ? Stats.percentile(en, 95) : Double.NaN, "mJ"), Reports.row("arcs inside the robot", arcs, "per match"), Reports.row("field perimeter after a full day (median)", Stats.percentile(endKv, 50), "kV"), Reports.row("lowest battery voltage (5th percentile match)", Stats.percentile(minV, 5), "V"), Reports.row("peak current (median match)", Stats.percentile(peakI, 50), "A"), Reports.row("fastest current rise / drop (median match)", Reports.round(Stats.percentile(surge, 50)) + " / " + Reports.round(Stats.percentile(dropR, 50)), "A/ms"), Reports.row("hardest hit (median match)", Stats.percentile(peakG, 50), "g"), Reports.row("brownouts below " + (Double.isNaN(maxBrown) ? "-" : Reports.round(maxBrown) + " V"), brownouts, "per match")));
         List<String> header = new ArrayList<>(Arrays.asList("disconnect", "per match", "chance per match %"));
         for (String c : Disconnects.CAUSES) header.add(c);
         List<List<String>> rows = new ArrayList<>();
@@ -455,9 +417,7 @@ public final class EsdScenario {
         List<List<String>> ledRows = new ArrayList<>();
         for (int j = 0; j < ledger.length; j++) ledRows.add(Reports.row(ChargeSim.Ledger.NAMES[j], ledger[j] * 1e9, generated > 0 ? 100 * ledger[j] / generated : Double.NaN));
         r.table(Arrays.asList("source (+) or sink (-)", "nC per match (average)", "% of the charge generated"), ledRows);
-        r.paragraph("Every coulomb is tracked: the robot's charge at the end of a match equals the sum of these rows, and the whole field "
-                + "(four robots, perimeter, metal structures, tiles) balances against contact charging in and leakage out. Largest "
-                + "bookkeeping error over these matches: " + Reports.round(worstResidual) + " of the charge moved (rounding).");
+        r.paragraph("Every coulomb is tracked: the robot's charge at the end of a match equals the sum of these rows, and the whole field " + "(four robots, perimeter, metal structures, tiles) balances against contact charging in and leakage out. Largest " + "bookkeeping error over these matches: " + Reports.round(worstResidual) + " of the charge moved (rounding).");
         r.heading("Charge through a match");
         r.chart(new SvgChart("Frame voltage through a match (median of " + n + ")", "match time (s)", "kV").zeroBased().add(Reports.series("|V| frame", kvVsT, true)));
         ChargeSim.MatchResult ex = base[0].charge;
@@ -482,8 +442,7 @@ public final class EsdScenario {
             r.table(Arrays.asList("time s", "discharge", "dV kV", "energy mJ", "into electronics mJ", "peak A"), evRows);
         }
         r.heading("Humidity and the grounding strap");
-        r.chart(new SvgChart("Chance of a disconnect per match", "relative humidity (%)", "probability").yRange(0, 1)
-                .add(Reports.series("as built", probVsRh)).add(Reports.series("with strap", probStrap)).add(Reports.series("no strap", probNoStrap)));
+        r.chart(new SvgChart("Chance of a disconnect per match", "relative humidity (%)", "probability").yRange(0, 1).add(Reports.series("as built", probVsRh)).add(Reports.series("with strap", probStrap)).add(Reports.series("no strap", probNoStrap)));
         r.chart(new SvgChart("Highest frame voltage per match", "relative humidity (%)", "kV").zeroBased().add(Reports.series("median", kvVsRh)));
         r.chart(new SvgChart("Discharges per match", "relative humidity (%)", "count").zeroBased().add(Reports.series("discharges", disVsRh)));
         r.heading("A competition day on one field (" + mpf + " matches, every " + Reports.round(s.cycleMin) + " min)");
@@ -505,24 +464,14 @@ public final class EsdScenario {
         r.chart(new SvgChart("One match: battery voltage (lowest per 0.1 s)", "match time (s)", "V").add(Reports.series("battery", vT)));
         r.chart(new SvgChart("One match: total current (highest per 0.1 s)", "match time (s)", "A").zeroBased().add(Reports.series("current", iT)));
         r.chart(new SvgChart("Lowest voltage in a match vs resting voltage", "resting voltage (V)", "V").add(Reports.series("lowest", minVsVoc)));
-        r.bullets(Arrays.asList(
-                "Leakage scales 10x per " + Reports.round(10 / Math.max(1e-6, cp.leakDecades)) + "% humidity; charging falls by e per " + Reports.round(cp.genScalePct) + "% humidity (both relative to 40%).",
-                "Charging at this humidity: " + Reports.round(cp.genPerM() * 1e9) + " nC per meter rolled (x" + Reports.round(cp.slideFactor) + " when sliding, x"
-                        + Reports.round(cp.slipFactor) + " per meter of wheel slip); "
-                        + "frame leak time constant " + Reports.round(cp.cFrame / cp.gWheel()) + " s; tile charge lifetime " + Reports.round(cp.tileTau()) + " s"
-                        + (cp.tileDiffusion() > 0 ? "; tile charge creeps sideways about " + Reports.round(Math.sqrt(cp.tileDiffusion() * cp.tileTau())) + " m in that time" : "") + ".",
-                "A discharge of energy E reaching the electronics fails a device with probability Phi(ln(E / E50) / " + Reports.round(s.spread) + "); "
-                        + "a device under its reset voltage for " + Reports.round(s.holdS * 1000) + " ms resets."));
+        r.bullets(Arrays.asList("Leakage scales 10x per " + Reports.round(10 / Math.max(1e-6, cp.leakDecades)) + "% humidity; charging falls by e per " + Reports.round(cp.genScalePct) + "% humidity (both relative to 40%).", "Charging at this humidity: " + Reports.round(cp.genPerM() * 1e9) + " nC per meter rolled (x" + Reports.round(cp.slideFactor) + " when sliding, x" + Reports.round(cp.slipFactor) + " per meter of wheel slip); " + "frame leak time constant " + Reports.round(cp.cFrame / cp.gWheel()) + " s; tile charge lifetime " + Reports.round(cp.tileTau()) + " s" + (cp.tileDiffusion() > 0 ? "; tile charge creeps sideways about " + Reports.round(Math.sqrt(cp.tileDiffusion() * cp.tileTau())) + " m in that time" : "") + ".", "A discharge of energy E reaching the electronics fails a device with probability Phi(ln(E / E50) / " + Reports.round(s.spread) + "); " + "a device under its reset voltage for " + Reports.round(s.holdS * 1000) + " ms resets."));
         r.write(ctx.outDir.resolve("esd/report.html"));
         ctx.log.println("  report: " + ctx.outDir.resolve("esd/report.html"));
         save.report();
     }
 
-    /**
-     * {@code predict disconnect}: chance of a disconnect per match at a given humidity
-     * (--humidity RH, default the profile's) with or without a strap (--strap 0|1).
-     */
     public static int predict(org.athletech.sim.config.ProfileDb db, org.athletech.sim.utility.Args a, java.io.PrintStream out) throws Exception {
+
         RobotParams rp = new RobotParams(db);
         Setup s = read(rp);
         rp.requireAll();
@@ -548,8 +497,7 @@ public final class EsdScenario {
             for (int m = 0; m < perMode.length; m++) perMode[m] += x.disc.expected[m] / o.length;
         }
         out.printf(java.util.Locale.ROOT, "At %.0f%% humidity, %s grounding strap (%d simulated matches):%n", q.rh, q.strap ? "with a" : "without a", o.length);
-        out.printf(java.util.Locale.ROOT, "  %.1f%% chance of at least one disconnect per match; %.1f s fully stopped + %.1f s partly down on average%n",
-                100 * prob, down, partial);
+        out.printf(java.util.Locale.ROOT, "  %.1f%% chance of at least one disconnect per match; %.1f s fully stopped + %.1f s partly down on average%n", 100 * prob, down, partial);
         out.printf(java.util.Locale.ROOT, "  frame reaches %.1f kV on average%n", kv);
         for (int m = 0; m < perMode.length; m++) {
             if (perMode[m] > 1e-4) out.printf(java.util.Locale.ROOT, "  %-20s %.4f per match%n", s.modes.get(m).id, perMode[m]);
@@ -558,18 +506,15 @@ public final class EsdScenario {
         return 0;
     }
 
-    /** Other robots slip like this one on average: its wheel-slip meters per second of enabled time. */
     static double otherSlip(MatchDriver.Trace[] tr, ChargeSim.Params cp) {
+
         double m = 0;
         for (MatchDriver.Trace t : tr) m += t.slipM / tr.length;
         return m / Math.max(1, cp.autoS + cp.teleopS);
     }
 
-    /**
-     * Charging rate (nC/s) against total battery current (A), binned: high current means hard
-     * pushing or launching, where wheels slip and charge the frame fastest. {x A, mean nC/s, std, n}.
-     */
     static List<double[]> chargingVsCurrent(MatchDriver.Trace[] tr, ChargeSim.Params cp) {
+
         double genPerM = cp.genPerM(), k = (cp.track + cp.base) / 2, bin = 2.0;
         java.util.TreeMap<Integer, double[]> bins = new java.util.TreeMap<>();
         double enabledEnd = cp.autoS, teleStart = cp.autoS + cp.transitionS;
@@ -594,14 +539,15 @@ public final class EsdScenario {
         return out;
     }
 
-    /** Readable small numbers for the cause table: blank for 0, "<0.0001" for tiny. */
     static String small(double v) {
+
         if (!(v > 0)) return "";
         if (v < 1e-4) return "<0.0001";
         return org.athletech.sim.utility.Csv.fmt(Reports.round(v));
     }
 
     static double maxOf(List<double[]> peaks) {
+
         double m = 0;
         for (double[] p : peaks) m = Math.max(m, p[1]);
         return m;

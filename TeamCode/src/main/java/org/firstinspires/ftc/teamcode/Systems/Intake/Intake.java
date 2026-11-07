@@ -13,6 +13,10 @@ public class Intake extends Subsystem {
 
     private Object intake; //given Intake (non-subsystem) or GeneralVeloMotor data
 
+    public Object getIntake() {
+        return intake;
+    }
+
     private BetterGamepad controller1;
 
     public Intake(GeneralVeloMotor intake) {
@@ -25,11 +29,12 @@ public class Intake extends Subsystem {
     public Intake() {}
 
     public Intake asSubsystem() {
+
         isSubsystem = true;
         return this;
     }
 
-    // COMPONENT
+    //COMPONENT
     public enum IntakeState {
         INTAKE(IntakeConstants.INTAKE_VELOCITY),
         REVERSE_INTAKE(IntakeConstants.REVERSE_INTAKE_VELOCITY),
@@ -67,7 +72,7 @@ public class Intake extends Subsystem {
         return state;
     }
 
-    // SUBSYSTEM
+    //SUBSYSTEM
     public void provideComponents(Intake intake, BetterGamepad controller1) {
 
         this.intake = intake;
@@ -87,5 +92,7 @@ public class Intake extends Subsystem {
         else {
             setState(IntakeState.IDLE);
         }
+
+        ((GeneralVeloMotor) ((Intake) intake).getIntake()).update();
     }
 }

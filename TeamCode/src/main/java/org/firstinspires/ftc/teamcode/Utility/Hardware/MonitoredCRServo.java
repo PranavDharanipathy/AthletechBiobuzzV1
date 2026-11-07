@@ -5,14 +5,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.PwmControl;
 import com.qualcomm.robotcore.hardware.ServoController;
 
-/**
- * Drop-in {@link CRServo} (continuous-rotation servo) that counts and times every call. Also
- * implements {@link PwmControl} whenever the wrapped servo supports it.
- *
- * <pre>
- * CRServo intake = new MonitoredCRServo(hardwareMap, "intake", false);
- * </pre>
- */
 public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServo, PwmControl {
 
     private final CacheSlot powerSlot;
@@ -29,6 +21,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
     }
 
     public MonitoredCRServo(CRServo servo, String name, boolean cacheReads) {
+
         super(servo, name, "CRServo", cacheReads);
         powerSlot = tracker.newSlot();
     }
@@ -45,6 +38,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public void setDirection(Direction direction) {
+
         long t0 = tracker.start();
         device.setDirection(direction);
         tracker.write(HwOp.SET_DIRECTION, t0, direction == lastDirection);
@@ -53,6 +47,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public Direction getDirection() {
+
         long t0 = tracker.start();
         Direction v = device.getDirection();
         tracker.read(HwOp.GET_DIRECTION, t0);
@@ -61,15 +56,17 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public void setPower(double power) {
+
         long t0 = tracker.start();
         device.setPower(power);
         tracker.write(HwOp.SET_POWER, t0, power == lastPower, powerSlot);
         lastPower = power;
-        lastPulseWidth = Double.NaN; // the pulse width now follows the power
+        lastPulseWidth = Double.NaN; //the pulse width now follows the power
     }
 
     @Override
     public double getPower() {
+
         if (tracker.cacheHit(HwOp.GET_POWER, powerSlot, CacheSlot.NO_KEY)) return powerSlot.d;
         long t0 = tracker.start();
         double v = device.getPower();
@@ -78,21 +75,19 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         return v;
     }
 
-    // ------------------------------------------------------------------ PwmControl
-
     public boolean supportsPwmControl() {
         return device instanceof PwmControl;
     }
 
     private PwmControl pwm() {
+
         if (device instanceof PwmControl) return (PwmControl) device;
-        throw new UnsupportedOperationException(
-                "CRServo '" + getName() + "' (" + device.getClass().getSimpleName()
-                        + ") does not support PwmControl");
+        throw new UnsupportedOperationException("CRServo '" + getName() + "' (" + device.getClass().getSimpleName() + ") does not support PwmControl");
     }
 
     @Override
     public void setPwmRange(PwmRange range) {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPwmRange(range);
@@ -102,6 +97,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public PwmRange getPwmRange() {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         PwmRange v = p.getPwmRange();
@@ -111,6 +107,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public void setPwmEnable() {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPwmEnable();
@@ -119,6 +116,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public void setPwmDisable() {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPwmDisable();
@@ -127,6 +125,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
 
     @Override
     public boolean isPwmEnabled() {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         boolean v = p.isPwmEnabled();
@@ -134,24 +133,20 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         return v;
     }
 
-    /**
-     * Commands the servo directly by pulse width in microseconds (typically 500-2500; the middle
-     * of the range is stop), bypassing {@link #setPower(double)}. Clears the cached power, and
-     * repeating the previous width counts as a redundant write.
-     */
     @Override
     public void setPulseWidth(double usWidth) {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         p.setPulseWidth(usWidth);
         tracker.write(HwOp.SET_PULSE_WIDTH, t0, usWidth == lastPulseWidth, powerSlot);
         lastPulseWidth = usWidth;
-        lastPower = Double.NaN; // moved without setPower: the next setPower is real
+        lastPower = Double.NaN; //moved without setPower: the next setPower is real
     }
 
-    /** The commanded pulse width in microseconds. */
     @Override
     public double getPulseWidth() {
+
         PwmControl p = pwm();
         long t0 = tracker.start();
         double v = p.getPulseWidth();

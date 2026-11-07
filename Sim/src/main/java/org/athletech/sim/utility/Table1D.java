@@ -2,12 +2,12 @@ package org.athletech.sim.utility;
 
 import java.util.Arrays;
 
-/** Piecewise-linear lookup table y(x). Outside the x range the end values are held (clamped). */
 public final class Table1D {
     private final double[] xs;
     private final double[] ys;
 
     public Table1D(double[] xs, double[] ys) {
+
         if (xs.length != ys.length || xs.length == 0) throw new IllegalArgumentException("need matching, non-empty x/y");
         Integer[] order = new Integer[xs.length];
         for (int i = 0; i < order.length; i++) order[i] = i;
@@ -21,6 +21,7 @@ public final class Table1D {
     }
 
     public double at(double x) {
+
         if (x <= xs[0]) return ys[0];
         int n = xs.length;
         if (x >= xs[n - 1]) return ys[n - 1];

@@ -1,9 +1,5 @@
 package org.firstinspires.ftc.teamcode.Utility.Monitoring;
 
-/**
- * Streaming count / mean / standard deviation / min / max (Welford's algorithm). Constant
- * memory no matter how many samples are added. Thread-safe.
- */
 public final class RunningStats {
     private long count;
     private double mean;
@@ -12,8 +8,8 @@ public final class RunningStats {
     private double max = Double.NEGATIVE_INFINITY;
     private double last = Double.NaN;
 
-    /** Adds a sample. NaN and infinite values are ignored. */
     public synchronized void add(double x) {
+
         if (Double.isNaN(x) || Double.isInfinite(x)) return;
         count++;
         double delta = x - mean;
@@ -53,6 +49,7 @@ public final class RunningStats {
     }
 
     public synchronized void reset() {
+
         count = 0;
         mean = m2 = 0;
         min = Double.POSITIVE_INFINITY;

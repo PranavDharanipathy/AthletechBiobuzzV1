@@ -40,3 +40,68 @@ kotlin {
 dependencies {
     implementation project(':FtcRobotController')
 }
+
+//TunerTeleOp + Turret Autotuner data: whenever a robot is on adb, new runs get pulled into tuning-data before the build,
+//then :Sim:analyzeTuning turns them into Constants/TunedConstants.java
+def tuningSdkDir = android.sdkDirectory
+
+tasks.register('pullTuningData') {
+    group = 'tuning'
+    def sets = [
+            [remote: '/sdcard/FIRST/data/TunerTeleOp', file: 'loop.csv', pattern: /\/TunerTeleOp\/(\d{8}-\d{6})\/loop\.csv (\d+)/, local: rootProject.file('tuning-data/sessions')],
+            [remote: '/sdcard/FIRST/data/TurretAutotune', file: 'result.csv', pattern: /\/TurretAutotune\/(\d{8}-\d{6}-[a-z]+)\/result\.csv (\d+)/, local: rootProject.file('tuning-data/turret-autotune')]
+    ]
+    doLast {
+        def isWindows = System.getProperty('os.name').toLowerCase().contains('win')
+        def adb = new File(tuningSdkDir, 'platform-tools/adb' + (isWindows ? '.exe' : ''))
+        def run = { List<String> cmd, long seconds ->
+            def outFile = File.createTempFile('adb', '.txt')
+            def p = new ProcessBuilder(cmd.collect { it.toString() } as List<String>).redirectErrorStream(true).redirectOutput(outFile).start() //GStrings break ProcessBuilder
+            def done = p.waitFor(seconds, java.util.concurrent.TimeUnit.SECONDS)
+            if (!done) p.destroyForcibly()
+            def text = outFile.text
+            outFile.delete()
+            return done && p.exitValue() == 0 ? text : null
+        }
+        if (project.findProperty('skipTuningPull') == 'true') {
+            logger.lifecycle('tuning: skipTuningPull=true, not touching adb')
+            return
+        }
+        if (!adb.isFile()) {
+            logger.lifecycle('tuning: no adb, not pulling')
+            return
+        }
+        def devices = run([adb.path, 'devices'], 10)
+        def serial = devices?.readLines()?.findAll { it.endsWith('\tdevice') }?.collect { it.split('\t')[0] }?.find()
+        if (serial == null) {
+            logger.lifecycle('tuning: no robot on adb, not pulling')
+            return
+        }
+        sets.each { set -> try {
+            def listing = run([adb.path, '-s', serial, 'shell', "stat -c '%n %s' ${set.remote}/*/${set.file} 2>/dev/null"], 20)
+            if (listing == null) {
+                logger.lifecycle("tuning: nothing in ${set.remote}")
+                return
+            }
+            set.local.mkdirs()
+            int pulled = 0
+            listing.readLines().each { line ->
+                def m = line.trim() =~ set.pattern
+                if (!m.find()) return
+                def name = m.group(1)
+                long remoteSize = m.group(2) as long
+                def local = new File(set.local, "${name}/${set.file}")
+                if (local.isFile() && local.length() == remoteSize) return
+                if (run([adb.path, '-s', serial, 'pull', "${set.remote}/${name}", set.local.path], 120) != null) pulled++
+                else logger.warn("tuning: couldn't pull ${name}")
+            }
+            logger.lifecycle("tuning: pulled ${pulled} new from ${set.remote} on ${serial}")
+        } catch (Exception e) {
+            logger.warn("tuning: couldn't pull from ${set.remote} (${e.message}), building anyway")
+        } }
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn(':Sim:analyzeTuning')
+}

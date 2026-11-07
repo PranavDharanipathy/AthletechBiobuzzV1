@@ -22,20 +22,11 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * Turns HardwareMonitor sessions (copied off the robot with
- * {@code adb pull /sdcard/FIRST/data/HardwareMonitor}) into measured profile values:
- * battery internal resistance (from voltage sag vs current), the battery sag curve, loop time,
- * current draw, and drive top speed.
- */
 public final class MonitorImport {
     private MonitorImport() {
     }
 
-    /** Default drive motor names when drive.motor_names is not set. */
-    static final Pattern DRIVE_NAME = Pattern.compile("(?i)^(left|right)[_ ]?(front|back|rear)([_ ]?(motor|drive|wheel))?$"
-            + "|^(front|back|rear)[_ ]?(left|right)([_ ]?(motor|drive|wheel))?$"
-            + "|^(fl|fr|bl|br|lf|rf|lb|rb)([_ ]?(motor|drive))?$");
+    static final Pattern DRIVE_NAME = Pattern.compile("(?i)^(left|right)[_ ]?(front|back|rear)([_ ]?(motor|drive|wheel))?$" + "|^(front|back|rear)[_ ]?(left|right)([_ ]?(motor|drive|wheel))?$" + "|^(fl|fr|bl|br|lf|rf|lb|rb)([_ ]?(motor|drive))?$");
 
     static final class Session {
         private final String id;
@@ -47,6 +38,7 @@ public final class MonitorImport {
         private final double[] loopMs;
 
         Session(String id, String opMode, Path dir, double[] t, double[] volts, double[] amps, double[] loopMs) {
+
             this.id = id;
             this.opMode = opMode;
             this.dir = dir;
@@ -66,16 +58,11 @@ public final class MonitorImport {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Session)) return false;
             Session o = (Session) other;
-            return java.util.Objects.equals(id, o.id)
-                    && java.util.Objects.equals(opMode, o.opMode)
-                    && java.util.Objects.equals(dir, o.dir)
-                    && java.util.Objects.equals(t, o.t)
-                    && java.util.Objects.equals(volts, o.volts)
-                    && java.util.Objects.equals(amps, o.amps)
-                    && java.util.Objects.equals(loopMs, o.loopMs);
+            return java.util.Objects.equals(id, o.id) && java.util.Objects.equals(opMode, o.opMode) && java.util.Objects.equals(dir, o.dir) && java.util.Objects.equals(t, o.t) && java.util.Objects.equals(volts, o.volts) && java.util.Objects.equals(amps, o.amps) && java.util.Objects.equals(loopMs, o.loopMs);
         }
 
         @Override
@@ -90,6 +77,7 @@ public final class MonitorImport {
     }
 
     public static List<Path> findSessions(Path p) throws IOException {
+
         List<Path> out = new ArrayList<>();
         if (Files.isRegularFile(p.resolve("system.csv"))) {
             out.add(p);
@@ -104,13 +92,13 @@ public final class MonitorImport {
     }
 
     public static void run(ProfileDb db, Path path, PrintStream log, boolean force, Path outDir) throws IOException, SQLException {
+
         List<Path> dirs = findSessions(path);
         if (dirs.isEmpty()) throw new IOException("no HardwareMonitor sessions (folders with system.csv) under " + path);
         List<Session> sessions = new ArrayList<>();
         for (Path d : dirs) sessions.add(load(d));
         log.println("HardwareMonitor import: " + sessions.size() + " session(s) from " + path);
 
-        // ---- battery: per-session linear fit V = Voc - R*I
         List<List<String>> table = new ArrayList<>();
         List<Double> rs = new ArrayList<>();
         List<double[]> allPairs = new ArrayList<>();
@@ -128,7 +116,8 @@ public final class MonitorImport {
                 if (r > 0 && r < 1) {
                     rs.add(r);
                     rTxt = Csv.fmt(round(r, 4)) + " ohm (+/- " + Csv.fmt(round(f.slopeStdErr(), 2)) + ", R^2 " + Csv.fmt(round(f.r2(), 2)) + ")";
-                } else {
+                }
+                else {
                     rTxt = "fit rejected (" + Csv.fmt(round(r, 3)) + " ohm)";
                 }
             }
@@ -136,8 +125,7 @@ public final class MonitorImport {
             table.add(Arrays.asList(s.id(), s.opMode() == null ? "" : s.opMode(), Csv.fmt(round(dur, 3)), Integer.toString(x.length), rTxt));
         }
 
-        long src = db.addSource(SourceKind.MEASURED, "HardwareMonitor import",
-                "Sessions: " + String.join(", ", sessions.stream().map(Session::id).collect(Collectors.toList())) + "\nFrom: " + path.toAbsolutePath());
+        long src = db.addSource(SourceKind.MEASURED, "HardwareMonitor import", "Sessions: " + String.join(", ", sessions.stream().map(Session::id).collect(Collectors.toList())) + "\nFrom: " + path.toAbsolutePath());
         List<String> written = new ArrayList<>(), kept = new ArrayList<>();
         Writer w = new Writer(db, src, force, written, kept);
 
@@ -147,22 +135,19 @@ public final class MonitorImport {
             Double std = arr.length > 1 ? Stats.std(arr) : null;
             w.param("battery.internal_resistance_ohm", r, std);
             log.printf("  battery internal resistance: %.4f ohm (median of %d session fits)%n", r, arr.length);
-        } else {
+        }
+        else {
             log.println("  battery internal resistance: not enough current variation in these sessions (need a few amps of swing)");
         }
-        // binned sag curve, all sessions together
         List<double[]> sag = bin(allPairs, 1.0, 5);
         w.curve("battery.voltage_vs_current", sag);
 
-        // longest session: voltage through the match
-        Session longest = sessions.stream().max((a, b) -> Double.compare(a.t().length == 0 ? 0 : a.t()[a.t().length - 1],
-                b.t().length == 0 ? 0 : b.t()[b.t().length - 1])).get();
+        Session longest = sessions.stream().max((a, b) -> Double.compare(a.t().length == 0 ? 0 : a.t()[a.t().length - 1], b.t().length == 0 ? 0 : b.t()[b.t().length - 1])).get();
         List<double[]> vt = new ArrayList<>();
         for (int i = 0; i < longest.t().length; i++) if (Double.isFinite(longest.volts()[i])) vt.add(new double[]{longest.t()[i], longest.volts()[i]});
         List<double[]> vtBinned = bin(vt, 2.0, 1);
         w.curve("battery.voltage_vs_match_time", vtBinned);
 
-        // end-of-match voltage from sessions that look like full matches (>= 100 s)
         List<Double> ends = new ArrayList<>();
         for (Session s : sessions) {
             if (s.t().length == 0 || s.t()[s.t().length - 1] < 100) continue;
@@ -171,7 +156,6 @@ public final class MonitorImport {
         }
         if (!ends.isEmpty()) w.param("battery.end_of_match_v", Stats.percentile(ends.stream().mapToDouble(Double::doubleValue).toArray(), 50), null);
 
-        // current + voltage + loop time
         double[] amps = concat(sessions.stream().map(Session::amps).collect(Collectors.toList()));
         double[] volts = concat(sessions.stream().map(Session::volts).collect(Collectors.toList()));
         double[] loops = concat(sessions.stream().map(Session::loopMs).collect(Collectors.toList()));
@@ -184,18 +168,15 @@ public final class MonitorImport {
             w.param("control.loop_time_ms", Stats.mean(loops), Stats.std(loops));
             w.param("control.loop_time_p95_ms", Stats.percentile(loops, 95), null);
             double[] sample = subsample(loops, 2000);
-            ProfileDb.Write r = db.setDist("control.loop_time_ms", "empirical", Stats.mean(loops), Stats.std(loops),
-                    Stats.percentile(loops, 0), Stats.percentile(loops, 100), null, sample, src, force);
+            ProfileDb.Write r = db.setDist("control.loop_time_ms", "empirical", Stats.mean(loops), Stats.std(loops), Stats.percentile(loops, 0), Stats.percentile(loops, 100), null, sample, src, force);
             (r == ProfileDb.Write.WRITTEN ? written : kept).add("control.loop_time_ms (distribution)");
             log.printf("  loop time: %.2f ms average, %.2f ms p95 (%d samples)%n", Stats.mean(loops), Stats.percentile(loops, 95), loops.length);
         }
         if (amps.length > 0) log.printf("  total current: %.1f A average, %.1f A p95%n", Stats.mean(amps), Stats.percentile(amps, 95));
 
-        // what each loop is made of (system.csv + devices.csv + events.csv)
         LoopParts parts = loopParts(sessions, log);
         if (parts != null) parts.write(w, db, src, force, written, kept);
 
-        // drive top speed from motor velocities
         double topSpeed = driveTopSpeed(db, sessions, log);
         if (Double.isFinite(topSpeed)) w.param("drive.measured_top_speed_mps", topSpeed, null);
 
@@ -215,7 +196,6 @@ public final class MonitorImport {
         log.println("  report: " + outDir.resolve("import-monitor/report.html"));
     }
 
-    /** Writes measured values, remembering what was written or kept. */
     private static final class Writer {
         private final ProfileDb db;
         private final long src;
@@ -224,6 +204,7 @@ public final class MonitorImport {
         private final List<String> kept;
 
         private Writer(ProfileDb db, long src, boolean force, List<String> written, List<String> kept) {
+
             this.db = db;
             this.src = src;
             this.force = force;
@@ -239,14 +220,11 @@ public final class MonitorImport {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Writer)) return false;
             Writer o = (Writer) other;
-            return java.util.Objects.equals(db, o.db)
-                    && src == o.src
-                    && force == o.force
-                    && java.util.Objects.equals(written, o.written)
-                    && java.util.Objects.equals(kept, o.kept);
+            return java.util.Objects.equals(db, o.db) && src == o.src && force == o.force && java.util.Objects.equals(written, o.written) && java.util.Objects.equals(kept, o.kept);
         }
 
         @Override
@@ -260,12 +238,14 @@ public final class MonitorImport {
         }
 
         void param(String key, double v, Double std) throws SQLException {
+
             if (!Double.isFinite(v)) return;
             ProfileDb.Write r = db.setParam(key, v, null, std, src, force);
             (r == ProfileDb.Write.WRITTEN ? written : kept).add(key);
         }
 
         void curve(String name, List<double[]> pts) throws SQLException {
+
             if (pts.isEmpty()) return;
             ProfileDb.Write r = db.setCurve(name, pts, src, force);
             (r == ProfileDb.Write.WRITTEN ? written : kept).add(name);
@@ -273,13 +253,13 @@ public final class MonitorImport {
     
     }
 
-    /** Loop composition measured from HardwareMonitor sessions. */
     static final class LoopParts {
         double logicMs = Double.NaN, cv = Double.NaN, spikeProb = Double.NaN, jitterStd = Double.NaN, spikeMean = Double.NaN, spikeStd = Double.NaN;
         final double[] ms = new double[CLASSES.length], perLoop = new double[CLASSES.length];
         final boolean[] has = new boolean[CLASSES.length];
 
         void write(Writer w, ProfileDb db, long src, boolean force, List<String> written, List<String> kept) throws SQLException {
+
             w.param("control.logic_time_ms", logicMs, null);
             for (int k = 0; k < CLASSES.length; k++) {
                 if (!has[k]) continue;
@@ -299,11 +279,10 @@ public final class MonitorImport {
         }
     }
 
-    /** Hardware call classes, matching the control.<class>_ms / control.<class>s_per_loop entries. */
     static final String[] CLASSES = {"motor_read", "motor_write", "servo_write", "sensor_read", "other_read"};
 
-    /** Which class a call on a device of {@code type} falls in (-1 = not counted). */
     static int classOf(String type, boolean read) {
+
         if (type == null) return -1;
         switch (type) {
             case "DcMotor":
@@ -326,12 +305,8 @@ public final class MonitorImport {
         }
     }
 
-    /**
-     * Logic time (loop minus hardware time), per-class call times and counts per loop (uncached
-     * reads, non-repeated writes), call-time scatter, loop jitter and spikes. Null if the sessions
-     * have no loop columns.
-     */
     static LoopParts loopParts(List<Session> sessions, PrintStream log) throws IOException {
+
         List<Double> logic = new ArrayList<>(), jitter = new ArrayList<>(), spikes = new ArrayList<>();
         long loopSamples = 0, spikeCount = 0;
         List<List<Double>> lat = new ArrayList<>();
@@ -345,7 +320,6 @@ public final class MonitorImport {
                     if (Double.isFinite(l) && Double.isFinite(h) && l > 0) logic.add(Math.max(0, l - h));
                 }
             }
-            // jitter and spikes from the per-row last-loop samples, against a running median
             double[] lm = s.loopMs();
             int win = 10;
             for (int i = 0; i < lm.length; i++) {
@@ -356,7 +330,8 @@ public final class MonitorImport {
                 if (lm[i] > 2 * med) {
                     spikeCount++;
                     spikes.add(lm[i] - med);
-                } else {
+                }
+                else {
                     jitter.add(lm[i] - med);
                 }
             }
@@ -374,7 +349,7 @@ public final class MonitorImport {
                     last = t;
                 }
                 boolean read = "R".equals(et.str(row, "kind"));
-                boolean flagged = "1".equals(et.str(row, "flag")); // cache hit (read) or repeated value (write): no hub traffic
+                boolean flagged = "1".equals(et.str(row, "flag")); //cache hit (read) or repeated value (write): no hub traffic
                 if (flagged) continue;
                 int k = classOf(types.get(et.str(row, "device")), read);
                 double us = et.num(row, "latency_us");
@@ -419,6 +394,7 @@ public final class MonitorImport {
     }
 
     static Session load(Path dir) throws IOException {
+
         Csv.Table t = Csv.read(dir.resolve("system.csv"));
         String opMode = null;
         Path summary = dir.resolve("summary.json");
@@ -427,22 +403,20 @@ public final class MonitorImport {
                 Object j = Json.parse(new String(Files.readAllBytes(summary), StandardCharsets.UTF_8));
                 opMode = Json.str(Json.obj(j, "session"), "opMode");
             } catch (RuntimeException e) {
-                // a session cut off by a power loss can have a partial summary; the CSVs are still fine
             }
         }
-        return new Session(dir.getFileName().toString(), opMode, dir, t.column("t_s"), t.column("battery_v"), t.column("total_current_a"),
-                t.has("loop_ms") ? Arrays.stream(t.column("loop_ms")).filter(Double::isFinite).toArray() : new double[0]);
+        return new Session(dir.getFileName().toString(), opMode, dir, t.column("t_s"), t.column("battery_v"), t.column("total_current_a"), t.has("loop_ms") ? Arrays.stream(t.column("loop_ms")).filter(Double::isFinite).toArray() : new double[0]);
     }
 
     static double driveTopSpeed(ProfileDb db, List<Session> sessions, PrintStream log) throws IOException, SQLException {
+
         Double ticks = db.value("drive.encoder_ticks_per_rev"), wheel = db.value("drive.wheel_diameter_m"), gear = db.value("drive.gear_ratio");
         if (ticks == null || wheel == null) {
             log.println("  drive top speed: skipped (set drive.encoder_ticks_per_rev and drive.wheel_diameter_m)");
             return Double.NaN;
         }
         ProfileDb.ParamRow namesRow = db.param("drive.motor_names");
-        List<String> names = namesRow != null && namesRow.text() != null
-                ? Arrays.stream(namesRow.text().split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toList()) : null;
+        List<String> names = namesRow != null && namesRow.text() != null ? Arrays.stream(namesRow.text().split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toList()) : null;
         List<Double> speeds = new ArrayList<>();
         for (Session s : sessions) {
             Path m = s.dir().resolve("motors.csv");
@@ -466,8 +440,8 @@ public final class MonitorImport {
         return mps;
     }
 
-    /** Groups {x, y} points into bins of width {@code w}: {binCenter, meanY, stdY, n} (bins with >= minN points). */
     static List<double[]> bin(List<double[]> pts, double w, int minN) {
+
         java.util.TreeMap<Long, Stats.Running> bins = new java.util.TreeMap<>();
         for (double[] p : pts) bins.computeIfAbsent((long) Math.floor(p[0] / w), k -> new Stats.Running()).add(p[1]);
         List<double[]> out = new ArrayList<>();
@@ -480,6 +454,7 @@ public final class MonitorImport {
     }
 
     static List<double[]> histogram(double[] v, int bins) {
+
         double lo = Stats.percentile(v, 0), hi = Stats.percentile(v, 99.5);
         if (!(hi > lo)) hi = lo + 1;
         double w = (hi - lo) / bins;
@@ -494,6 +469,7 @@ public final class MonitorImport {
     }
 
     static double[] tail(double[] v, int n) {
+
         double[] f = Arrays.stream(v).filter(Double::isFinite).toArray();
         return Arrays.copyOfRange(f, Math.max(0, f.length - n), f.length);
     }
@@ -503,6 +479,7 @@ public final class MonitorImport {
     }
 
     static double[] subsample(double[] v, int max) {
+
         if (v.length <= max) return v.clone();
         double[] out = new double[max];
         for (int i = 0; i < max; i++) out[i] = v[(int) ((long) i * v.length / max)];
@@ -510,6 +487,7 @@ public final class MonitorImport {
     }
 
     static double round(double v, int sig) {
+
         if (!Double.isFinite(v) || v == 0) return v;
         double mag = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(v))));
         return Math.round(v * mag) / mag;

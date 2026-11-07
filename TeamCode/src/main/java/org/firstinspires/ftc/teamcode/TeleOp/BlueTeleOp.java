@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
+import org.firstinspires.ftc.teamcode.Systems.Shooter;
 import org.firstinspires.ftc.teamcode.Systems.Drivetrain.plain.RobotCentricDrive;
 import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 
@@ -15,10 +16,9 @@ public class BlueTeleOp extends TeleOpBaseOpMode {
 
     private final Intake intake = new Intake().asSubsystem();
     private final Blocker blocker = new Blocker().asSubsystem();
+    private final Shooter shooter = new Shooter();
 
     private RobotCentricDrive robotCentricDrive;
-
-    private DcMotor motor;
 
     @Override
     public void init() {
@@ -51,16 +51,16 @@ public class BlueTeleOp extends TeleOpBaseOpMode {
         );
 
         intake.provideComponents(new Intake(super.intake), controller1);
-        blocker.provideComponents(super.blocker, controller1);
-
-        motor = hardwareMap.dcMotor.get(DeviceConstants.intakeMotorDeviceName);
+        blocker.provideComponents(super.blocker, controller1, flywheel, turret);
+        shooter.provideComponents(flywheel, turret, follower, controller1, controller2);
+        addDriverTelemetry(shooter);
 
         setUpLynxModule();
     }
 
     @Override
     public void start() {
-        flywheel.setVelocity(1500, true);
+        shooter.start(alliance);
     }
 
     @Override
@@ -73,8 +73,8 @@ public class BlueTeleOp extends TeleOpBaseOpMode {
 
         blocker.update();
         follower.update();
-        motor.setPower(1);
-        flywheel.update();
+        intake.update();
+        shooter.update();
         robotCentricDrive.update();
 
     }

@@ -58,7 +58,9 @@ Sim/
     undeterminables/ error distributions, odometry drift, LoopTimingModel, static charge
                      (RobotCharge, TileChargeGrid, ChargeSim, Electrostatics), Disconnects
     predict/         AimSolver, ShotPredictor (Monte Carlo), DriveTimePredictor, LoopControlSim
-    scenarios/       drive / launcher / localization / loop / esd sims that save results
+    robotcode/       adapters that let TeamCode classes run on sim time and sim hardware (SimClock, SimFlywheelMotor)
+    scenarios/       drive / launcher / localization / loop / esd sims that save results, plus code-in-the-loop
+                     turret (TurretScenario) and flywheel (FlywheelCodeScenario) sims that run TeamCode's own classes
     input/           HardwareMonitor + shot/pose/disconnect log importers
     telemetry/ visualization/ utility/
 ```
@@ -74,7 +76,9 @@ Sim/
   `build.dependencies.gradle` (applied by both `FtcRobotController` and `TeamCode`).
 - **Sim** is a desktop module, also **Java 8** source/target (Kotlin `JVM_1_8`), with its own
   dependencies in `Sim/build.gradle.kts` (`org.xerial:sqlite-jdbc`, commons-math3, JUnit 4). It must
-  not depend on the FTC SDK or Android.
+  not depend on the FTC SDK or Android. It *does* compile a list of pure-Java TeamCode classes
+  (`copyTeamCodeSources`) against the stand-ins in `Sim/src/ftcStubs`, so its sims run the robot's
+  real control code. Keep those classes free of hardware calls beyond what the stand-ins have.
 - **All Java in this repo is Java 8.** No `record`, `var`, `switch` arrows/expressions, text blocks
   (`"""`), `instanceof` patterns, `List.of`/`Map.of`/`Set.of`, `Path.of`, `Files.readString`/
   `writeString`, `String.isBlank`/`repeat`/`strip`, `Stream.toList()`, `Optional.orElseThrow()`
@@ -127,6 +131,17 @@ v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep e
 
 ## Conventions for agents
 
+- Format like Pranav: one statement per line (no hanging wraps; only his block lists, builder chains and array
+  lists go multi-line), `else` on the line after `}`, blank line after `{` in multi-line methods. Run
+  `python tools/pranavfmt.py <files>` on Java you write. See the code style rule in DEV_NOTES.
+- Only comment when people literally won't get it, rough and short, `//blah`. See the code style rule in
+  DEV_NOTES.
+- Threads and loop code must suit the Control Hub: 4 slow A53 cores and little RAM, shared with the RC app,
+  and one serial link per hub. At most one low-priority daemon background thread per job (`Thread.MIN_PRIORITY`).
+  It does file/network I/O only, never hardware calls (hub transactions are serialized, so threads don't
+  speed them up, they only add lock waits). It sleeps or blocks, never busy-waits, and stops when the OpMode
+  stops. No thread pools, parallel streams or per-loop `new Thread`. No allocation per loop in hot paths:
+  reuse buffers and arrays. See DEV_NOTES.
 - Write new robot logic in `TeamCode` only. Never modify `FtcRobotController` —
   one deliberate exception: its `AndroidManifest.xml` declares `android:exported`,
   which `targetSdk` ≥ 31 requires (see DEV_NOTES). Re-apply after SDK upgrades.
@@ -151,7 +166,9 @@ v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep e
   (`measured` > `manual` > `sim` > `placeholder`). Never use `--force` on the shared profile
   without the user asking.
 - Never fill `Sim/data/robot_profile.db` with `--example` placeholders. Example runs use a
-  scratch `--db out/...` file.
+  scratch `--db out/...` file, or `--assume` (a filled copy in `out/`).
+- Robot code that needs the time reads `Utility/Clock.seconds()` (same as `System.nanoTime()` on the robot),
+  so the code-in-the-loop sims can run it on sim time.
 
 ## Hardware monitoring
 
@@ -165,6 +182,27 @@ tables + CSV/JSON export; page source `TeamCode/src/main/assets/hwmonitor/index.
 delete them with the **Hardware Monitor: Clear Database** OpMode, the dashboard, or
 `HardwareMonitor.clearDatabase()`. Design, costs and limits
 are in [DEV_NOTES.md](./DEV_NOTES.md).
+
+## Turret control and tuning
+
+`Systems/Turret/TurretController` is model based (speed per volt, lag, dead time, friction, and also top speed and
+acceleration, because the servos run out of torque long before volts), not a hand-tuned PIDF. Its gains come from `TURRET_BANDWIDTH`. Tune it with the **Turret Autotuner** OpMode: run STATIONARY
+first, with the robot still and the turret straight at INIT, then DRIVING (press A, then drive). Each run saves
+`/sdcard/FIRST/data/TurretAutotune/...`, and the next build pulls it into `TunedConstants`. **Turret Manual
+Tuner** is for dashboard tweaking. `TurretAutotuneEngine` has no hardware calls, so keep it that way and
+test it against a simulated turret. Details are in DEV_NOTES.
+
+The turret travels **±190° from home** (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`) and the robot may spin
+forever. `TurretRoute` (used by `Shooter` and the autotuner's DRIVING mode) follows the aim round continuously and
+swings it a full turn around before an end, early enough for the turret's stopping distance. `TurretController`'s plan
+never heads for an end faster than it can stop (`setTravel`). Past the limit plus
+`TURRET_HARD_LIMIT_MARGIN_DEGREES`, `TurretBase` will only drive back toward home, which protects the wiring.
+Flywheel shake is handled by **vibration rejection** in `TurretController`: it measures shake from the error's
+second difference and lowers stiffness while the turret shakes, down to `TURRET_MIN_BANDWIDTH`, which DRIVING
+derives (`TURRET_SHAKE_BANDWIDTH`: the softest bandwidth that really shook less without holding or tracking worse; equal
+to the bandwidth = never soften). The autotuner turns rejection off while it measures.
+**Lanyard compensation** (`LanyardMap`, `TURRET_LANYARDS_ENABLED`, off for now) learns the volts the lanyards need at
+each angle (the Manual Tuner's X sweep) and adds them as feedforward. When it's off it must add exactly 0.
 
 ## Simulation and the robot profile
 

@@ -11,8 +11,12 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
+import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
+import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
+import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients;
+import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
@@ -20,7 +24,9 @@ import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 @TeleOp (group = "tuning")
 public class FlywheelTuner extends LinearOpMode {
 
-    public static int LOOP_TIME = 60;
+    public static boolean SHOOT = false;
+
+    public static int LOOP_TIME = (int) Math.round(TunedConstants.LOOP_TIME_MS);
 
     public enum TUNING_STAGES {
 
@@ -45,9 +51,17 @@ public class FlywheelTuner extends LinearOpMode {
     public static double I_MIN = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS.minI, I_MAX = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS.maxI;
     public static double P_MIN = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS.minP, P_MAX = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS.maxP;
 
+    public static double VOLTAGE_SAMPLE_PERIOD = FlywheelConstants.FLYWHEEL_VOLTAGE_SAMPLE_PERIOD;
+    public static double VOLTAGE_FILTER_TAU = FlywheelConstants.FLYWHEEL_VOLTAGE_FILTER_TAU;
+
     public static double VELOCITY;
 
     private Flywheel flywheel;
+
+    private GeneralVeloMotor intake;
+
+    private Blocker blocker;
+
     private FlywheelPIDVSCoefficients coefficients;
 
     private VoltageSensor batteryVoltageSensor;
@@ -59,6 +73,15 @@ public class FlywheelTuner extends LinearOpMode {
         Telemetry telemetry = new MultipleTelemetry(this.telemetry, FtcDashboard.getInstance().getTelemetry());
 
         telemetry.setMsTransmissionInterval(12);
+
+        intake = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
+        intake.setVelocityPDFCoefficients(
+                IntakeConstants.INTAKE_PDF_COEFFICIENTS[0],
+                IntakeConstants.INTAKE_PDF_COEFFICIENTS[1],
+                IntakeConstants.INTAKE_PDF_COEFFICIENTS[2]
+        );
+
+        blocker = new Blocker(hardwareMap.servo.get(DeviceConstants.blockerServoDeviceName));
 
         batteryVoltageSensor = hardwareMap.voltageSensor.iterator().next();
 
@@ -74,6 +97,8 @@ public class FlywheelTuner extends LinearOpMode {
         waitForStart();
 
         flywheel.reset();
+
+        intake.setVelocity(IntakeConstants.INTAKE_VELOCITY);
 
         while (opModeIsActive()) {
 
@@ -97,14 +122,20 @@ public class FlywheelTuner extends LinearOpMode {
             telemetry.addData("voltage", batteryVoltageSensor.getVoltage());
 
             flywheel.setVelocityPIDVSCoefficients(coefficients);
+            flywheel.setVoltageFilter(VOLTAGE_SAMPLE_PERIOD, VOLTAGE_FILTER_TAU);
 
             flywheel.setVelocity(VELOCITY, true);
 
+            intake.update();
+            blocker.setState(SHOOT ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
             flywheel.update();
 
+            telemetry.addData("filtered voltage", flywheel.getFilteredVolts());
             telemetry.addData("Target Velocity", flywheel.getTargetVelocity());
             telemetry.addData("Current Velocity", flywheel.getCurrentVelocity());
             telemetry.addData("Velocity Estimate", flywheel.getVelocityEstimate());
+            telemetry.addData("Raw Velocity", flywheel.getRawVelocity());
+            telemetry.addData("Filter Hz", flywheel.getEncoder().getFilterBandwidth());
             telemetry.addData("Error", flywheel.getError());
             telemetry.addData("ki", flywheel.ki);
             telemetry.addData("p", flywheel.getPIDVS()[0]);

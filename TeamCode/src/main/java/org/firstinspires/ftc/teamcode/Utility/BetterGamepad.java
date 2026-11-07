@@ -63,7 +63,7 @@ public class BetterGamepad {
     public void rumble(int durationMs) { gamepad.rumble(durationMs); }
     public void runRumbleEffect(Gamepad.RumbleEffect effect) { gamepad.runRumbleEffect(effect); }
 
-    // to detect if a key has just been pressed
+    //to detect if a key has just been pressed
     public boolean curr_a = false;
     public boolean prev_a = false;
     public boolean aHasJustBeenPressed = false;

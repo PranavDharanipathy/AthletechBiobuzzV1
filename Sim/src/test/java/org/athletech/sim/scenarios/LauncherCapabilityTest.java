@@ -16,6 +16,7 @@ public class LauncherCapabilityTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
     @Test public void pollenOnlyScenarioClearsStaleNectarSimulationButKeepsMeasurements() throws Exception {
+
         Path root = temporary.getRoot().toPath();
         try (ProfileDb db = ProfileDb.open(root.resolve("profile.db"))) {
             db.fillExamples();
@@ -30,8 +31,7 @@ public class LauncherCapabilityTest {
             db.setCurve("launcher.nectar.make_prob_vs_distance", Collections.singletonList(new double[] {2, 0.9}), example, false);
             db.setCurve("launcher.nectar.measured_make_prob_vs_distance", Collections.singletonList(new double[] {2, 0.8}), measured, false);
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            SimContext ctx = new SimContext(db, root.resolve("out"), true, false, 1, 1,
-                    new PrintStream(bytes), "pollen-only regression with example physics");
+            SimContext ctx = new SimContext(db, root.resolve("out"), true, false, 1, 1, new PrintStream(bytes), "pollen-only regression with example physics");
             LauncherScenario.run(ctx);
             assertTrue(db.curve("launcher.pollen.make_prob_vs_distance").hasData());
             assertNull(db.param("launcher.nectar.max_range_m").value());

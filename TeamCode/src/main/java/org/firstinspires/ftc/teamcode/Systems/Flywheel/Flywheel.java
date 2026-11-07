@@ -6,8 +6,11 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
+import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
+import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.DynamicTrapezoidalSum;
 import org.firstinspires.ftc.teamcode.Utility.Encoder;
+import org.firstinspires.ftc.teamcode.Utility.HubVoltage;
 import org.firstinspires.ftc.teamcode.Utility.MathUtil;
 import org.firstinspires.ftc.teamcode.Utility.VoltageCompensator;
 
@@ -23,10 +26,7 @@ public final class Flywheel {
 
     private VoltageSensor batteryVoltageSensor;
 
-    private final VoltageCompensator voltageCompensator = new VoltageCompensator(
-            FlywheelConstants.FLYWHEEL_VOLTAGE_SAMPLE_PERIOD,
-            FlywheelConstants.FLYWHEEL_VOLTAGE_FILTER_TAU,
-            FlywheelConstants.FLYWHEEL_NOMINAL_VOLTS);
+    private final VoltageCompensator voltageCompensator = new VoltageCompensator(FlywheelConstants.FLYWHEEL_VOLTAGE_SAMPLE_PERIOD, FlywheelConstants.FLYWHEEL_VOLTAGE_FILTER_TAU, FlywheelConstants.FLYWHEEL_NOMINAL_VOLTS);
 
     public Flywheel(DcMotorEx flywheelMotor) {
 
@@ -36,13 +36,29 @@ public final class Flywheel {
 
         encoder = new Encoder(this.flywheelMotor);
         encoder.setDirection(Encoder.Direction.FORWARD);
+        encoder.setVelocityFilterParameters(
+                TunedConstants.FLYWHEEL_FILTER_MIN_BANDWIDTH, TunedConstants.FLYWHEEL_FILTER_MAX_BANDWIDTH,
+                TunedConstants.FLYWHEEL_FILTER_SCORE_MEMORY, TunedConstants.FLYWHEEL_FILTER_STALE_TIME
+        );
 
         this.flywheelMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
     }
 
     public void initVoltageSensor(HardwareMap hardwareMap) {
-        batteryVoltageSensor = hardwareMap.voltageSensor.iterator().next();
+        batteryVoltageSensor = HubVoltage.forDevice(hardwareMap, flywheelMotor);
+    }
+
+    public VoltageSensor getVoltageSensor() {
+        return batteryVoltageSensor;
+    }
+
+    public void setVoltageFilter(double samplePeriod, double filterTau) {
+        voltageCompensator.setFilter(samplePeriod, filterTau);
+    }
+
+    public double getFilteredVolts() {
+        return voltageCompensator.volts();
     }
 
     public double kp;
@@ -69,7 +85,6 @@ public final class Flywheel {
     public double minD, maxD;
 
     public double[] getPIDVS() {
-
         return new double[] {p, i, d, v, s};
     }
 
@@ -130,7 +145,7 @@ public final class Flywheel {
     private double dt;
 
     private double getSeconds() {
-        return System.nanoTime() * 1e-9;
+        return Clock.seconds();
     }
 
     private double power = 0;
@@ -159,7 +174,8 @@ public final class Flywheel {
 
         lastCurrentVelocity = currentVelocity;
         velocityEstimate = wasFirstTick || dt <= 0 ? 0 : (position - lastPosition) / dt;
-        currentVelocity = velocityEstimate;
+        rawVelocity = encoder.getInternalVelocity();
+        currentVelocity = encoder.updateFilteredVelocity(now, rawVelocity);
 
         chooseCoefficientsInternal();
 
@@ -172,20 +188,20 @@ public final class Flywheel {
         if (ki != 0 && MathUtil.isFinite(error * dt) && targetVelocity != 0) errorSum.updateSum(dt, error);
         else errorSum.setSum(0); //integral is reset if it's NaN or if targetVelocity is equal to 0
 
-        // i smashing
+        //i smashing
         if (Math.signum(error) != Math.signum(prevError)) {
             errorSum.setSum(errorSum.getSum() * kISmash);
         }
 
-        // i is prevented from getting too high or too low
+        //i is prevented from getting too high or too low
         if (ki == 0) {
             errorSum.setSum(0);
             i = 0;
-        } else {
+        }
+        else {
             double bound0 = minI / ki;
             double bound1 = maxI / ki;
-            errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(),
-                    Math.min(bound0, bound1), Math.max(bound0, bound1)));
+            errorSum.setRawSum(MathUtil.clamp(errorSum.getSum(), Math.min(bound0, bound1), Math.max(bound0, bound1)));
             i = ki * errorSum.getSum();
         }
 
@@ -235,7 +251,7 @@ public final class Flywheel {
         flywheelMotor.setPower(this.power);
     }
 
-    // default mode is enabled
+    //default mode is enabled
     private boolean isPIDEnabled = true;
 
     /// @return if motor is enabled
@@ -245,6 +261,12 @@ public final class Flywheel {
 
     public void runMotor(RunningMotor isPIDEnabled) {
         this.isPIDEnabled = isPIDEnabled.getValue();
+    }
+
+    private double rawVelocity = 0;
+
+    public double getRawVelocity() {
+        return rawVelocity;
     }
 
     public double getVelocityEstimate() {
@@ -270,11 +292,8 @@ public final class Flywheel {
     /// @param velocityMarginOfError Acceptable variation in velocity.
     /// @param stabilityMarginOfError Acceptable variation in stability.
     public boolean isAtVelocityAndStable(double velocityMarginOfError, double stabilityMarginOfError) {
-        if (firstTick || !isPIDEnabled || targetVelocity == 0
-                || !MathUtil.isFinite(targetVelocity) || !MathUtil.isFinite(currentVelocity)
-                || !MathUtil.isFinite(lastCurrentVelocity)
-                || !MathUtil.isFinite(velocityMarginOfError) || velocityMarginOfError < 0
-                || !MathUtil.isFinite(stabilityMarginOfError) || stabilityMarginOfError < 0) return false;
+
+        if (firstTick || !isPIDEnabled || targetVelocity == 0 || !MathUtil.isFinite(targetVelocity) || !MathUtil.isFinite(currentVelocity) || !MathUtil.isFinite(lastCurrentVelocity) || !MathUtil.isFinite(velocityMarginOfError) || velocityMarginOfError < 0 || !MathUtil.isFinite(stabilityMarginOfError) || stabilityMarginOfError < 0) return false;
 
         boolean isAtVelocity = Math.abs(targetVelocity - currentVelocity) <= velocityMarginOfError;
 
@@ -284,6 +303,8 @@ public final class Flywheel {
     }
 
     public void reset() {
+
+        encoder.resetVelocityFilter();
 
         flywheelMotor.setPower(0);
         power = 0;
@@ -307,6 +328,7 @@ public final class Flywheel {
     }
 
     private void resetIntegral() {
+
         errorSum.setSum(0);
         i = 0;
     }

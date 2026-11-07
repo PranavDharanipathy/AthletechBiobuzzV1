@@ -10,16 +10,6 @@ import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
-/**
- * Drop-in color sensor. Implements {@link ColorSensor}, {@link NormalizedColorSensor} and
- * {@link DistanceSensor}, matching the REV Color Sensor V3, so it can stand in for whichever of
- * those you were using. Calling an interface the real sensor lacks throws
- * {@link UnsupportedOperationException}.
- *
- * <pre>
- * NormalizedColorSensor color = new MonitoredColorSensor(hardwareMap, "color", true);
- * </pre>
- */
 public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         implements ColorSensor, NormalizedColorSensor, DistanceSensor {
 
@@ -41,12 +31,11 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         this(hardwareMap, name, false);
     }
 
-    /** @param sensor a {@link ColorSensor} and/or {@link NormalizedColorSensor} */
     public MonitoredColorSensor(HardwareDevice sensor, String name, boolean cacheReads) {
+
         super(sensor, name, "ColorSensor", cacheReads);
         if (!(sensor instanceof ColorSensor) && !(sensor instanceof NormalizedColorSensor)) {
-            throw new IllegalArgumentException("'" + name + "' (" + sensor.getClass().getSimpleName()
-                    + ") is not a color sensor");
+            throw new IllegalArgumentException("'" + name + "' (" + sensor.getClass().getSimpleName() + ") is not a color sensor");
         }
         redSlot = tracker.newSlot();
         greenSlot = tracker.newSlot();
@@ -70,26 +59,26 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
     }
 
     private ColorSensor raw() {
+
         if (device instanceof ColorSensor) return (ColorSensor) device;
         throw unsupported("ColorSensor");
     }
 
     private NormalizedColorSensor normalized() {
+
         if (device instanceof NormalizedColorSensor) return (NormalizedColorSensor) device;
         throw unsupported("NormalizedColorSensor");
     }
 
     private DistanceSensor distance() {
+
         if (device instanceof DistanceSensor) return (DistanceSensor) device;
         throw unsupported("DistanceSensor");
     }
 
     private UnsupportedOperationException unsupported(String what) {
-        return new UnsupportedOperationException("'" + getName() + "' ("
-                + device.getClass().getSimpleName() + ") is not a " + what);
+        return new UnsupportedOperationException("'" + getName() + "' (" + device.getClass().getSimpleName() + ") is not a " + what);
     }
-
-    // ------------------------------------------------------------------ ColorSensor
 
     @Override
     public int red() {
@@ -117,6 +106,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
     }
 
     private int channel(HwOp op, CacheSlot slot) {
+
         ColorSensor s = raw();
         if (tracker.cacheHit(op, slot, CacheSlot.NO_KEY)) return slot.i;
         long t0 = tracker.start();
@@ -145,6 +135,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
 
     @Override
     public void enableLed(boolean enable) {
+
         ColorSensor s = raw();
         long t0 = tracker.start();
         s.enableLed(enable);
@@ -154,6 +145,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
 
     @Override
     public void setI2cAddress(I2cAddr newAddress) {
+
         ColorSensor s = raw();
         long t0 = tracker.start();
         s.setI2cAddress(newAddress);
@@ -162,6 +154,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
 
     @Override
     public I2cAddr getI2cAddress() {
+
         ColorSensor s = raw();
         long t0 = tracker.start();
         I2cAddr v = s.getI2cAddress();
@@ -169,10 +162,9 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         return v;
     }
 
-    // ------------------------------------------------------------------ NormalizedColorSensor
-
     @Override
     public NormalizedRGBA getNormalizedColors() {
+
         NormalizedColorSensor s = normalized();
         if (tracker.cacheHit(HwOp.GET_NORMALIZED_COLORS, normalizedSlot, CacheSlot.NO_KEY)) {
             return (NormalizedRGBA) normalizedSlot.o;
@@ -186,6 +178,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
 
     @Override
     public float getGain() {
+
         NormalizedColorSensor s = normalized();
         long t0 = tracker.start();
         float v = s.getGain();
@@ -195,6 +188,7 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
 
     @Override
     public void setGain(float newGain) {
+
         NormalizedColorSensor s = normalized();
         long t0 = tracker.start();
         s.setGain(newGain);
@@ -202,10 +196,9 @@ public class MonitoredColorSensor extends MonitoredDevice<HardwareDevice>
         lastGain = newGain;
     }
 
-    // ------------------------------------------------------------------ DistanceSensor
-
     @Override
     public double getDistance(DistanceUnit unit) {
+
         DistanceSensor s = distance();
         if (tracker.cacheHit(HwOp.GET_DISTANCE, distanceSlot, CacheSlot.NO_KEY)) {
             return unit.fromMm(distanceSlot.d);

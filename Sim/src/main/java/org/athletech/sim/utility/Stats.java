@@ -2,20 +2,20 @@ package org.athletech.sim.utility;
 
 import java.util.Arrays;
 
-/** Small statistics helpers (no external dependencies). */
 public final class Stats {
     private Stats() {
     }
 
     public static double mean(double[] v) {
+
         if (v.length == 0) return Double.NaN;
         double s = 0;
         for (double x : v) s += x;
         return s / v.length;
     }
 
-    /** Sample standard deviation (n - 1). */
     public static double std(double[] v) {
+
         if (v.length < 2) return Double.NaN;
         double m = mean(v), s = 0;
         for (double x : v) s += (x - m) * (x - m);
@@ -23,14 +23,15 @@ public final class Stats {
     }
 
     public static double rms(double[] v) {
+
         if (v.length == 0) return Double.NaN;
         double s = 0;
         for (double x : v) s += x * x;
         return Math.sqrt(s / v.length);
     }
 
-    /** Percentile (0..100) with linear interpolation. */
     public static double percentile(double[] v, double p) {
+
         if (v.length == 0) return Double.NaN;
         double[] s = v.clone();
         Arrays.sort(s);
@@ -39,8 +40,8 @@ public final class Stats {
         return s[lo] + (pos - lo) * (s[hi] - s[lo]);
     }
 
-    /** 95% Wilson score interval for k successes in n trials: {low, high}. */
     public static double[] wilson(long k, long n) {
+
         if (n == 0) return new double[]{0, 1};
         double z = 1.959964, p = (double) k / n, z2 = z * z;
         double denom = 1 + z2 / n;
@@ -49,15 +50,15 @@ public final class Stats {
         return new double[]{Math.max(0, centre - half), Math.min(1, centre + half)};
     }
 
-    /** Standard error of a proportion, used as the "y_std" of probability curves. */
     public static double proportionStd(long k, long n) {
+
         if (n == 0) return Double.NaN;
         double p = (double) k / n;
         return Math.sqrt(Math.max(p * (1 - p), 0.25 / n) / n);
     }
 
-    /** Standard normal CDF (Abramowitz-Stegun 26.2.17, error < 7.5e-8). */
     public static double normalCdf(double z) {
+
         if (Double.isNaN(z)) return Double.NaN;
         if (z == Double.POSITIVE_INFINITY) return 1;
         if (z == Double.NEGATIVE_INFINITY) return 0;
@@ -67,7 +68,6 @@ public final class Stats {
         return z >= 0 ? 1 - tail : tail;
     }
 
-    /** Ordinary least squares y = intercept + slope * x. */
     public static final class Fit {
         private final double slope;
         private final double intercept;
@@ -77,6 +77,7 @@ public final class Stats {
         private final int n;
 
         public Fit(double slope, double intercept, double slopeStdErr, double interceptStdErr, double r2, int n) {
+
             this.slope = slope;
             this.intercept = intercept;
             this.slopeStdErr = slopeStdErr;
@@ -94,15 +95,11 @@ public final class Stats {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Fit)) return false;
             Fit o = (Fit) other;
-            return Double.compare(slope, o.slope) == 0
-                    && Double.compare(intercept, o.intercept) == 0
-                    && Double.compare(slopeStdErr, o.slopeStdErr) == 0
-                    && Double.compare(interceptStdErr, o.interceptStdErr) == 0
-                    && Double.compare(r2, o.r2) == 0
-                    && n == o.n;
+            return Double.compare(slope, o.slope) == 0 && Double.compare(intercept, o.intercept) == 0 && Double.compare(slopeStdErr, o.slopeStdErr) == 0 && Double.compare(interceptStdErr, o.interceptStdErr) == 0 && Double.compare(r2, o.r2) == 0 && n == o.n;
         }
 
         @Override
@@ -117,6 +114,7 @@ public final class Stats {
     }
 
     public static Fit linearFit(double[] x, double[] y) {
+
         int n = x.length;
         if (n < 3 || y.length != n) throw new IllegalArgumentException("need >= 3 points");
         double mx = mean(x), my = mean(y), sxx = 0, sxy = 0, syy = 0;
@@ -139,12 +137,12 @@ public final class Stats {
         return new Fit(slope, intercept, slopeSe, interceptSe, r2, n);
     }
 
-    /** Streaming mean / variance / min / max (Welford). */
     public static final class Running {
         private long n;
         private double mean, m2, min = Double.POSITIVE_INFINITY, max = Double.NEGATIVE_INFINITY;
 
         public void add(double x) {
+
             if (Double.isNaN(x)) return;
             n++;
             double d = x - mean;

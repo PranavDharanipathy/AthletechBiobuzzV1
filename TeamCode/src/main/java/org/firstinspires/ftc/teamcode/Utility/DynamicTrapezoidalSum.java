@@ -25,8 +25,9 @@ public class DynamicTrapezoidalSum {
     }
 
     public void setSum(double value) {
-        // A reset also starts a new integration interval, even if the total is unchanged.
-        // Otherwise the next update integrates against a sample from before the reset.
+
+        //a reset also starts a new integration interval, even if the total is unchanged
+        //otherwise the next update integrates against a sample from before the reset
         sum = value;
         hasLastY = false;
     }

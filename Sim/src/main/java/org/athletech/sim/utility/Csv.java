@@ -14,18 +14,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Minimal CSV reading (quoted fields supported) and writing. */
 public final class Csv {
     private Csv() {
     }
 
-    /** A parsed file: header names plus rows of raw strings. Lines starting with '#' are skipped. */
     public static final class Table {
         public final List<String> header;
         public final List<String[]> rows;
         private final Map<String, Integer> index = new HashMap<>();
 
         Table(List<String> header, List<String[]> rows) {
+
             this.header = header;
             this.rows = rows;
             for (int i = 0; i < header.size(); i++) index.put(header.get(i).trim().toLowerCase(Locale.ROOT), i);
@@ -36,13 +35,14 @@ public final class Csv {
         }
 
         public String str(String[] row, String column) {
+
             Integer i = index.get(column.toLowerCase(Locale.ROOT));
             if (i == null || i >= row.length) return "";
             return row[i].trim();
         }
 
-        /** The column as a number, or NaN when blank / missing / not a number. */
         public double num(String[] row, String column) {
+
             String s = str(row, column);
             if (s.isEmpty()) return Double.NaN;
             try {
@@ -53,6 +53,7 @@ public final class Csv {
         }
 
         public double[] column(String column) {
+
             double[] out = new double[rows.size()];
             for (int r = 0; r < rows.size(); r++) out[r] = num(rows.get(r), column);
             return out;
@@ -60,12 +61,13 @@ public final class Csv {
     }
 
     public static Table read(Path file) throws IOException {
+
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
         List<String> header = null;
         List<String[]> rows = new ArrayList<>();
         for (String line : lines) {
             if (line.trim().isEmpty() || line.startsWith("#")) continue;
-            if (header == null && line.startsWith("﻿")) line = line.substring(1); // Excel BOM
+            if (header == null && line.startsWith("﻿")) line = line.substring(1); //excel BOM
             List<String> cells = parseLine(line);
             if (header == null) header = cells;
             else rows.add(cells.toArray(new String[0]));
@@ -74,6 +76,7 @@ public final class Csv {
     }
 
     public static List<String> parseLine(String line) {
+
         List<String> out = new ArrayList<>();
         StringBuilder cur = new StringBuilder();
         boolean quoted = false;
@@ -84,18 +87,23 @@ public final class Csv {
                     if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
                         cur.append('"');
                         i++;
-                    } else {
+                    }
+                    else {
                         quoted = false;
                     }
-                } else {
+                }
+                else {
                     cur.append(c);
                 }
-            } else if (c == '"') {
+            }
+            else if (c == '"') {
                 quoted = true;
-            } else if (c == ',') {
+            }
+            else if (c == ',') {
                 out.add(cur.toString());
                 cur.setLength(0);
-            } else {
+            }
+            else {
                 cur.append(c);
             }
         }
@@ -104,6 +112,7 @@ public final class Csv {
     }
 
     public static String cell(Object v) {
+
         if (v == null) return "";
         if (v instanceof Double) return fmt((Double) v);
         String s = v.toString();
@@ -111,8 +120,8 @@ public final class Csv {
         return s;
     }
 
-    /** Up to 6 significant digits, no trailing zeros, no exponent for everyday magnitudes. */
     public static String fmt(double d) {
+
         if (Double.isNaN(d) || Double.isInfinite(d)) return "";
         if (d == Math.rint(d) && Math.abs(d) < 1e15) return Long.toString((long) d);
         double a = Math.abs(d);
@@ -123,6 +132,7 @@ public final class Csv {
     }
 
     public static void write(Path file, List<String> header, List<Object[]> rows) throws IOException {
+
         Files.createDirectories(file.toAbsolutePath().getParent());
         try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             w.write(String.join(",", header));

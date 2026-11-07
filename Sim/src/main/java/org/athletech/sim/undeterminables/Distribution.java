@@ -2,10 +2,6 @@ package org.athletech.sim.undeterminables;
 
 import org.athletech.sim.utility.Rng;
 
-/**
- * A random error or variation ("undeterminable"): how much a quantity scatters from shot to shot,
- * loop to loop or match to match. Read from the profile's {@code distributions} table.
- */
 public final class Distribution {
     private final String name;
     private final Kind kind;
@@ -18,6 +14,7 @@ public final class Distribution {
     private final String unit;
 
     public Distribution(String name, Kind kind, double mean, double std, double min, double max, double mode, double[] samples, String unit) {
+
         this.name = name;
         this.kind = kind;
         this.mean = mean;
@@ -41,18 +38,11 @@ public final class Distribution {
 
     @Override
     public boolean equals(Object other) {
+
         if (this == other) return true;
         if (!(other instanceof Distribution)) return false;
         Distribution o = (Distribution) other;
-        return java.util.Objects.equals(name, o.name)
-                && java.util.Objects.equals(kind, o.kind)
-                && Double.compare(mean, o.mean) == 0
-                && Double.compare(std, o.std) == 0
-                && Double.compare(min, o.min) == 0
-                && Double.compare(max, o.max) == 0
-                && Double.compare(mode, o.mode) == 0
-                && java.util.Objects.equals(samples, o.samples)
-                && java.util.Objects.equals(unit, o.unit);
+        return java.util.Objects.equals(name, o.name) && java.util.Objects.equals(kind, o.kind) && Double.compare(mean, o.mean) == 0 && Double.compare(std, o.std) == 0 && Double.compare(min, o.min) == 0 && Double.compare(max, o.max) == 0 && Double.compare(mode, o.mode) == 0 && java.util.Objects.equals(samples, o.samples) && java.util.Objects.equals(unit, o.unit);
     }
 
     @Override
@@ -66,13 +56,12 @@ public final class Distribution {
     }
 
     public enum Kind {
-        /** Not measured yet: always returns 0 (no error). */
         NONE,
         CONSTANT, NORMAL, UNIFORM, TRIANGULAR, LOGNORMAL,
-        /** Draws from recorded samples. */
         EMPIRICAL;
 
         public static Kind parse(String s) {
+
             if (s == null || s.trim().isEmpty()) return NONE;
             return Kind.valueOf(s.trim().toUpperCase(java.util.Locale.ROOT));
         }
@@ -95,6 +84,7 @@ public final class Distribution {
     }
 
     public double sample(Rng rng) {
+
         double m = or(mean, 0), s = or(std, 0);
         double v;
         switch (kind) {
@@ -111,7 +101,6 @@ public final class Distribution {
                 v = triangular(rng, or(min, m - s * Math.sqrt(6)), or(max, m + s * Math.sqrt(6)), or(mode, m));
                 break;
             case LOGNORMAL: {
-                // parameterised by the mean and std of the value itself (must be > 0)
                 double variance = s * s, mm = Math.max(1e-12, m);
                 double sigma2 = Math.log(1 + variance / (mm * mm));
                 double mu = Math.log(mm) - sigma2 / 2;
@@ -121,7 +110,7 @@ public final class Distribution {
             case EMPIRICAL:
                 v = samples.length == 0 ? m : samples[rng.nextInt(samples.length)];
                 break;
-            default: // NONE
+            default: //NONE
                 v = 0;
         }
         if (kind != Kind.UNIFORM && kind != Kind.TRIANGULAR) {
@@ -132,6 +121,7 @@ public final class Distribution {
     }
 
     private static double triangular(Rng rng, double a, double b, double c) {
+
         if (!(b > a)) return a;
         c = Math.max(a, Math.min(b, c));
         double u = rng.uniform(), f = (c - a) / (b - a);
@@ -142,8 +132,8 @@ public final class Distribution {
         return org.athletech.sim.utility.Csv.fmt(Math.abs(v) < 1e-12 ? 0 : v);
     }
 
-    /** One-line description, e.g. "normal(mean 0, std 35 rpm)". */
     public String describe() {
+
         switch (kind) {
             case NONE: return "not set (treated as zero error)";
             case CONSTANT: return "constant " + f(mean) + " " + unit;

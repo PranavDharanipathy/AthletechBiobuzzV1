@@ -18,7 +18,7 @@ import java.util.List;
 
 @Config
 @TeleOp (group = "tuning")
-public class HoodInterpolationTuner extends TeleOpBaseOpMode {
+public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
 
     public static Alliance ALLIANCE = Alliance.RED;
 
@@ -26,13 +26,10 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
 
     public static double FLYWHEEL_VELOCITY = 0;
 
-    public static double HOOD_POSITION = 0.3;
-
     public static double DISTANCE_TO_GOAL = 0;
 
     private final List<Double> distances = new ArrayList<>();
     private final List<Double> velocities = new ArrayList<>();
-    private final List<Double> positions = new ArrayList<>();
 
     private RobotCentricDrive robotCentricDrive;
 
@@ -63,18 +60,18 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
         flywheel.reset();
     }
 
-    private boolean seeHoodInterpolationDataset = false;
+    private boolean seeInterpolationDataset = false;
 
     @Override
     public void loop() {
 
-        // clear data at start of loop
+        //clear data at start of loop
         clearCacheOfLynxModule();
 
         controller1.getInformation();
 
         if (controller1.yHasJustBeenPressed) {
-            seeHoodInterpolationDataset = !seeHoodInterpolationDataset;
+            seeInterpolationDataset = !seeInterpolationDataset;
         }
 
         blocker.setState(SHOOT ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
@@ -86,7 +83,6 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
 
         if (controller1.dpad_upHasJustBeenPressed) {
             distances.add(DISTANCE_TO_GOAL);
-            positions.add(HOOD_POSITION);
             velocities.add(flywheel.getTargetVelocity());
         }
         else if (controller1.dpad_downHasJustBeenPressed && !distances.isEmpty()) {
@@ -94,20 +90,16 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
             int lastIndex = distances.size() - 1;
 
             distances.remove(lastIndex);
-            positions.remove(lastIndex);
             velocities.remove(lastIndex);
         }
-
-        hood.tuningUpdate(HOOD_POSITION);
 
         robotCentricDrive.update();
 
         telemetry.addLine("<dpad up> to add data point.");
         telemetry.addLine("<dpad down> to remove data point.");
-        telemetry.addLine("<Y> to see hood interpolation dataset.");
+        telemetry.addLine("<Y> to see flywheel interpolation dataset.");
 
-        if (seeHoodInterpolationDataset) {
-            telemetry.addData("positions", positions);
+        if (seeInterpolationDataset) {
             telemetry.addData("distances", distances);
             telemetry.addData("velocities", velocities);
         }
@@ -115,7 +107,6 @@ public class HoodInterpolationTuner extends TeleOpBaseOpMode {
             telemetry.addLine();
 
             telemetry.addData("distance to goal", DISTANCE_TO_GOAL);
-            telemetry.addData("hood position", hood.accessHoodAngler().getPosition());
 
             telemetry.addLine();
 

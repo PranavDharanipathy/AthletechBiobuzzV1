@@ -2,7 +2,6 @@ package org.athletech.sim.utility;
 
 import java.util.SplittableRandom;
 
-/** Seeded random numbers so every sim run is reproducible ({@code --seed}). */
 public final class Rng {
     private final SplittableRandom random;
 
@@ -15,8 +14,8 @@ public final class Rng {
     private double spare;
     private boolean hasSpare;
 
-    /** Standard normal sample (Marsaglia polar method; SplittableRandom has no nextGaussian before Java 17). */
     public double gaussian() {
+
         if (hasSpare) {
             hasSpare = false;
             return spare;
@@ -36,6 +35,5 @@ public final class Rng {
     public double gaussian(double mean, double std) { return mean + std * gaussian(); }
     public int nextInt(int bound) { return random.nextInt(bound); }
 
-    /** Independent stream, e.g. one per Monte Carlo worker. */
     public Rng split() { return new Rng(random.nextLong()); }
 }

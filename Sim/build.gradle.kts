@@ -58,3 +58,50 @@ tasks.test {
     workingDir = projectDir
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
+
+//the robot's own control code, so sims and the tuning analyzer run the real thing, not a copy that drifts.
+//Only pure-Java classes: anything that touches hardware gets a stand-in in src/ftcStubs
+val teamCodeSources = tasks.register<Sync>("copyTeamCodeSources") {
+    from(rootProject.file("TeamCode/src/main/java")) {
+        include("org/firstinspires/ftc/teamcode/Utility/Encoder.java")
+        include("org/firstinspires/ftc/teamcode/Utility/VoltageCompensator.java")
+        include("org/firstinspires/ftc/teamcode/Utility/MathUtil.java")
+        include("org/firstinspires/ftc/teamcode/Utility/InterpolationData.java")
+        include("org/firstinspires/ftc/teamcode/Utility/DynamicTrapezoidalSum.java")
+        include("org/firstinspires/ftc/teamcode/Utility/Clock.java")
+        include("org/firstinspires/ftc/teamcode/Constants/TunedConstants.java")
+        include("org/firstinspires/ftc/teamcode/Constants/FlywheelConstants.java")
+        include("org/firstinspires/ftc/teamcode/Constants/ShooterConstants.java")
+        include("org/firstinspires/ftc/teamcode/Constants/TurretConstants.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Flywheel/Flywheel.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Flywheel/FlywheelPIDVSCoefficients.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Flywheel/ShotGate.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretController.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretRoute.java")
+        include("org/firstinspires/ftc/teamcode/Systems/Turret/LanyardMap.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/TurretLanyardSweep.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/TurretAutotuneEngine.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/FlywheelVoltageFilterFit.java")
+    }
+    from(file("src/ftcStubs/java"))
+    into(layout.buildDirectory.dir("generated/teamcode-src"))
+}
+
+sourceSets.named("main") {
+    java.srcDir(teamCodeSources)
+}
+
+tasks.register<JavaExec>("analyzeTuning") {
+    group = "tuning"
+    description = "Pulls new TunerTeleOp sessions and Turret Autotuner results (if a robot is on adb) and writes TunedConstants.java + tuning-data/REPORT.md"
+    dependsOn(":TeamCode:pullTuningData")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.athletech.sim.tuning.TuningAnalyzer")
+    workingDir = rootDir
+    args(
+        "tuning-data/sessions",
+        "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Constants/TunedConstants.java",
+        "tuning-data/REPORT.md",
+        "tuning-data/turret-autotune"
+    )
+}

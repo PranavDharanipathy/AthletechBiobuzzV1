@@ -3,13 +3,6 @@ package org.firstinspires.ftc.teamcode.Utility.Hardware;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.TouchSensor;
 
-/**
- * Drop-in {@link TouchSensor} that counts and times every read and can cache them.
- *
- * <pre>
- * TouchSensor limit = new MonitoredTouchSensor(hardwareMap, "liftLimit", true);
- * </pre>
- */
 public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implements TouchSensor {
 
     private final CacheSlot pressedSlot;
@@ -24,6 +17,7 @@ public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implement
     }
 
     public MonitoredTouchSensor(TouchSensor sensor, String name, boolean cacheReads) {
+
         super(sensor, name, "TouchSensor", cacheReads);
         pressedSlot = tracker.newSlot();
         valueSlot = tracker.newSlot();
@@ -31,6 +25,7 @@ public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implement
 
     @Override
     public boolean isPressed() {
+
         if (tracker.cacheHit(HwOp.IS_PRESSED, pressedSlot, CacheSlot.NO_KEY)) return pressedSlot.b;
         long t0 = tracker.start();
         boolean v = device.isPressed();
@@ -41,6 +36,7 @@ public class MonitoredTouchSensor extends MonitoredDevice<TouchSensor> implement
 
     @Override
     public double getValue() {
+
         if (tracker.cacheHit(HwOp.GET_TOUCH_VALUE, valueSlot, CacheSlot.NO_KEY)) return valueSlot.d;
         long t0 = tracker.start();
         double v = device.getValue();

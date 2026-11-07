@@ -5,21 +5,10 @@ import org.athletech.sim.field.Aperture;
 import org.athletech.sim.utility.Vec2;
 import org.athletech.sim.utility.Vec3;
 
-/**
- * Ball flight with gravity, quadratic air drag and Magnus lift, integrated with RK4. Stops at the
- * first time the ball goes into the target's plane (scores or hits the structure) or hits the floor.
- *
- * <pre>
- *   a = g - (rho*Cd*A / 2m)|v| v + (rho*Cl*A / 2m)|v|^2 * L
- * </pre>
- * L is the unit vector perpendicular to the velocity in the vertical plane, pointing up. A
- * positive lift coefficient is backspin (ball floats), negative is topspin (ball dips).
- */
 public final class Projectile {
     private Projectile() {
     }
 
-    /** Game element properties. */
     public static final class Ball {
         private final String name;
         private final double massKg;
@@ -28,8 +17,8 @@ public final class Projectile {
         private final double liftCoeff;
 
         public Ball(String name, double massKg, double diameterM, double dragCoeff, double liftCoeff) {
-            if (!Double.isFinite(massKg) || massKg <= 0 || !Double.isFinite(diameterM) || diameterM <= 0
-                    || !Double.isFinite(dragCoeff) || dragCoeff < 0 || !Double.isFinite(liftCoeff)) {
+
+            if (!Double.isFinite(massKg) || massKg <= 0 || !Double.isFinite(diameterM) || diameterM <= 0 || !Double.isFinite(dragCoeff) || dragCoeff < 0 || !Double.isFinite(liftCoeff)) {
                 throw new IllegalArgumentException("ball needs finite positive mass/diameter, nonnegative drag and finite lift");
             }
             this.name = name;
@@ -47,14 +36,11 @@ public final class Projectile {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Ball)) return false;
             Ball o = (Ball) other;
-            return java.util.Objects.equals(name, o.name)
-                    && Double.compare(massKg, o.massKg) == 0
-                    && Double.compare(diameterM, o.diameterM) == 0
-                    && Double.compare(dragCoeff, o.dragCoeff) == 0
-                    && Double.compare(liftCoeff, o.liftCoeff) == 0;
+            return java.util.Objects.equals(name, o.name) && Double.compare(massKg, o.massKg) == 0 && Double.compare(diameterM, o.diameterM) == 0 && Double.compare(dragCoeff, o.dragCoeff) == 0 && Double.compare(liftCoeff, o.liftCoeff) == 0;
         }
 
         @Override
@@ -74,11 +60,6 @@ public final class Projectile {
 
     public enum Outcome { MAKE, SHORT, LONG, LEFT, RIGHT, TIMEOUT }
 
-    /**
-     * @param along   where the ball reached the target plane relative to its center, along the
-     *                ball's horizontal travel direction (+ = past the center, - = short)
-     * @param lateral same, sideways (+ = to the left of the travel direction)
-     */
     public static final class Result {
         private final Outcome outcome;
         private final double timeS;
@@ -90,6 +71,7 @@ public final class Projectile {
         private final double entryAngleDeg;
 
         public Result(Outcome outcome, double timeS, Vec3 endPoint, double along, double lateral, double apexZ, double entrySpeed, double entryAngleDeg) {
+
             this.outcome = outcome;
             this.timeS = timeS;
             this.endPoint = endPoint;
@@ -111,17 +93,11 @@ public final class Projectile {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Result)) return false;
             Result o = (Result) other;
-            return java.util.Objects.equals(outcome, o.outcome)
-                    && Double.compare(timeS, o.timeS) == 0
-                    && java.util.Objects.equals(endPoint, o.endPoint)
-                    && Double.compare(along, o.along) == 0
-                    && Double.compare(lateral, o.lateral) == 0
-                    && Double.compare(apexZ, o.apexZ) == 0
-                    && Double.compare(entrySpeed, o.entrySpeed) == 0
-                    && Double.compare(entryAngleDeg, o.entryAngleDeg) == 0;
+            return java.util.Objects.equals(outcome, o.outcome) && Double.compare(timeS, o.timeS) == 0 && java.util.Objects.equals(endPoint, o.endPoint) && Double.compare(along, o.along) == 0 && Double.compare(lateral, o.lateral) == 0 && Double.compare(apexZ, o.apexZ) == 0 && Double.compare(entrySpeed, o.entrySpeed) == 0 && Double.compare(entryAngleDeg, o.entryAngleDeg) == 0;
         }
 
         @Override
@@ -146,19 +122,15 @@ public final class Projectile {
         return fly(ball, p0, v0, target, airDensity, dt, maxT, null);
     }
 
-    /** Same, also recording the ball position every step into {@code trace} (for drawing). */
-    public static Result fly(Ball ball, Vec3 p0, Vec3 v0, Aperture target, double airDensity, double dt, double maxT,
-                             java.util.List<Vec3> trace) {
-        if (!Double.isFinite(dt) || dt <= 0 || !Double.isFinite(maxT) || maxT < 0
-                || !Double.isFinite(airDensity) || airDensity < 0
-                || !finite(p0) || !finite(v0)) {
+    public static Result fly(Ball ball, Vec3 p0, Vec3 v0, Aperture target, double airDensity, double dt, double maxT, java.util.List<Vec3> trace) {
+
+        if (!Double.isFinite(dt) || dt <= 0 || !Double.isFinite(maxT) || maxT < 0 || !Double.isFinite(airDensity) || airDensity < 0 || !finite(p0) || !finite(v0)) {
             throw new IllegalArgumentException("flight needs finite vectors, positive dt, nonnegative horizon and air density");
         }
         if (trace != null) trace.add(p0);
         double kd = 0.5 * airDensity * ball.dragCoeff() * ball.area() / ball.massKg();
         double kl = 0.5 * airDensity * ball.liftCoeff() * ball.area() / ball.massKg();
         double[] s = {p0.x(), p0.y(), p0.z(), v0.x(), v0.y(), v0.z()};
-        // Per-flight work buffers: the RK4 timestep itself creates no temporary arrays.
         double[] k1 = new double[6], k2 = new double[6], k3 = new double[6], k4 = new double[6], work = new double[6];
         double apex = p0.z();
         double prevDist = target.signedDistance(p0);
@@ -180,8 +152,6 @@ public final class Projectile {
             double dist = (s[0] - center.x()) * normal.x() + (s[1] - center.y()) * normal.y() + (s[2] - center.z()) * normal.z();
             double normalVelocity = s[3] * normal.x() + s[4] * normal.y() + s[5] * normal.z();
             if (prevDist <= 0 && dist > 0 && normalVelocity > 0) {
-                // coming OUT through the opening's plane: if that happens within the goal's outline the
-                // ball came up from underneath and hit the structure (it cannot rise through a CELL)
                 double f = -prevDist / (dist - prevDist);
                 Vec3 out = new Vec3(prevX + f * (s[0] - prevX), prevY + f * (s[1] - prevY), prevZ + f * (s[2] - prevZ));
                 if (target.overlaps(out, ball.radius())) {
@@ -192,16 +162,13 @@ public final class Projectile {
                 }
             }
             if (prevDist > 0 && dist <= 0 && normalVelocity < 0) {
-                // went into the plane between the two steps: interpolate the crossing
                 double f = prevDist / (prevDist - dist);
                 Vec3 hit = new Vec3(prevX + f * (s[0] - prevX), prevY + f * (s[1] - prevY), prevZ + f * (s[2] - prevZ));
-                return classify(ball, target, hit, new Vec3(s[3], s[4], s[5]),
-                        new Vec2(travelX, travelY), t - step + f * step, apex);
+                return classify(ball, target, hit, new Vec3(s[3], s[4], s[5]), new Vec2(travelX, travelY), t - step + f * step, apex);
             }
             prevDist = dist;
             if (s[2] <= ball.radius()) {
-                return hitFloor(target, new Vec3(s[0], s[1], s[2]), new Vec3(s[3], s[4], s[5]),
-                        new Vec2(travelX, travelY), t, apex);
+                return hitFloor(target, new Vec3(s[0], s[1], s[2]), new Vec3(s[3], s[4], s[5]), new Vec2(travelX, travelY), t, apex);
             }
         }
         Vec3 p = new Vec3(s[0], s[1], s[2]);
@@ -209,15 +176,13 @@ public final class Projectile {
     }
 
     private static Result classify(Ball ball, Aperture target, Vec3 hit, Vec3 v, Vec2 travel, double t, double apex) {
+
         Vec2 rel = hit.minus(target.center()).xy();
         double along = rel.dot(travel);
         double lateral = travel.cross(rel);
         double speed = v.norm();
         double entry = Math.toDegrees(Math.asin(Math.min(1, -v.dot(target.normal()) / Math.max(1e-9, speed))));
         if (target.fits(hit, ball.radius())) return new Result(Outcome.MAKE, t, hit, along, lateral, apex, speed, entry);
-        // Which way it missed, in the opening's own plane. "Long" is the direction the ball was
-        // travelling within the plane (beyond the far edge of an upward opening); for a vertical
-        // opening hit head-on that direction is undefined, so "long" means high.
         double[] l = target.local(hit);
         Vec3 tr = new Vec3(travel.x(), travel.y(), 0);
         double tu = tr.dot(target.widthAxis()), th = tr.dot(target.heightAxis()), tn = Math.hypot(tu, th);
@@ -229,6 +194,7 @@ public final class Projectile {
     }
 
     private static Result hitFloor(Aperture target, Vec3 p, Vec3 v, Vec2 travel, double t, double apex) {
+
         Vec2 rel = p.minus(target.center()).xy();
         double along = rel.dot(travel);
         double lateral = travel.cross(rel);
@@ -239,8 +205,8 @@ public final class Projectile {
         return v != null && Double.isFinite(v.x()) && Double.isFinite(v.y()) && Double.isFinite(v.z());
     }
 
-    private static void rk4(double[] s, double h, double kd, double kl,
-                            double[] k1, double[] k2, double[] k3, double[] k4, double[] work) {
+    private static void rk4(double[] s, double h, double kd, double kl, double[] k1, double[] k2, double[] k3, double[] k4, double[] work) {
+
         deriv(s, kd, kl, k1);
         add(s, k1, h / 2, work);
         deriv(work, kd, kl, k2);
@@ -256,11 +222,11 @@ public final class Projectile {
     }
 
     private static void deriv(double[] s, double kd, double kl, double[] out) {
+
         double vx = s[3], vy = s[4], vz = s[5];
         double sp = Math.sqrt(vx * vx + vy * vy + vz * vz);
         double ax = -kd * sp * vx, ay = -kd * sp * vy, az = -Physics.G - kd * sp * vz;
         if (kl != 0 && sp > 1e-9) {
-            // lift direction: "up" with the along-velocity part removed
             double ux = vx / sp, uy = vy / sp, uz = vz / sp;
             double lx = -uz * ux, ly = -uz * uy, lz = 1 - uz * uz;
             double ln = Math.sqrt(lx * lx + ly * ly + lz * lz);

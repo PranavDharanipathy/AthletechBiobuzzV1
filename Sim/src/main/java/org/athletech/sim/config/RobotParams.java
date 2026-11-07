@@ -21,11 +21,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-/**
- * Reads the profile into model parameters, keeping track of what was missing, what was assumed
- * and which inputs were only placeholders. Sims call {@link #requireAll()} after building their
- * models; outputs inherit {@link #outputKind()} (placeholder in, placeholder out).
- */
 public final class RobotParams {
     private final ProfileDb db;
     private final List<String> missing = new ArrayList<>();
@@ -41,8 +36,8 @@ public final class RobotParams {
     public List<String> assumptions() { return assumptions; }
     public Set<String> placeholderInputs() { return placeholders; }
 
-    /** A required number; recorded as missing (and NaN returned) when empty. */
     public double req(String key) {
+
         ProfileDb.ParamRow r = row(key);
         if (r == null || r.value() == null) {
             if (!missing.contains(key)) missing.add(key);
@@ -52,8 +47,8 @@ public final class RobotParams {
         return r.value();
     }
 
-    /** An optional number with a documented fallback. */
     public double opt(String key, double fallback) {
+
         ProfileDb.ParamRow r = row(key);
         if (r == null || r.value() == null) {
             if (!Double.isNaN(fallback)) assumptions.add(key + " not set: using " + fmt(fallback));
@@ -64,17 +59,19 @@ public final class RobotParams {
     }
 
     public boolean flag(String key, boolean fallback) {
+
         double v = opt(key, fallback ? 1 : 0);
         return v >= 0.5;
     }
 
     public String text(String key) {
+
         ProfileDb.ParamRow r = row(key);
         return r == null ? null : r.text();
     }
 
-    /** An error distribution; missing ones are treated as "no error" and noted. */
     public Distribution dist(String name) {
+
         try {
             ProfileDb.DistRow r = db.dist(name);
             if (r == null || !r.hasData()) {
@@ -89,6 +86,7 @@ public final class RobotParams {
     }
 
     private ProfileDb.ParamRow row(String key) {
+
         try {
             return db.param(key);
         } catch (SQLException e) {
@@ -104,8 +102,8 @@ public final class RobotParams {
         return org.athletech.sim.utility.Csv.fmt(v);
     }
 
-    /** Throws with a readable list if any required input was missing. */
     public void requireAll() {
+
         if (missing.isEmpty()) return;
         StringBuilder sb = new StringBuilder("The profile is missing values these sims need:\n");
         for (String k : missing) {
@@ -124,27 +122,26 @@ public final class RobotParams {
         public final transient List<String> keys;
 
         MissingInputsException(String msg, List<String> keys) {
+
             super(msg);
             this.keys = keys;
         }
     }
 
-    /** Placeholder inputs make placeholder outputs, so they can never pass for real data. */
     public SourceKind outputKind() {
         return placeholders.isEmpty() ? SourceKind.SIM : SourceKind.PLACEHOLDER;
     }
 
-    /** Text stored with each sim run in the sources table. */
     public String provenance(String command) {
+
         StringBuilder sb = new StringBuilder(command);
         if (!placeholders.isEmpty()) sb.append("\nPlaceholder inputs: ").append(String.join(", ", placeholders));
         if (!assumptions.isEmpty()) sb.append("\nAssumptions: ").append(String.join("; ", assumptions));
         return sb.toString();
     }
 
-    // ------------------------------------------------------------------ model builders
-
     public MotorSpec driveMotor() {
+
         double t = req("drive.motor_stall_torque_nm"), is = req("drive.motor_stall_current_a"),
                 w = req("drive.motor_free_speed_rpm"), i0 = req("drive.motor_free_current_a"), v = opt("drive.motor_nominal_v", 12);
         if (anyNaN(t, is, w, i0)) return null;
@@ -152,6 +149,7 @@ public final class RobotParams {
     }
 
     public MecanumDrive.Params drive() {
+
         double mass = req("robot.mass_kg"), len = req("robot.length_m"), wid = req("robot.width_m");
         double moi = opt("robot.moi_kgm2", Double.NaN);
         if (Double.isNaN(moi) && !anyNaN(mass, len, wid)) {
@@ -166,12 +164,11 @@ public final class RobotParams {
         boolean brake = flag("drive.zero_power_brake", true);
         MotorSpec motor = driveMotor();
         if (motor == null || anyNaN(mass, moi, wheelD, track, base, gear, mu, eta)) return null;
-        return new MecanumDrive.Params(mass, moi, wheelD / 2, track, base, gear, motor, mu, eta, crr,
-                Double.isNaN(limit) ? 0 : limit, maxPower, brake);
+        return new MecanumDrive.Params(mass, moi, wheelD / 2, track, base, gear, motor, mu, eta, crr, Double.isNaN(limit) ? 0 : limit, maxPower, brake);
     }
 
-    /** A fresh battery. {@code openCircuitV} overrides the profile's resting voltage when not NaN. */
     public Battery battery(double openCircuitV) {
+
         double voc = Double.isNaN(openCircuitV) ? req("battery.open_circuit_v") : openCircuitV;
         double r = req("battery.internal_resistance_ohm");
         double drop = opt("battery.voltage_drop_per_ah", 0.6);
@@ -184,6 +181,7 @@ public final class RobotParams {
     }
 
     public Projectile.Ball ball(String b) {
+
         double d = req("ball." + b + ".diameter_m"), m = req("ball." + b + ".mass_kg");
         double cd = opt("ball." + b + ".drag_coeff", 0.5), cl = opt("ball." + b + ".lift_coeff", 0.0);
         if (anyNaN(d, m)) return null;
@@ -191,6 +189,7 @@ public final class RobotParams {
     }
 
     public Launcher.Params launcher() {
+
         double t = req("launcher.motor_stall_torque_nm"), is = req("launcher.motor_stall_current_a"),
                 w = req("launcher.motor_free_speed_rpm"), i0 = req("launcher.motor_free_current_a"),
                 v = opt("launcher.motor_nominal_v", 12);
@@ -211,15 +210,14 @@ public final class RobotParams {
             double loss = opt("launcher." + b + ".energy_loss_factor", 1.6);
             if (ball != null && !Double.isNaN(ratio)) balls.put(b, new Launcher.BallFit(ball, ratio, loss));
         }
-        if (anyNaN(t, is, w, i0, dia, moi, count, gear, kp, maxRpm, tol, feed, h, hMin, hMax)
-                || enabled.isEmpty() || balls.size() < enabled.size()) return null;
+        if (anyNaN(t, is, w, i0, dia, moi, count, gear, kp, maxRpm, tol, feed, h, hMin, hMax) || enabled.isEmpty() || balls.size() < enabled.size()) return null;
         MotorSpec motor = MotorSpec.fromRpm(t, is, w, i0, v);
         Flywheel.Params fp = new Flywheel.Params(moi, dia / 2, gear, (int) Math.round(count), motor, friction, kp, comp);
         return new Launcher.Params(fp, h, fwd, left, hMin, hMax, maxRpm, tol, feed, waitReady, turret, balls);
     }
 
-    /** Explicit capabilities prevent requiring or predicting shots for pieces that do not fit. */
     public List<String> launcherBallTypes() {
+
         List<String> enabled = new ArrayList<>();
         boolean incomplete = false;
         for (String b : Catalog.BALLS) {
@@ -235,16 +233,14 @@ public final class RobotParams {
     }
 
     public Turret turret() {
+
         double v = opt("turret.max_speed_dps", Double.NaN), a = opt("turret.max_accel_dps2", Double.NaN);
         if (anyNaN(v, a)) return null;
         return new Turret(v, a, opt("turret.settle_time_s", 0), opt("turret.range_deg", 360));
     }
 
-    /**
-     * The upward-facing HIVE CELL opening, centered above the origin and facing +x (the launching
-     * robot stands on the +x side).
-     */
     public Aperture cell() {
+
         double w = req("target.cell.opening_width_m"), h = req("target.cell.opening_height_m");
         double z = req("target.cell.opening_center_height_m"), tilt = req("target.cell.opening_tilt_deg");
         if (anyNaN(w, h, z, tilt)) return null;
@@ -252,6 +248,7 @@ public final class RobotParams {
     }
 
     public OdometryErrorModel.Params odometry() {
+
         double scale = req("localization.scale_error_std"), slip = req("localization.slip_std_per_sqrt_m");
         double bias = req("localization.gyro_bias_std_dps");
         double noise = opt("localization.gyro_noise_deg_per_sqrt_s", 0), gscale = opt("localization.gyro_scale_std", 0);
@@ -261,6 +258,7 @@ public final class RobotParams {
     }
 
     private static boolean anyNaN(double... v) {
+
         for (double x : v) if (Double.isNaN(x)) return true;
         return false;
     }

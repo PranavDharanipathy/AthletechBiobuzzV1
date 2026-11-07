@@ -17,13 +17,6 @@ import java.util.Locale;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-/**
- * Imports logged real-robot results: shots (makes and misses) and pose checks (where the robot
- * really was vs where it thought it was). After importing, the measured curves are rebuilt from
- * every observation in the profile, so they replace the sim estimates.
- *
- * <p>Templates: data/templates/shots_template.csv and poses_template.csv.
- */
 public final class ObservationImport {
     private ObservationImport() {
     }
@@ -31,6 +24,7 @@ public final class ObservationImport {
     static final double DIST_BIN = 0.25;
 
     public static void importShots(ProfileDb db, Path csv, PrintStream log, boolean force) throws IOException, SQLException {
+
         Csv.Table t = Csv.read(csv);
         for (String col : Arrays.asList("ball", "distance_m", "result")) {
             if (!t.has(col)) throw new IOException(csv + ": missing column '" + col + "' (see data/templates/shots_template.csv)");
@@ -47,9 +41,7 @@ public final class ObservationImport {
             if (!Double.isFinite(dist)) throw new IOException(csv + " row " + line + ": distance_m is required");
             String target = t.str(r, "target");
             double burst = t.num(r, "shot_in_burst");
-            shots.add(new ProfileDb.ShotObs(t.str(r, "recorded"), ball, target.isEmpty() ? "cell" : target, dist, opt(t, r, "bearing_deg"),
-                    opt(t, r, "robot_speed_mps"), opt(t, r, "target_rpm"), opt(t, r, "actual_rpm"), opt(t, r, "hood_deg"),
-                    opt(t, r, "turret_error_deg"), opt(t, r, "battery_v"), Double.isFinite(burst) ? (int) burst : null, result, t.str(r, "notes")));
+            shots.add(new ProfileDb.ShotObs(t.str(r, "recorded"), ball, target.isEmpty() ? "cell" : target, dist, opt(t, r, "bearing_deg"), opt(t, r, "robot_speed_mps"), opt(t, r, "target_rpm"), opt(t, r, "actual_rpm"), opt(t, r, "hood_deg"), opt(t, r, "turret_error_deg"), opt(t, r, "battery_v"), Double.isFinite(burst) ? (int) burst : null, result, t.str(r, "notes")));
         }
         long src = db.addSource(SourceKind.MEASURED, "shot log " + csv.getFileName(), csv.toAbsolutePath().toString());
         db.addShots(shots, src);
@@ -58,19 +50,19 @@ public final class ObservationImport {
     }
 
     private static Double opt(Csv.Table t, String[] r, String col) {
+
         double v = t.num(r, col);
         return Double.isFinite(v) ? v : null;
     }
 
-    /** Rebuilds the measured make-probability curves and error distributions from all shot observations. */
     static void rebuildShotCurves(ProfileDb db, long src, PrintStream log, boolean force) throws SQLException {
+
         List<Double> rpmErr = new ArrayList<>(), aimErr = new ArrayList<>();
         for (String ball : Catalog.BALLS) {
             List<ProfileDb.ShotObs> all = db.shots(ball, "cell");
             if (all.isEmpty()) continue;
             List<ProfileDb.ShotObs> single = all.stream().filter(s -> s.shotInBurst() == null || s.shotInBurst() <= 1).collect(Collectors.toList());
             List<ProfileDb.ShotObs> burst = all.stream().filter(s -> s.shotInBurst() != null).collect(Collectors.toList());
-            // separate measured curves: a handful of real shots must not replace the sim curve
             write(db, "launcher." + ball + ".measured_make_prob_vs_distance", single, src, force, log);
             write(db, "launcher." + ball + ".measured_burst_make_prob_vs_distance", burst, src, force, log);
             for (ProfileDb.ShotObs s : all) {
@@ -91,6 +83,7 @@ public final class ObservationImport {
     }
 
     private static void write(ProfileDb db, String curve, List<ProfileDb.ShotObs> shots, long src, boolean force, PrintStream log) throws SQLException {
+
         if (shots.isEmpty()) return;
         TreeMap<Long, long[]> bins = new TreeMap<>();
         for (ProfileDb.ShotObs s : shots) {
@@ -113,6 +106,7 @@ public final class ObservationImport {
     }
 
     public static void importPoses(ProfileDb db, Path csv, PrintStream log, boolean force) throws IOException, SQLException {
+
         Csv.Table t = Csv.read(csv);
         for (String col : Arrays.asList("true_x_m", "true_y_m", "est_x_m", "est_y_m")) {
             if (!t.has(col)) throw new IOException(csv + ": missing column '" + col + "' (see data/templates/poses_template.csv)");
@@ -124,9 +118,7 @@ public final class ObservationImport {
             for (String col : Arrays.asList("true_x_m", "true_y_m", "est_x_m", "est_y_m")) {
                 if (!Double.isFinite(t.num(r, col))) throw new IOException(csv + " row " + line + ": " + col + " must be a number");
             }
-            poses.add(new ProfileDb.PoseObs(t.str(r, "recorded"), opt(t, r, "elapsed_s"), opt(t, r, "distance_driven_m"),
-                    t.num(r, "true_x_m"), t.num(r, "true_y_m"), opt(t, r, "true_heading_deg"),
-                    t.num(r, "est_x_m"), t.num(r, "est_y_m"), opt(t, r, "est_heading_deg"), t.str(r, "notes")));
+            poses.add(new ProfileDb.PoseObs(t.str(r, "recorded"), opt(t, r, "elapsed_s"), opt(t, r, "distance_driven_m"), t.num(r, "true_x_m"), t.num(r, "true_y_m"), opt(t, r, "true_heading_deg"), t.num(r, "est_x_m"), t.num(r, "est_y_m"), opt(t, r, "est_heading_deg"), t.str(r, "notes")));
         }
         long src = db.addSource(SourceKind.MEASURED, "pose log " + csv.getFileName(), csv.toAbsolutePath().toString());
         db.addPoses(poses, src);
@@ -143,12 +135,8 @@ public final class ObservationImport {
         rms(db, "localization.measured_position_error_vs_time", byTime, 10, src, force, log);
     }
 
-    /**
-     * Disconnect log: one row per match (type "none") or per disconnect. Fills the measured rates,
-     * outage lengths and the rate vs humidity. Every match needs at least one row, so matches
-     * without problems count too.
-     */
     public static void importDisconnects(ProfileDb db, Path csv, PrintStream log, boolean force) throws IOException, SQLException {
+
         Csv.Table t = Csv.read(csv);
         for (String col : Arrays.asList("match", "type")) {
             if (!t.has(col)) throw new IOException(csv + ": missing column '" + col + "' (see data/templates/disconnects_template.csv)");
@@ -164,8 +152,7 @@ public final class ObservationImport {
             if (match == null || match.trim().isEmpty()) throw new IOException(csv + " row " + line + ": match is empty");
             type = type == null ? "" : type.trim().toLowerCase(java.util.Locale.ROOT);
             if (!types.contains(type)) throw new IOException(csv + " row " + line + ": type must be one of " + types);
-            rows.add(new ProfileDb.DisconnectObs(t.str(r, "recorded"), match.trim(), opt(t, r, "match_time_s"), type, opt(t, r, "outage_s"),
-                    opt(t, r, "humidity_pct"), t.str(r, "cause"), t.str(r, "notes")));
+            rows.add(new ProfileDb.DisconnectObs(t.str(r, "recorded"), match.trim(), opt(t, r, "match_time_s"), type, opt(t, r, "outage_s"), opt(t, r, "humidity_pct"), t.str(r, "cause"), t.str(r, "notes")));
         }
         long src = db.addSource(SourceKind.MEASURED, "disconnect log " + csv.getFileName(), csv.toAbsolutePath().toString());
         db.addDisconnects(rows, src);
@@ -199,8 +186,7 @@ public final class ObservationImport {
         if (matches == 0) return;
         db.setParam("disconnect.measured_per_match", (double) events / matches, null, null, src, force);
         db.setParam("disconnect.measured_prob_per_match", (double) withAny / matches, null, null, src, force);
-        log.printf(java.util.Locale.ROOT, "  %d matches, %d disconnects: %.2f per match, %.0f%% of matches had one%n",
-                matches, events, (double) events / matches, 100.0 * withAny / matches);
+        log.printf(java.util.Locale.ROOT, "  %d matches, %d disconnects: %.2f per match, %.0f%% of matches had one%n", matches, events, (double) events / matches, 100.0 * withAny / matches);
         if (outages.size() >= 2) {
             double[] a = outages.stream().mapToDouble(Double::doubleValue).toArray();
             db.setDist("disconnect.measured_outage_s", "empirical", Stats.mean(a), Stats.std(a), Stats.percentile(a, 0), Stats.percentile(a, 100), null, a, src, force);
@@ -217,6 +203,7 @@ public final class ObservationImport {
     }
 
     private static void rms(ProfileDb db, String curve, TreeMap<Long, Stats.Running> bins, double w, long src, boolean force, PrintStream log) throws SQLException {
+
         List<double[]> pts = new ArrayList<>();
         for (java.util.Map.Entry<Long, Stats.Running> e : bins.entrySet()) {
             if (e.getValue().n() < 2) continue;

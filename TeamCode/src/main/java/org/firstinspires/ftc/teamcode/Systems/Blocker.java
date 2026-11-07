@@ -3,7 +3,12 @@ package org.firstinspires.ftc.teamcode.Systems;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.teamcode.Constants.BlockerConstants;
+import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
+import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotGate;
+import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
 import org.firstinspires.ftc.teamcode.Utility.Subsystem;
 
@@ -25,11 +30,12 @@ public class Blocker extends Subsystem {
     public Blocker() {}
 
     public Blocker asSubsystem() {
+
         isSubsystem = true;
         return this;
     }
 
-    // COMPONENT
+    //COMPONENT
     public enum BlockerState {
         CLEAR(BlockerConstants.BLOCKER_CLEAR_POSITION), BLOCK(BlockerConstants.BLOCKER_BLOCK_POSITION);
 
@@ -65,7 +71,7 @@ public class Blocker extends Subsystem {
         return state;
     }
 
-    // SUBSYSTEM
+    //SUBSYSTEM
     public void provideComponents(Blocker blocker, BetterGamepad controller1) {
 
         this.blocker = blocker;
@@ -73,10 +79,51 @@ public class Blocker extends Subsystem {
         this.controller1 = controller1;
     }
 
+    private Flywheel flywheel;
+    private ShotGate shotGate;
+
+    public void provideComponents(Blocker blocker, BetterGamepad controller1, Flywheel flywheel) {
+
+        provideComponents(blocker, controller1);
+
+        this.flywheel = flywheel;
+
+        shotGate = new ShotGate(
+                FlywheelConstants.SHOT_GATE_ENTER_BAND_BELOW, FlywheelConstants.SHOT_GATE_ENTER_BAND_ABOVE,
+                FlywheelConstants.SHOT_GATE_HOLD_BAND_BELOW, FlywheelConstants.SHOT_GATE_HOLD_BAND_ABOVE,
+                FlywheelConstants.SHOT_GATE_DWELL,
+                FlywheelConstants.SHOT_GATE_MIN_OPEN,
+                FlywheelConstants.SHOT_GATE_PULSE
+        );
+    }
+
+    private TurretBase turret;
+
+    public void provideComponents(Blocker blocker, BetterGamepad controller1, Flywheel flywheel, TurretBase turret) {
+
+        provideComponents(blocker, controller1, flywheel);
+        this.turret = turret;
+    }
+
+    public boolean isAimReady() {
+        return turret == null || !TurretConstants.TURRET_AIM_GATE_ENABLED || turret.isOnTarget();
+    }
+
+    public boolean isFlywheelReady() {
+
+        if (shotGate == null || !FlywheelConstants.SHOT_GATE_ENABLED) return true;
+
+        return shotGate.isReady();
+    }
+
     @Override
     public void update() {
 
-        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD)) {
+        if (shotGate != null) {
+            shotGate.update(System.nanoTime() * 1e-9, flywheel.getTargetVelocity(), flywheel.getCurrentVelocity(), state == BlockerState.CLEAR);
+        }
+
+        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady()) {
             setState(BlockerState.CLEAR);
         }
         else {

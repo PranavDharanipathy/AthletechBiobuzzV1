@@ -24,33 +24,6 @@ import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
 
-/**
- * Serves the HardwareMonitor dashboard from the Robot Controller's built-in web server - the
- * same server that hosts OnBotJava and Blocks. Connect a laptop or phone to the robot's Wi-Fi
- * and open:
- *
- * <pre>
- *   Control Hub:              http://192.168.43.1:8080/hwmonitor
- *   Phone Robot Controller:   http://192.168.49.1:8080/hwmonitor
- * </pre>
- *
- * The page itself is {@code TeamCode/src/main/assets/hwmonitor/index.html}. The same file can be
- * opened straight from disk on a laptop to browse a folder copied off the robot with
- * {@code adb pull /sdcard/FIRST/data/HardwareMonitor}.
- *
- * <h3>JSON / CSV API</h3>
- * <pre>
- * GET  /hwmonitor/api/sessions                          list of sessions with key metrics
- * GET  /hwmonitor/api/file?session=ID&amp;name=FILE[&amp;offset=N][&amp;download=1]
- *                                                        summary.json, system.csv, motors.csv,
- *                                                        devices.csv or events.csv; "offset"
- *                                                        skips bytes (header X-Next-Offset
- *                                                        returns where to continue from)
- * GET  /hwmonitor/api/live                              summary of the recording session, or 204
- * POST /hwmonitor/api/delete?session=ID                 delete one stored session
- * POST /hwmonitor/api/clear                             delete every stored session
- * </pre>
- */
 public final class MonitorWebServer {
 
     public static final String PATH = "/hwmonitor";
@@ -64,24 +37,24 @@ public final class MonitorWebServer {
     private MonitorWebServer() {
     }
 
-    /** Found and called by the SDK when the web server starts (like FTC Dashboard's pages). */
     @WebHandlerRegistrar
     public static void attachWebServer(Context context, WebHandlerManager manager) {
+
         try {
             register(manager, context.getAssets());
         } catch (Throwable t) {
-            // Never let the dashboard break the Robot Controller.
             RobotLog.ee(TAG, t, "HardwareMonitor: could not register the web dashboard");
         }
     }
 
     static void register(WebHandlerManager manager, final AssetManager assets) {
+
         WebHandler page = new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) throws IOException {
+
                 if (session.getMethod() != NanoHTTPD.Method.GET) return status(NanoHTTPD.Response.Status.METHOD_NOT_ALLOWED);
-                NanoHTTPD.Response r = NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK,
-                        "text/html; charset=utf-8", assets.open(ASSET));
+                NanoHTTPD.Response r = NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "text/html; charset=utf-8", assets.open(ASSET));
                 r.addHeader("Cache-Control", "no-cache");
                 return r;
             }
@@ -93,6 +66,7 @@ public final class MonitorWebServer {
         manager.register(PATH + "/api/sessions", new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) {
+
                 try {
                     return json(sessionsJson());
                 } catch (Exception e) {
@@ -104,6 +78,7 @@ public final class MonitorWebServer {
         manager.register(PATH + "/api/file", new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) {
+
                 try {
                     return file(query(session));
                 } catch (Exception e) {
@@ -115,6 +90,7 @@ public final class MonitorWebServer {
         manager.register(PATH + "/api/live", new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) {
+
                 try {
                     String live = HardwareMonitor.get().liveSummaryJson();
                     if (live == null) return status(NanoHTTPD.Response.Status.NO_CONTENT);
@@ -128,6 +104,7 @@ public final class MonitorWebServer {
         manager.register(PATH + "/api/delete", new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) {
+
                 if (session.getMethod() != NanoHTTPD.Method.POST) return status(NanoHTTPD.Response.Status.METHOD_NOT_ALLOWED);
                 try {
                     String id = query(session).get("session");
@@ -146,6 +123,7 @@ public final class MonitorWebServer {
         manager.register(PATH + "/api/clear", new WebHandler() {
             @Override
             public NanoHTTPD.Response getResponse(NanoHTTPD.IHTTPSession session) {
+
                 if (session.getMethod() != NanoHTTPD.Method.POST) return status(NanoHTTPD.Response.Status.METHOD_NOT_ALLOWED);
                 try {
                     return json("{\"deleted\":" + HardwareMonitor.clearDatabase() + "}");
@@ -158,9 +136,8 @@ public final class MonitorWebServer {
         RobotLog.ii(TAG, "HardwareMonitor dashboard available at %s", PATH);
     }
 
-    // ------------------------------------------------------------------ handlers
-
     static String sessionsJson() throws JSONException {
+
         String recording = HardwareMonitor.get().getSessionId();
         List<MonitorStore.SessionInfo> list = MonitorStore.listSessions();
         JSONObject root = new JSONObject();
@@ -199,6 +176,7 @@ public final class MonitorWebServer {
     }
 
     static NanoHTTPD.Response file(Map<String, String> q) throws IOException {
+
         String id = q.get("session");
         String name = q.get("name");
         if (!validId(id) || !isSessionFile(name)) {
@@ -212,7 +190,6 @@ public final class MonitorWebServer {
         try {
             if (q.get("offset") != null) offset = Long.parseLong(q.get("offset"));
         } catch (NumberFormatException ignored) {
-            // treat as 0
         }
         offset = Math.max(0, Math.min(offset, length));
 
@@ -224,8 +201,7 @@ public final class MonitorWebServer {
             skipped += n;
         }
         String mime = name.endsWith(".json") ? MIME_JSON : MIME_CSV;
-        NanoHTTPD.Response r = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK,
-                mime + "; charset=utf-8", in, length - offset);
+        NanoHTTPD.Response r = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime + "; charset=utf-8", in, length - offset);
         r.addHeader("X-Next-Offset", Long.toString(length));
         r.addHeader("Cache-Control", "no-store");
         if ("1".equals(q.get("download"))) {
@@ -234,9 +210,8 @@ public final class MonitorWebServer {
         return r;
     }
 
-    // ------------------------------------------------------------------ helpers
-
     static boolean validId(String id) {
+
         if (id == null || id.isEmpty() || id.length() > 120 || id.startsWith(".")) return false;
         for (int i = 0; i < id.length(); i++) {
             char c = id.charAt(i);
@@ -246,12 +221,14 @@ public final class MonitorWebServer {
     }
 
     static boolean isSessionFile(String name) {
+
         if (name == null) return false;
         for (String allowed : SESSION_FILES) if (allowed.equals(name)) return true;
         return false;
     }
 
     static Map<String, String> query(NanoHTTPD.IHTTPSession session) throws UnsupportedEncodingException {
+
         Map<String, String> out = new HashMap<>();
         String qs = session.getQueryParameterString();
         if (qs == null || qs.isEmpty()) return out;
@@ -266,13 +243,14 @@ public final class MonitorWebServer {
     }
 
     private static void num(JSONObject o, String key, double v) throws JSONException {
+
         if (Double.isNaN(v) || Double.isInfinite(v)) o.put(key, JSONObject.NULL);
         else o.put(key, v);
     }
 
     private static NanoHTTPD.Response json(String body) {
-        NanoHTTPD.Response r = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK,
-                MIME_JSON + "; charset=utf-8", body);
+
+        NanoHTTPD.Response r = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, MIME_JSON + "; charset=utf-8", body);
         r.addHeader("Cache-Control", "no-store");
         return r;
     }
@@ -286,6 +264,7 @@ public final class MonitorWebServer {
     }
 
     private static NanoHTTPD.Response error(Exception e) {
+
         RobotLog.ee(TAG, e, "HardwareMonitor web request failed");
         return text(NanoHTTPD.Response.Status.INTERNAL_ERROR, String.valueOf(e));
     }

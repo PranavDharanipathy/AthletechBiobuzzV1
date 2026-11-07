@@ -4,21 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Thread-safe I/O statistics for one hardware device.
- *
- * <p>Every read and write made through a {@code Monitored*} wrapper lands here: how many,
- * how often (recent and lifetime frequency), how long the call blocked (latency), when it
- * happened ({@link System#nanoTime()} timestamps), how many reads were served from the read
- * cache, and how many writes re-sent a value the device already had.
- *
- * <p>Use {@link #snapshot()} for a consistent, immutable copy you can print or log.
- */
 public final class DeviceStats {
 
-    /** How many of the most recent events are kept in memory with their timestamps. */
     public static final int RECENT_EVENT_CAPACITY = 256;
-    /** Window used for "recent" frequencies. */
     public static final long RECENT_WINDOW_NS = 1_000_000_000L;
 
     private static final int RATE_RING_CAPACITY = 1024;
@@ -56,6 +44,7 @@ public final class DeviceStats {
     private int evSize;
 
     public DeviceStats(String name, String type) {
+
         this.name = name;
         this.type = type;
     }
@@ -76,18 +65,13 @@ public final class DeviceStats {
         return createdWallMs;
     }
 
-    // ------------------------------------------------------------------ recording
-
-    /**
-     * Records a read. {@code cached} reads were answered from the wrapper's read cache and did
-     * not touch the hardware, so they add no I/O time.
-     */
     synchronized void recordRead(HwOp op, long startNs, long endNs, boolean cached) {
         long latency = cached ? 0 : Math.max(0, endNs - startNs);
         reads++;
         if (cached) {
             cacheHits++;
-        } else {
+        }
+        else {
             readIoNs += latency;
             if (latency > maxReadNs) maxReadNs = latency;
         }
@@ -98,10 +82,6 @@ public final class DeviceStats {
         pushEvent(startNs, op, latency, cached);
     }
 
-    /**
-     * Records a write. {@code redundant} writes sent the same value as the previous write of
-     * the same kind - a sign that write caching would save bus time.
-     */
     synchronized void recordWrite(HwOp op, long startNs, long endNs, boolean redundant) {
         long latency = Math.max(0, endNs - startNs);
         writes++;
@@ -115,14 +95,14 @@ public final class DeviceStats {
         pushEvent(startNs, op, latency, redundant);
     }
 
-    /** Records a read the HardwareMonitor made for its own sampling (not your code's read). */
     public synchronized void recordMonitorRead(long latencyNs) {
+
         monitorReads++;
         monitorReadNs += Math.max(0, latencyNs);
     }
 
-    /** Zeroes every counter (the device itself is untouched). */
     public synchronized void reset() {
+
         for (int i = 0; i < ops.length; i++) ops[i] = null;
         reads = writes = cacheHits = redundantWrites = 0;
         readIoNs = writeIoNs = maxReadNs = maxWriteNs = 0;
@@ -132,8 +112,6 @@ public final class DeviceStats {
         writeTimes.clear();
         evHead = evSize = 0;
     }
-
-    // ------------------------------------------------------------------ quick getters
 
     public synchronized long getReads() {
         return reads;
@@ -147,7 +125,6 @@ public final class DeviceStats {
         return cacheHits;
     }
 
-    /** Reads that actually went to the hardware (total reads minus cache hits). */
     public synchronized long getHardwareReads() {
         return reads - cacheHits;
     }
@@ -156,22 +133,20 @@ public final class DeviceStats {
         return redundantWrites;
     }
 
-    /** Reads per second over the last second. */
     public synchronized double getRecentReadHz() {
         return readTimes.rateHz(System.nanoTime(), RECENT_WINDOW_NS);
     }
 
-    /** Writes per second over the last second. */
     public synchronized double getRecentWriteHz() {
         return writeTimes.rateHz(System.nanoTime(), RECENT_WINDOW_NS);
     }
 
-    /** Total time spent blocked in this device's hardware calls, in milliseconds. */
     public synchronized double getTotalIoMs() {
         return (readIoNs + writeIoNs) / 1e6;
     }
 
     public synchronized Snapshot snapshot() {
+
         long now = System.nanoTime();
         List<OpSnapshot> opList = new ArrayList<>();
         for (int i = 0; i < ops.length; i++) {
@@ -195,27 +170,11 @@ public final class DeviceStats {
         }
 
         long hwReads = reads - cacheHits;
-        return new Snapshot(
-                name, type, now, createdNs, createdWallMs,
-                reads, writes, cacheHits, hwReads, redundantWrites,
-                readTimes.rateHz(now, RECENT_WINDOW_NS),
-                writeTimes.rateHz(now, RECENT_WINDOW_NS),
-                spanHz(reads, firstReadNs, lastReadNs),
-                spanHz(writes, firstWriteNs, lastWriteNs),
-                hwReads > 0 ? readIoNs / 1e3 / hwReads : 0,
-                maxReadNs / 1e3,
-                writes > 0 ? writeIoNs / 1e3 / writes : 0,
-                maxWriteNs / 1e3,
-                (readIoNs + writeIoNs) / 1e6,
-                firstReadNs, lastReadNs, firstWriteNs, lastWriteNs,
-                monitorReads, monitorReadNs / 1e6,
-                Collections.unmodifiableList(opList),
-                t, lat, op, flag);
+        return new Snapshot(name, type, now, createdNs, createdWallMs, reads, writes, cacheHits, hwReads, redundantWrites, readTimes.rateHz(now, RECENT_WINDOW_NS), writeTimes.rateHz(now, RECENT_WINDOW_NS), spanHz(reads, firstReadNs, lastReadNs), spanHz(writes, firstWriteNs, lastWriteNs), hwReads > 0 ? readIoNs / 1e3 / hwReads : 0, maxReadNs / 1e3, writes > 0 ? writeIoNs / 1e3 / writes : 0, maxWriteNs / 1e3, (readIoNs + writeIoNs) / 1e6, firstReadNs, lastReadNs, firstWriteNs, lastWriteNs, monitorReads, monitorReadNs / 1e6, Collections.unmodifiableList(opList), t, lat, op, flag);
     }
 
-    // ------------------------------------------------------------------ internals
-
     private OpCounter counter(HwOp op) {
+
         OpCounter c = ops[op.ordinal()];
         if (c == null) {
             c = new OpCounter();
@@ -225,6 +184,7 @@ public final class DeviceStats {
     }
 
     private void pushEvent(long t, HwOp op, long latencyNs, boolean flag) {
+
         evTime[evHead] = t;
         evLatencyNs[evHead] = (int) Math.min(Integer.MAX_VALUE, latencyNs);
         evOp[evHead] = (short) op.ordinal();
@@ -233,8 +193,8 @@ public final class DeviceStats {
         if (evSize < RECENT_EVENT_CAPACITY) evSize++;
     }
 
-    /** Average frequency across the span between the first and last event. */
     static double spanHz(long count, long firstNs, long lastNs) {
+
         if (count < 2 || lastNs <= firstNs) return 0;
         return (count - 1) / ((lastNs - firstNs) / 1e9);
     }
@@ -249,6 +209,7 @@ public final class DeviceStats {
         long lastNs = -1;
 
         void add(long t, long latencyNs, boolean flag) {
+
             count++;
             if (flag) flagged++;
             ioNs += latencyNs;
@@ -261,17 +222,12 @@ public final class DeviceStats {
         }
 
         OpSnapshot snapshot(HwOp op) {
+
             long timed = op.isRead() ? count - flagged : count;
-            return new OpSnapshot(op, count, flagged,
-                    timed > 0 ? ioNs / 1e3 / timed : 0,
-                    minNs == Long.MAX_VALUE ? 0 : minNs / 1e3,
-                    maxNs / 1e3,
-                    spanHz(count, firstNs, lastNs),
-                    firstNs, lastNs);
+            return new OpSnapshot(op, count, flagged, timed > 0 ? ioNs / 1e3 / timed : 0, minNs == Long.MAX_VALUE ? 0 : minNs / 1e3, maxNs / 1e3, spanHz(count, firstNs, lastNs), firstNs, lastNs);
         }
     }
 
-    /** Fixed-size ring of timestamps, used for "events per second over the last N ns". */
     private static final class TimeRing {
         private final long[] t;
         private int head;
@@ -282,6 +238,7 @@ public final class DeviceStats {
         }
 
         void add(long ns) {
+
             t[head] = ns;
             head = (head + 1) % t.length;
             if (size < t.length) size++;
@@ -292,6 +249,7 @@ public final class DeviceStats {
         }
 
         double rateHz(long nowNs, long windowNs) {
+
             if (size == 0) return 0;
             long cutoff = nowNs - windowNs;
             int counted = 0;
@@ -303,7 +261,6 @@ public final class DeviceStats {
                 oldest = v;
             }
             if (counted == size && size == t.length) {
-                // the whole ring fits in the window: extrapolate from the span it covers
                 long newest = t[(head - 1 + t.length) % t.length];
                 return newest > oldest ? (counted - 1) / ((newest - oldest) / 1e9) : 0;
             }
@@ -311,13 +268,9 @@ public final class DeviceStats {
         }
     }
 
-    // ------------------------------------------------------------------ snapshots
-
-    /** Immutable statistics for one operation (e.g. {@code getCurrentPosition}). */
     public static final class OpSnapshot {
         public final HwOp op;
         public final long count;
-        /** Cache hits for reads, redundant (same-value) writes for writes. */
         public final long flagged;
         public final double avgLatencyUs;
         public final double minLatencyUs;
@@ -326,8 +279,8 @@ public final class DeviceStats {
         public final long firstNs;
         public final long lastNs;
 
-        OpSnapshot(HwOp op, long count, long flagged, double avgLatencyUs, double minLatencyUs,
-                   double maxLatencyUs, double avgHz, long firstNs, long lastNs) {
+        OpSnapshot(HwOp op, long count, long flagged, double avgLatencyUs, double minLatencyUs, double maxLatencyUs, double avgHz, long firstNs, long lastNs) {
+
             this.op = op;
             this.count = count;
             this.flagged = flagged;
@@ -340,7 +293,6 @@ public final class DeviceStats {
         }
     }
 
-    /** Immutable statistics for one device. Times are {@link System#nanoTime()} values. */
     public static final class Snapshot {
         public final String name;
         public final String type;
@@ -356,7 +308,6 @@ public final class DeviceStats {
         public final double recentWriteHz;
         public final double avgReadHz;
         public final double avgWriteHz;
-        /** Mean latency of reads that hit the hardware (cache hits excluded). */
         public final double avgReadLatencyUs;
         public final double maxReadLatencyUs;
         public final double avgWriteLatencyUs;
@@ -372,17 +323,10 @@ public final class DeviceStats {
         public final long[] recentTimeNs;
         public final int[] recentLatencyNs;
         public final HwOp[] recentOp;
-        /** Cache hit (reads) or redundant write (writes) for each recent event. */
         public final boolean[] recentFlag;
 
-        Snapshot(String name, String type, long takenNs, long createdNs, long createdWallMs,
-                 long reads, long writes, long cacheHits, long hardwareReads, long redundantWrites,
-                 double recentReadHz, double recentWriteHz, double avgReadHz, double avgWriteHz,
-                 double avgReadLatencyUs, double maxReadLatencyUs,
-                 double avgWriteLatencyUs, double maxWriteLatencyUs, double totalIoMs,
-                 long firstReadNs, long lastReadNs, long firstWriteNs, long lastWriteNs,
-                 long monitorReads, double monitorIoMs, List<OpSnapshot> ops,
-                 long[] recentTimeNs, int[] recentLatencyNs, HwOp[] recentOp, boolean[] recentFlag) {
+        Snapshot(String name, String type, long takenNs, long createdNs, long createdWallMs, long reads, long writes, long cacheHits, long hardwareReads, long redundantWrites, double recentReadHz, double recentWriteHz, double avgReadHz, double avgWriteHz, double avgReadLatencyUs, double maxReadLatencyUs, double avgWriteLatencyUs, double maxWriteLatencyUs, double totalIoMs, long firstReadNs, long lastReadNs, long firstWriteNs, long lastWriteNs, long monitorReads, double monitorIoMs, List<OpSnapshot> ops, long[] recentTimeNs, int[] recentLatencyNs, HwOp[] recentOp, boolean[] recentFlag) {
+
             this.name = name;
             this.type = type;
             this.takenNs = takenNs;
@@ -415,7 +359,6 @@ public final class DeviceStats {
             this.recentFlag = recentFlag;
         }
 
-        /** Percentage of reads answered by the read cache. */
         public double cacheHitPercent() {
             return reads > 0 ? 100.0 * cacheHits / reads : 0;
         }

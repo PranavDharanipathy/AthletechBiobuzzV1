@@ -6,40 +6,6 @@ import org.athletech.sim.utility.Rng;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Static charge on a whole field through a match: four robots (this one, driven by a
- * {@link MatchDriver.Trace}, and three others with similar but randomized behaviour), the field
- * perimeter's metal, metal field structures, and the charge the wheels leave on the tiles.
- *
- * <p>Every {@link #DT} each robot:
- * <ul>
- *   <li>gains charge from its rollers rubbing the tiles, in proportion to distance rolled plus a
- *       factor times distance slid (strafing, turning) plus a factor times wheel slip (wheels
- *       spinning or skidding when the motors push harder than traction holds - pushing walls and
- *       robots, full-power starts and stops - which is how current draw feeds static), scaled for
- *       humidity; the opposite charge stays on the tiles under its wheels, where it slowly leaks
- *       to the floor and creeps sideways over the foam;</li>
- *   <li>gains charge per game element intaken and per plastic wall hit (contact charging);</li>
- *   <li>feels the tile charge under it (induced charge on the frame);</li>
- *   <li>leaks to the floor through its wheels (humidity-dependent) and, above the corona onset,
- *       into the air; its electronics leak to the frame through the grounding strap or insulation.</li>
- * </ul>
- * Contacts are discharges: frame to perimeter metal (the share of wall hits that touch metal),
- * frame to frame between robots, frame to metal structures. Each one brings the two conductors to
- * the same potential; the energy released is {@code 1/2 * dV * charge moved}. A share
- * ({@code coupling}) of an outside discharge's energy reaches the electronics. If the electronics
- * end up more than the internal breakdown voltage from the frame, they arc inside the robot and
- * all of that energy goes through the electronics.
- *
- * <p>Field charge (perimeter, metal structures, tiles) carries over between matches
- * ({@link Field}); robots start each match at 0 V (people handle them in between).
- *
- * <p>Bookkeeping: every coulomb is accounted for. {@link Ledger} lists where this robot's charge
- * came from and went (rolling, sliding, slip, intake, wall contact, perimeter, other robots, metal,
- * floor, air) and the whole field's balance (robots + perimeter + metal + tiles = charge brought
- * in by contact charging - charge drained to the floor) is checked every match
- * ({@link MatchResult#globalResidualC}).
- */
 public final class ChargeSim {
     private ChargeSim() {
     }
@@ -50,16 +16,13 @@ public final class ChargeSim {
     public static final int K_PERIMETER = 0, K_ROBOT = 1, K_METAL = 2, K_INTERNAL = 3;
     public static final String[] KIND_NAMES = {"frame to perimeter metal", "frame to another robot", "frame to metal structure", "electronics to frame (inside)"};
 
-    /** Everything the charge model needs, in SI units (F, C, ohm, s). */
     public static final class Params implements Cloneable {
         public double rh = 30;
         public double cFrame = 70e-12, cElec = 30e-12, cCouple = 300e-12;
         public boolean strap = true;
         public double strapOhm = 470, isoOhm40 = 1e12, wheelOhm40 = 1e11, leakDecades = 1;
         public double genCPerM40 = 8e-9, slideFactor = 2, slipFactor = 3, genScalePct = 15, antistatic = 1;
-        /** Average wheel slip speed of the other robots while enabled, m/s (from this robot's matches). */
         public double otherSlipMps = 0.02;
-        /** Tile surface resistivity at 40% RH (ohm/sq; NaN = no sideways creep) and capacitance per area to the floor (F/m^2). */
         public double tileRhoS40 = Double.NaN, tileCArea = 7.7e-10;
         public double intakeC = 2e-9, wallHitC = 5e-9, coronaV = 15e3, coronaBleedS = 0.1;
         public double cPerim = 400e-12, perimOhm40 = 2e10, tileDecay40 = 300, metalFraction = 0.3;
@@ -74,6 +37,7 @@ public final class ChargeSim {
         public double autoS = 30, transitionS = 8, teleopS = 120;
 
         public Params copy() {
+
             try {
                 return (Params) clone();
             } catch (CloneNotSupportedException e) {
@@ -82,12 +46,14 @@ public final class ChargeSim {
         }
 
         public Params withRh(double v) {
+
             Params p = copy();
             p.rh = v;
             return p;
         }
 
         public Params withStrap(boolean v) {
+
             Params p = copy();
             p.strap = v;
             return p;
@@ -97,7 +63,6 @@ public final class ChargeSim {
 
         boolean enabled(double t) { return t < autoS || t >= autoS + transitionS; }
 
-        /** Charge per meter rolled at this humidity, C/m. */
         public double genPerM() { return genCPerM40 * Electrostatics.generationFactor(rh, genScalePct) * antistatic; }
 
         double resFactor() { return Electrostatics.resistanceFactor(rh, leakDecades); }
@@ -112,14 +77,13 @@ public final class ChargeSim {
 
         public double tileTau() { return tileDecay40 * resFactor() * antistatic; }
 
-        /** Sideways diffusion coefficient of tile surface charge, m^2/s (0 = none). */
         public double tileDiffusion() {
+
             if (!(tileRhoS40 > 0) || !(tileCArea > 0)) return 0;
             return 1 / (tileRhoS40 * resFactor() * antistatic * tileCArea);
         }
     }
 
-    /** Charge on the field itself; carries over from match to match. */
     public static final class Field {
         public double qPerimeter, qMetal;
         public final TileChargeGrid tiles;
@@ -128,26 +92,25 @@ public final class ChargeSim {
             tiles = new TileChargeGrid(fieldSizeM, GRID);
         }
 
-        /** Leakage over {@code seconds} with nobody on the field. */
         public void idle(double seconds, Params p) {
+
             qPerimeter *= Math.exp(-seconds * p.gPerimeter() / p.cPerim);
             if (p.cMetal > 0) qMetal *= Math.exp(-seconds * p.gMetal() / p.cMetal);
             tiles.decay(Math.exp(-seconds / p.tileTau()));
             tiles.diffuse(p.tileDiffusion(), seconds, 20000);
         }
 
-        /** Net charge on the field (perimeter + metal + tiles), C. */
         public double total() { return qPerimeter + qMetal + tiles.total(); }
 
         public double perimeterV(Params p) { return qPerimeter / p.cPerim; }
     }
 
-    /** A discharge involving this robot. */
     public static final class Event {
         public final double t, dv, energyJ, coupledJ, peakA;
         public final int kind;
 
         Event(double t, int kind, double dv, double energyJ, double coupledJ, double peakA) {
+
             this.t = t;
             this.kind = kind;
             this.dv = dv;
@@ -157,11 +120,6 @@ public final class ChargeSim {
         }
     }
 
-    /**
-     * Where this robot's charge (frame + electronics) came from and went in one match, C. Positive
-     * = into the robot. {@code qEnd - qStart} equals the sum of all entries up to rounding
-     * ({@link #residual}).
-     */
     public static final class Ledger {
         public static final String[] NAMES = {"rolling over the tiles", "sliding (strafe, turn)", "wheel slip (pushing, hard starts)",
                 "intaking game elements", "hitting plastic walls", "perimeter metal", "other robots", "metal structures",
@@ -170,13 +128,12 @@ public final class ChargeSim {
         public final double[] c = new double[NAMES.length];
         public double qStart, qEnd;
 
-        /** Charge the robot generated itself (friction and contact charging), C. */
         public double generated() {
             return c[ROLL] + c[SLIDE] + c[SLIP] + c[INTAKE] + c[WALL];
         }
 
-        /** Bookkeeping error: (end - start) - sum of entries, C. Rounding only. */
         public double residual() {
+
             double sum = 0;
             for (double v : c) sum += v;
             return (qEnd - qStart) - sum;
@@ -185,39 +142,37 @@ public final class ChargeSim {
 
     public static final class MatchResult {
         public final List<Event> events = new ArrayList<>();
-        public final List<double[]> series = new ArrayList<>(); // {t, frame kV, electronics - frame kV} every 0.5 s
+        public final List<double[]> series = new ArrayList<>(); //{t, frame kV, electronics - frame kV} every 0.5 s
         public double maxAbsKv, perimeterKvEnd, tileUcEnd;
         public int internalArcs;
         public final Ledger ledger = new Ledger();
-        /** Whole-field balance: (all charge at the end - at the start) - (contact charging - drained to the floor), C. */
         public double globalResidualC;
-        /** Scale for that residual: total charge moved around in the match, C. */
         public double globalTurnoverC;
     }
 
-    /** One robot on the field. */
     private static final class Bot {
         final RobotCharge charge;
         final double genMult;
         final boolean strap;
         double x, y, h, vf, vl, w, slip;
-        // synthetic driving for the other robots
         double speed, tx, ty, th, pause, vmax;
 
         Bot(Params p, double genMult, boolean strap) {
+
             this.charge = new RobotCharge(p.cFrame, p.cElec, p.cCouple);
             this.genMult = genMult;
             this.strap = strap;
         }
 
         void target(Rng rng, double lim) {
+
             tx = rng.uniform(-lim, lim);
             ty = rng.uniform(-lim, lim);
             th = rng.uniform(-Math.PI, Math.PI);
         }
 
-        /** Simple point-to-point driving with acceleration limits and pauses. */
         void drive(double dt, Rng rng, double lim, boolean on) {
+
             vf = vl = w = 0;
             if (!on) {
                 speed = 0;
@@ -248,11 +203,8 @@ public final class ChargeSim {
         }
     }
 
-    /**
-     * Plays one match. {@code ours} = this robot's trace, or null for a match with only other robots
-     * (four of them). {@code field} is updated in place.
-     */
     public static MatchResult runMatch(Params p, MatchDriver.Trace ours, Field field, Rng rng, boolean recordSeries) {
+
         MatchResult res = new MatchResult();
         int nBots = 4;
         Bot[] bots = new Bot[nBots];
@@ -276,7 +228,6 @@ public final class ChargeSim {
         double tileD = p.tileDiffusion();
         double perimFactor = Math.exp(-DT * p.gPerimeter() / p.cPerim);
         double metalFactor = p.cMetal > 0 ? Math.exp(-DT * p.gMetal() / p.cMetal) : 1;
-        // other robots' discrete events as per-step probabilities
         double pWall = p.wallHitsPerMatch / active * DT, pIntake = p.intakesPerMatch / active * DT;
         double pContact = p.robotContactsPerMatch / active * DT, pMetal = p.metalContactsPerMatch / active * DT;
         int wi = 0, ci = 0, ii = 0, mi = 0;
@@ -288,7 +239,6 @@ public final class ChargeSim {
         for (int s = 0; s < steps; s++) {
             double t = s * DT;
             boolean on = p.enabled(t);
-            // ---- motion
             for (int i = 0; i < nBots; i++) {
                 Bot b = bots[i];
                 if (i == 0 && ours != null) {
@@ -300,11 +250,11 @@ public final class ChargeSim {
                     b.vl = ours.vl[r];
                     b.w = ours.w[r];
                     b.slip = ours.slip[r];
-                } else {
+                }
+                else {
                     b.drive(DT, rng, lim, on);
                 }
             }
-            // ---- friction charging; the opposite charge stays on the tiles under the wheels
             for (int i = 0; i < nBots; i++) {
                 Bot b = bots[i];
                 boolean isOurs = i == 0 && ours != null;
@@ -332,7 +282,6 @@ public final class ChargeSim {
                 Bot b = bots[i];
                 qInd[i] = p.inducedFrac * field.tiles.underFootprint(b.x, b.y, b.h, p.length, p.width);
             }
-            // ---- this robot's scheduled contacts
             if (ours != null) {
                 while (wi < ours.wallHits.size() && ours.wallHits.get(wi)[0] < t + DT) {
                     double[] e = ours.wallHits.get(wi++);
@@ -341,7 +290,8 @@ public final class ChargeSim {
                         led.c[Ledger.PERIMETER] -= x[2];
                         turnover += Math.abs(x[2]);
                         record(res, t, K_PERIMETER, x, p, bots[0], qInd[0]);
-                    } else {
+                    }
+                    else {
                         double dq = p.wallHitC * genFactor * Math.min(3, e[1]);
                         bots[0].charge.addFrame(dq);
                         led.c[Ledger.WALL] += dq;
@@ -376,14 +326,14 @@ public final class ChargeSim {
                     }
                 }
             }
-            // ---- the other robots' contacts (random)
             if (on) {
                 for (int i = (ours != null ? 1 : 0); i < nBots; i++) {
                     Bot b = bots[i];
                     if (rng.uniform() < pWall) {
                         if (rng.uniform() < p.metalFraction) {
                             turnover += Math.abs(toPerimeter(b, qInd[i], field, p)[2]);
-                        } else {
+                        }
+                        else {
                             double dq = p.wallHitC * genFactor * Math.min(3, Math.max(0.1, p.wallHitSpeed.sample(rng)));
                             b.charge.addFrame(dq);
                             external += dq;
@@ -410,7 +360,6 @@ public final class ChargeSim {
                     }
                 }
             }
-            // ---- leakage (implicit), corona, strap / insulation
             for (int i = 0; i < nBots; i++) {
                 Bot b = bots[i];
                 double v = b.charge.vFrame(qInd[i]);
@@ -430,7 +379,8 @@ public final class ChargeSim {
                         res.internalArcs++;
                         res.events.add(new Event(t, K_INTERNAL, p.internalBreakdownV, e, e, p.internalBreakdownV / p.sparkOhm));
                     }
-                } else {
+                }
+                else {
                     internal(b, qInd[i], p);
                 }
             }
@@ -443,7 +393,6 @@ public final class ChargeSim {
                 drained += tb - field.tiles.total();
                 field.tiles.diffuse(tileD, 10 * DT, 2000);
             }
-            // ---- records
             Bot o = bots[0];
             double vf = o.charge.vFrame(qInd[0]);
             res.maxAbsKv = Math.max(res.maxAbsKv, Math.abs(vf) / 1000);
@@ -457,14 +406,13 @@ public final class ChargeSim {
         if (ours != null) led.qEnd = bots[0].charge.qFrame() + bots[0].charge.qElec();
         double robotsEnd = 0;
         for (Bot b : bots) robotsEnd += b.charge.qFrame() + b.charge.qElec();
-        // robots start at 0 C
         res.globalResidualC = (robotsEnd + field.total() - globalStart) - (external - drained);
         res.globalTurnoverC = turnover;
         return res;
     }
 
-    /** {dV, energy J, charge moved from the frame to the perimeter C} of bringing them to the same potential. */
     private static double[] toPerimeter(Bot b, double qInd, Field f, Params p) {
+
         double vf = b.charge.vFrame(qInd), vp = f.qPerimeter / p.cPerim;
         double d = (vf - vp) / (b.charge.frameElastance() + 1 / p.cPerim);
         b.charge.addFrame(-d);
@@ -473,6 +421,7 @@ public final class ChargeSim {
     }
 
     private static double[] toMetal(Bot b, double qInd, Field f, Params p) {
+
         double vf = b.charge.vFrame(qInd), vm = f.qMetal / p.cMetal;
         double d = (vf - vm) / (b.charge.frameElastance() + 1 / p.cMetal);
         b.charge.addFrame(-d);
@@ -481,6 +430,7 @@ public final class ChargeSim {
     }
 
     private static double[] between(Bot a, double qa, Bot b, double qb) {
+
         double va = a.charge.vFrame(qa), vb = b.charge.vFrame(qb);
         double d = (va - vb) / (a.charge.frameElastance() + b.charge.frameElastance());
         a.charge.addFrame(-d);
@@ -488,15 +438,15 @@ public final class ChargeSim {
         return new double[]{va - vb, 0.5 * d * (va - vb), d};
     }
 
-    /** Arcs electronics to frame if the difference exceeds the internal breakdown voltage; returns the energy (J). */
     private static double internal(Bot b, double qInd, Params p) {
+
         double diff = b.charge.vElec(qInd) - b.charge.vFrame(qInd);
         if (Math.abs(diff) <= p.internalBreakdownV) return 0;
         return b.charge.equalizeInternal(qInd);
     }
 
-    /** Records an outside discharge on this robot, plus any internal arc it triggers. */
     private static void record(MatchResult res, double t, int kind, double[] dvE, Params p, Bot b, double qInd) {
+
         double e = Math.abs(dvE[1]);
         if (e > 1e-9) res.events.add(new Event(t, kind, dvE[0], e, p.coupling * e, Math.abs(dvE[0]) / p.sparkOhm));
         double ei = internal(b, qInd, p);

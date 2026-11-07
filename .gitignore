@@ -79,3 +79,7 @@ lint/generated/
 lint/outputs/
 lint/tmp/
 # lint/reports/
+
+# TunerTeleOp raw sessions (big CSVs); REPORT.md and TunedConstants.java are tracked
+tuning-data/sessions/
+tuning-data/turret-autotune/

@@ -69,8 +69,31 @@ Paths given to the commands are relative to the `Sim/` folder. Full list:
 ./gradlew :Sim:run --args="predict loop --sensor-reads 3 --motor-writes 6"   # what-if on the loop
 ./gradlew :Sim:run --args="predict disconnect --humidity 20 --strap 0"
 ./gradlew :Sim:run --args="profile export --format json" # for engines without SQLite
+./gradlew :Sim:run --args="profile import-autotune"     # newest Turret Autotuner run -> turret.* (measured)
+./gradlew :Sim:run --args="sim turret --assume"         # robot's real turret code vs a sim turret
+./gradlew :Sim:run --args="sim flywheel --assume"       # robot's real Flywheel + ShotGate vs sim flywheel
 ./gradlew :Sim:test                                     # unit tests
 ```
+
+**Running sims yourself (agents):**
+
+- Build the launcher once, then call it directly, no Gradle startup each time:
+  `./gradlew :Sim:installDist`, then from `Sim/`:
+  `JAVA_OPTS="--enable-native-access=ALL-UNNAMED" build/install/sim/bin/sim.bat sim turret --assume`
+  (`bin/sim` on Linux/macOS). Rebuild after changing Sim or the TeamCode classes it uses.
+- `--assume` makes every sim runnable today. It copies the shared profile to
+  `out/assumed_profile.db`, fills only the missing entries with PLACEHOLDER examples, and runs
+  there. Real values win, the shared profile isn't touched, and the output lists every placeholder used.
+  Report those placeholders with any number you quote.
+- `sim turret` / `sim flywheel` are **code in the loop**: they run the robot's real classes
+  (`TurretController`, `TurretAutotuneEngine`, `Flywheel`, `ShotGate`, `Encoder`, `VoltageCompensator`,
+  the `Constants` they read), copied from TeamCode at build time by `:Sim:copyTeamCodeSources`. They
+  compile against `Sim/src/ftcStubs` (only the SDK methods that code calls). To try a robot-code
+  change, edit TeamCode, rebuild Sim and rerun. `--loop-ms` / `--loop-jitter` set the robot loop time.
+  Traces (CSV) go to `Sim/out/`.
+- To bring a new TeamCode class into the sims, add it to `copyTeamCodeSources` in
+  `Sim/build.gradle.kts`. It must not touch hardware beyond the stand-ins. Read time through
+  `Utility/Clock`, not `System.nanoTime()`, so the sim can drive it.
 
 - Results and HTML reports go to `Sim/out/` (ignored by git). `profile report --html` charts
   every curve in the profile.
@@ -82,7 +105,9 @@ Paths given to the commands are relative to the `Sim/` folder. Full list:
 - `sim all` takes about 1-2 min; `sim esd` is most of it (`--trials` sets Monte Carlo trials per
   point, default 1000, and scales how many matches `sim esd` plays).
 - Missing inputs stop a sim with a list of keys and how to set them. That is expected
-  until the profile is filled in.
+  until the profile is filled in. Add `--assume` to run anyway on placeholders (see above).
+- When you set a profile value, say where it came from: `profile set <key> <value> --source manual
+  --note "CAD 10-31: ..."`. The note is stored with the value.
 
 ## Verify
 

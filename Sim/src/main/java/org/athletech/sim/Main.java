@@ -7,6 +7,7 @@ import org.athletech.sim.config.ProfileReport;
 import org.athletech.sim.config.RobotParams;
 import org.athletech.sim.config.SourceKind;
 import org.athletech.sim.field.Aperture;
+import org.athletech.sim.input.AutotuneImport;
 import org.athletech.sim.input.MonitorImport;
 import org.athletech.sim.input.ObservationImport;
 import org.athletech.sim.physics.Battery;
@@ -18,9 +19,11 @@ import org.athletech.sim.robot.MecanumDrive;
 import org.athletech.sim.scenarios.DriveScenario;
 import org.athletech.sim.scenarios.LauncherScenario;
 import org.athletech.sim.scenarios.EsdScenario;
+import org.athletech.sim.scenarios.FlywheelCodeScenario;
 import org.athletech.sim.scenarios.LocalizationScenario;
 import org.athletech.sim.scenarios.LoopTimingScenario;
 import org.athletech.sim.scenarios.SimContext;
+import org.athletech.sim.scenarios.TurretScenario;
 import org.athletech.sim.utility.Args;
 import org.athletech.sim.utility.Csv;
 import org.athletech.sim.utility.Rng;
@@ -33,68 +36,19 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Command-line entry point: {@code ./gradlew :Sim:run --args="<command>"}. Run with "help" for the
- * list of commands.
- */
 public final class Main {
     private Main() {
     }
 
-    static final String HELP = "Robot sims + robot profile database.   ./gradlew :Sim:run --args=\"<command> [options]\"\n" +
-            "\n" +
-            "PROFILE (the database a game simulator reads: data/robot_profile.db)\n" +
-            "  profile init [--example]          create/update the database (--example: fill empty inputs with\n" +
-            "                                    placeholder numbers so the sims can run; use a scratch --db)\n" +
-            "  profile report [--html]           what is filled, what is missing (--html: out/profile_report.html)\n" +
-            "  profile list [prefix]             every parameter with value, unit and source\n" +
-            "  profile get <name>                one entry (parameter, curve, surface, distribution or action)\n" +
-            "  profile set <key> <value>         set a parameter   [--std S] [--source measured|manual|game_manual]\n" +
-            "                                    [--unit U --description D] adds a parameter not in the catalog\n" +
-            "  profile set-dist <name> <kind> <mean> <std>     set an error distribution (normal, uniform, ...)\n" +
-            "  profile set-action <name> <mean_s> <std_s> <success 0-1>\n" +
-            "  profile clear <name>              empty a parameter, curve, surface, distribution or action again\n" +
-            "  profile set-meta <key> <value>    e.g. robot_name, team_number\n" +
-            "  profile import-monitor <folder>   HardwareMonitor sessions (adb pull /sdcard/FIRST/data/HardwareMonitor)\n" +
-            "  profile import-shots <file.csv>   real shot results  (template: data/templates/shots_template.csv)\n" +
-            "  profile import-poses <file.csv>   real localization checks (template: data/templates/poses_template.csv)\n" +
-            "  profile import-disconnects <file.csv>   disconnect log, one row per match or disconnect\n" +
-            "                                    (template: data/templates/disconnects_template.csv)\n" +
-            "  profile export [--format json|csv] [--file path]   for programs that do not read SQLite\n" +
-            "  profile docs                      regenerate PROFILE.md (the data dictionary)\n" +
-            "\n" +
-            "SIMS (read the profile; --save writes results back into it)\n" +
-            "  sim drive          drivetrain: top speed, acceleration, current, move times, battery effect\n" +
-            "  sim launcher       flywheel spin-up/recovery, shooting table, Monte Carlo make probability\n" +
-            "  sim localization   odometry drift over a match\n" +
-            "  sim loop           loop timing: what reads/writes/your code cost per loop, and what slow or uneven\n" +
-            "                     loops cost in turn/move settle time, flywheel speed error and pose lag\n" +
-            "  sim esd            static charge on robot, field and tiles; discharges; brownouts, current surges/drops,\n" +
-            "                     impacts; disconnect chance per match vs humidity; a competition day on one field\n" +
-            "  sim all            all of the above, in order\n" +
-            "\n" +
-            "PREDICTIONS (quick answers from the current profile)\n" +
-            "  predict shot --distance D [--ball pollen|nectar] [--battery V] [--bearing DEG]\n" +
-            "  predict drive --distance D [--strafe] [--battery V]\n" +
-            "  predict turn --angle DEG [--battery V]\n" +
-            "  predict loop [--sensor-reads N --motor-writes N --motor-reads N --servo-writes N --logic MS | --loop-ms MS]\n" +
-            "                                    loop time and turn/move accuracy now and with those changes\n" +
-            "  predict disconnect [--humidity RH] [--strap 0|1]   chance of a disconnect per match\n" +
-            "\n" +
-            "OPTIONS\n" +
-            "  --db PATH       profile database (default data/robot_profile.db)\n" +
-            "  --out DIR       reports and CSV output (default out)\n" +
-            "  --save          store sim results in the profile\n" +
-            "  --force         let a write replace a higher-priority value (e.g. overwrite a measurement)\n" +
-            "  --trials N      Monte Carlo trials per point (default 1000)\n" +
-            "  --seed N        random seed (default 1)\n";
+    static final String HELP = "Robot sims + robot profile database.   ./gradlew :Sim:run --args=\"<command> [options]\"\n" + "\n" + "PROFILE (the database a game simulator reads: data/robot_profile.db)\n" + "  profile init [--example]          create/update the database (--example: fill empty inputs with\n" + "                                    placeholder numbers so the sims can run; use a scratch --db)\n" + "  profile report [--html]           what is filled, what is missing (--html: out/profile_report.html)\n" + "  profile list [prefix]             every parameter with value, unit and source\n" + "  profile get <name>                one entry (parameter, curve, surface, distribution or action)\n" + "  profile set <key> <value>         set a parameter   [--std S] [--source measured|manual|game_manual]\n" + "                                    [--note \"where it came from\"] stored with the value\n" + "                                    [--unit U --description D] adds a parameter not in the catalog\n" + "  profile set-dist <name> <kind> <mean> <std>     set an error distribution (normal, uniform, ...)\n" + "  profile set-action <name> <mean_s> <std_s> <success 0-1>\n" + "  profile clear <name>              empty a parameter, curve, surface, distribution or action again\n" + "  profile set-meta <key> <value>    e.g. robot_name, team_number\n" + "  profile import-monitor <folder>   HardwareMonitor sessions (adb pull /sdcard/FIRST/data/HardwareMonitor)\n" + "  profile import-shots <file.csv>   real shot results  (template: data/templates/shots_template.csv)\n" + "  profile import-poses <file.csv>   real localization checks (template: data/templates/poses_template.csv)\n" + "  profile import-disconnects <file.csv>   disconnect log, one row per match or disconnect\n" + "                                    (template: data/templates/disconnects_template.csv)\n" + "  profile import-autotune [folder]  Turret Autotuner result (default: newest in ../tuning-data/turret-autotune)\n" + "  profile export [--format json|csv] [--file path]   for programs that do not read SQLite\n" + "  profile docs                      regenerate PROFILE.md (the data dictionary)\n" + "\n" + "SIMS (read the profile; --save writes results back into it)\n" + "  sim drive          drivetrain: top speed, acceleration, current, move times, battery effect\n" + "  sim launcher       flywheel spin-up/recovery, shooting table, Monte Carlo make probability\n" + "  sim localization   odometry drift over a match\n" + "  sim loop           loop timing: what reads/writes/your code cost per loop, and what slow or uneven\n" + "                     loops cost in turn/move settle time, flywheel speed error and pose lag\n" + "  sim esd            static charge on robot, field and tiles; discharges; brownouts, current surges/drops,\n" + "                     impacts; disconnect chance per match vs humidity; a competition day on one field\n" + "  sim turret         CODE IN THE LOOP: the robot's real TurretAutotuneEngine + TurretController on a sim\n" + "                     CR-servo turret: autotune (stationary + driving), steps, robot spinning, time to turn\n" + "                     [--faults: broken turrets for the diagnostics] [--verbose: every autotune test]\n" + "  sim flywheel       CODE IN THE LOOP: the robot's real Flywheel + ShotGate with TeamCode's FlywheelConstants:\n" + "                     spin-up to the FLYWHEEL_VELOCITIES targets, 4-ball bursts with and without the gate\n" + "  sim all            all of the above, in order\n" + "\n" + "PREDICTIONS (quick answers from the current profile)\n" + "  predict shot --distance D [--ball pollen|nectar] [--battery V] [--bearing DEG]\n" + "  predict drive --distance D [--strafe] [--battery V]\n" + "  predict turn --angle DEG [--battery V]\n" + "  predict loop [--sensor-reads N --motor-writes N --motor-reads N --servo-writes N --logic MS | --loop-ms MS]\n" + "                                    loop time and turn/move accuracy now and with those changes\n" + "  predict disconnect [--humidity RH] [--strap 0|1]   chance of a disconnect per match\n" + "\n" + "OPTIONS\n" + "  --db PATH       profile database (default data/robot_profile.db)\n" + "  --out DIR       reports and CSV output (default out)\n" + "  --save          store sim results in the profile\n" + "  --force         let a write replace a higher-priority value (e.g. overwrite a measurement)\n" + "  --trials N      Monte Carlo trials per point (default 1000)\n" + "  --seed N        random seed (default 1)\n" + "  --assume        run on a copy (out/assumed_profile.db) with every missing input filled by a PLACEHOLDER\n" + "                  example; real values are kept, results are marked placeholder, the shared profile is untouched\n" + "  --loop-ms MS --loop-jitter F   robot loop time for the code-in-the-loop sims (default: control.loop_time_ms, else 20)\n";
 
     public static void main(String[] argv) {
+
         PrintStream out;
         try {
             out = new PrintStream(System.out, true, "UTF-8");
         } catch (java.io.UnsupportedEncodingException e) {
-            out = System.out; // UTF-8 is always supported
+            out = System.out; //UTF-8 is always supported
         }
         try {
             int code = run(argv, out);
@@ -110,6 +64,7 @@ public final class Main {
     }
 
     public static int run(String[] argv, PrintStream out) throws Exception {
+
         Args a = new Args(argv);
         String cmd = a.pos(0);
         if (cmd == null || cmd.equals("help") || a.flag("help")) {
@@ -118,6 +73,7 @@ public final class Main {
         }
         Path dbPath = Paths.get(a.str("db", "data/robot_profile.db"));
         Path outDir = Paths.get(a.str("out", "out"));
+        if (a.flag("assume") && (cmd.equals("sim") || cmd.equals("predict"))) dbPath = assumed(dbPath, outDir, out);
         String sub = a.pos(1);
         boolean force = a.flag("force");
         int code;
@@ -143,9 +99,24 @@ public final class Main {
         return code;
     }
 
-    // ------------------------------------------------------------------ profile
+    //a copy of the profile with the gaps filled by placeholders, so every sim runs before everything is measured
+    static Path assumed(Path dbPath, Path outDir, PrintStream out) throws Exception {
+
+        if (!Files.isRegularFile(dbPath)) throw new IllegalArgumentException("no profile at " + dbPath.toAbsolutePath());
+        Files.createDirectories(outDir);
+        Path copy = outDir.resolve("assumed_profile.db");
+        Files.copy(dbPath, copy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        int n;
+        try (ProfileDb db = ProfileDb.open(copy)) {
+            n = db.fillExamples();
+        }
+        out.println("--assume: running on " + copy.toAbsolutePath() + " (" + n + " missing entries filled with PLACEHOLDER examples, real values kept, shared profile untouched)");
+        out.println();
+        return copy;
+    }
 
     static int profile(Args a, String sub, Path dbPath, Path outDir, boolean force, PrintStream out) throws Exception {
+
         if (sub == null) {
             out.print(HELP);
             return 1;
@@ -154,9 +125,7 @@ public final class Main {
             switch (sub) {
                 case "init": {
                     out.println("Profile ready: " + dbPath.toAbsolutePath());
-                    out.println("  " + (Catalog.PARAMS.size() + Catalog.CURVES.size() + Catalog.SURFACES.size() + Catalog.DISTS.size() + Catalog.ACTIONS.size())
-                            + " catalog entries (" + Catalog.PARAMS.size() + " parameters, " + Catalog.CURVES.size() + " curves, " + Catalog.SURFACES.size()
-                            + " surfaces, " + Catalog.DISTS.size() + " distributions, " + Catalog.ACTIONS.size() + " actions); game-manual values pre-filled.");
+                    out.println("  " + (Catalog.PARAMS.size() + Catalog.CURVES.size() + Catalog.SURFACES.size() + Catalog.DISTS.size() + Catalog.ACTIONS.size()) + " catalog entries (" + Catalog.PARAMS.size() + " parameters, " + Catalog.CURVES.size() + " curves, " + Catalog.SURFACES.size() + " surfaces, " + Catalog.DISTS.size() + " distributions, " + Catalog.ACTIONS.size() + " actions); game-manual values pre-filled.");
                     if (a.flag("example")) {
                         int n = db.fillExamples();
                         out.println("  filled " + n + " empty entries with PLACEHOLDER example values (not your robot).");
@@ -179,8 +148,7 @@ public final class Main {
                     String prefix = a.pos(2) == null ? "" : a.pos(2);
                     for (ProfileDb.ParamRow r : db.params(prefix)) {
                         String v = r.text() != null ? r.text() : r.value() == null ? "-" : Csv.fmt(r.value());
-                        out.printf(Locale.ROOT, "  %-44s %14s %-10s %-12s%s%n", r.key(), v, r.unit(),
-                                r.sourceKind() == null ? "" : r.sourceKind().id(), r.required() && !r.hasData() ? "  (required)" : "");
+                        out.printf(Locale.ROOT, "  %-44s %14s %-10s %-12s%s%n", r.key(), v, r.unit(), r.sourceKind() == null ? "" : r.sourceKind().id(), r.required() && !r.hasData() ? "  (required)" : "");
                     }
                     return 0;
                 }
@@ -200,14 +168,12 @@ public final class Main {
                     Double num = parseNum(val);
                     ProfileDb.ParamRow row = db.param(key);
                     if (num != null && row.outOfRange(num)) {
-                        out.println("Warning: " + val + " is outside the usual range [" + Csv.fmt(row.min() == null ? Double.NaN : row.min()) + ", "
-                                + Csv.fmt(row.max() == null ? Double.NaN : row.max()) + "] " + row.unit() + " for " + key + ". Check the unit.");
+                        out.println("Warning: " + val + " is outside the usual range [" + Csv.fmt(row.min() == null ? Double.NaN : row.min()) + ", " + Csv.fmt(row.max() == null ? Double.NaN : row.max()) + "] " + row.unit() + " for " + key + ". Check the unit.");
                     }
-                    long src = db.addSource(kind, "profile set", key + " = " + val);
+                    long src = db.addSource(kind, a.has("note") ? a.str("note", "") : "profile set", key + " = " + val);
                     Double std = a.has("std") ? a.num("std", Double.NaN) : null;
                     ProfileDb.Write w = db.setParam(key, num, num == null ? val : null, std, src, force);
-                    out.println(w == ProfileDb.Write.WRITTEN ? key + " = " + val + " " + row.unit() + " (" + kind.id() + ")"
-                            : key + " kept: it already has a higher-priority value (" + row.sourceKind().id() + "). Use --force to replace it.");
+                    out.println(w == ProfileDb.Write.WRITTEN ? key + " = " + val + " " + row.unit() + " (" + kind.id() + ")" : key + " kept: it already has a higher-priority value (" + row.sourceKind().id() + "). Use --force to replace it.");
                     return w == ProfileDb.Write.WRITTEN ? 0 : 1;
                 }
                 case "set-dist": {
@@ -215,8 +181,7 @@ public final class Main {
                     String name = need(a.pos(2), usage), kind = need(a.pos(3), usage);
                     Double mean = parseNum(need(a.pos(4), usage)), std = parseNum(need(a.pos(5), usage));
                     long src = db.addSource(SourceKind.parse(a.str("source", "manual")), "profile set-dist", String.join(" ", a.positional()));
-                    ProfileDb.Write w = db.setDist(name, kind, mean, std, a.has("min") ? a.num("min", 0) : null, a.has("max") ? a.num("max", 0) : null,
-                            a.has("mode") ? a.num("mode", 0) : null, null, src, force);
+                    ProfileDb.Write w = db.setDist(name, kind, mean, std, a.has("min") ? a.num("min", 0) : null, a.has("max") ? a.num("max", 0) : null, a.has("mode") ? a.num("mode", 0) : null, null, src, force);
                     out.println(name + ": " + w);
                     return w == ProfileDb.Write.WRITTEN ? 0 : 1;
                 }
@@ -224,8 +189,7 @@ public final class Main {
                     String usage = "profile set-action <name> <mean_s> <std_s> <success 0-1>";
                     String name = need(a.pos(2), usage);
                     long src = db.addSource(SourceKind.parse(a.str("source", "manual")), "profile set-action", String.join(" ", a.positional()));
-                    ProfileDb.Write w = db.setAction(name, parseNum(need(a.pos(3), usage)), parseNum(need(a.pos(4), usage)),
-                            a.has("min") ? a.num("min", 0) : null, parseNum(need(a.pos(5), usage)), src, force);
+                    ProfileDb.Write w = db.setAction(name, parseNum(need(a.pos(3), usage)), parseNum(need(a.pos(4), usage)), a.has("min") ? a.num("min", 0) : null, parseNum(need(a.pos(5), usage)), src, force);
                     out.println(name + ": " + w);
                     return w == ProfileDb.Write.WRITTEN ? 0 : 1;
                 }
@@ -255,6 +219,9 @@ public final class Main {
                     ObservationImport.importDisconnects(db, Paths.get(need(a.pos(2), "profile import-disconnects <file.csv>")), out, force);
                     return 0;
                 }
+                case "import-autotune": {
+                    return AutotuneImport.run(db, Paths.get(a.pos(2) == null ? "../tuning-data/turret-autotune" : a.pos(2)), out, force);
+                }
                 case "import-poses": {
                     ObservationImport.importPoses(db, Paths.get(need(a.pos(2), "profile import-poses <file.csv>")), out, force);
                     return 0;
@@ -265,11 +232,13 @@ public final class Main {
                         Path f = Paths.get(a.str("file", outDir.resolve("robot_profile.json").toString()));
                         ProfileExport.json(db, f);
                         out.println("Wrote " + f.toAbsolutePath());
-                    } else if (fmt.equals("csv")) {
+                    }
+                    else if (fmt.equals("csv")) {
                         Path d = Paths.get(a.str("file", outDir.resolve("robot_profile_csv").toString()));
                         ProfileExport.csv(db, d);
                         out.println("Wrote CSV tables to " + d.toAbsolutePath());
-                    } else {
+                    }
+                    else {
                         out.println("--format must be json or csv");
                         return 1;
                     }
@@ -290,14 +259,14 @@ public final class Main {
     }
 
     static int get(ProfileDb db, String name, PrintStream out) throws Exception {
+
         if (name == null) {
             out.println("profile get <name>");
             return 1;
         }
         ProfileDb.ParamRow p = db.param(name);
         if (p != null) {
-            out.println(p.key() + " = " + (p.text() != null ? p.text() : p.value() == null ? "(empty)" : Csv.fmt(p.value())) + " " + p.unit()
-                    + (p.std() == null ? "" : "  +/- " + Csv.fmt(p.std())));
+            out.println(p.key() + " = " + (p.text() != null ? p.text() : p.value() == null ? "(empty)" : Csv.fmt(p.value())) + " " + p.unit() + (p.std() == null ? "" : "  +/- " + Csv.fmt(p.std())));
             out.println("  " + p.description());
             out.println("  role " + p.role() + (p.required() ? ", required" : "") + (p.sourceKind() == null ? "" : ", source " + p.sourceKind().id() + " (" + p.sourceName() + ", " + p.updated() + ")"));
             return 0;
@@ -325,8 +294,7 @@ public final class Main {
         }
         ProfileDb.ActionRow ac = db.action(name);
         if (ac != null) {
-            out.println(ac.name() + ": " + (ac.meanTimeS() == null ? "(empty)" : Csv.fmt(ac.meanTimeS()) + " s +/- " + Csv.fmt(ac.stdTimeS() == null ? Double.NaN : ac.stdTimeS())
-                    + ", success " + Csv.fmt(ac.successProb() == null ? Double.NaN : ac.successProb())));
+            out.println(ac.name() + ": " + (ac.meanTimeS() == null ? "(empty)" : Csv.fmt(ac.meanTimeS()) + " s +/- " + Csv.fmt(ac.stdTimeS() == null ? Double.NaN : ac.stdTimeS()) + ", success " + Csv.fmt(ac.successProb() == null ? Double.NaN : ac.successProb())));
             out.println("  " + ac.description());
             return 0;
         }
@@ -334,15 +302,15 @@ public final class Main {
         return 1;
     }
 
-    // ------------------------------------------------------------------ sims
-
     static int sim(Args a, String sub, Path dbPath, Path outDir, boolean force, PrintStream out, String command) throws Exception {
+
         if (sub == null) {
             out.print(HELP);
             return 1;
         }
         try (ProfileDb db = ProfileDb.open(dbPath)) {
             SimContext ctx = new SimContext(db, outDir, a.flag("save"), force, (long) a.num("seed", 1), a.integer("trials", 1000), out, command);
+            ctx.args = a;
             long t0 = System.nanoTime();
             switch (sub) {
                 case "drive":
@@ -360,20 +328,30 @@ public final class Main {
                 case "esd":
                     EsdScenario.run(ctx);
                     break;
+                case "turret":
+                    TurretScenario.run(ctx);
+                    break;
+                case "flywheel":
+                    FlywheelCodeScenario.run(ctx);
+                    break;
                 case "all": {
                     DriveScenario.run(ctx);
                     out.println();
-                    LocalizationScenario.run(ctx); // before the launcher: it produces the pose error the shots use
+                    LocalizationScenario.run(ctx);
                     out.println();
-                    LoopTimingScenario.run(ctx);   // before the launcher: it produces the loop-timing rpm error
+                    LoopTimingScenario.run(ctx);   //before the launcher: it produces the loop-timing rpm error
                     out.println();
                     LauncherScenario.run(ctx);
                     out.println();
                     EsdScenario.run(ctx);
+                    out.println();
+                    TurretScenario.run(ctx);
+                    out.println();
+                    FlywheelCodeScenario.run(ctx);
                     break;
                 }
                 default: {
-                    out.println("Unknown sim '" + sub + "' (drive, launcher, localization, loop, esd, all).");
+                    out.println("Unknown sim '" + sub + "' (drive, launcher, localization, loop, esd, turret, flywheel, all).");
                     return 1;
                 }
             }
@@ -382,9 +360,8 @@ public final class Main {
         }
     }
 
-    // ------------------------------------------------------------------ predictions
-
     static int predict(Args a, String sub, Path dbPath, PrintStream out) throws Exception {
+
         if (sub == null) {
             out.print(HELP);
             return 1;
@@ -412,16 +389,12 @@ public final class Main {
                     ShotPredictor.Prediction p = ShotPredictor.predict(L, ball, cell, s, bearing, Double.NaN, e, a.integer("trials", 2000), new Rng((long) a.num("seed", 1)));
                     out.printf(Locale.ROOT, "%s shot from %.2f m (bearing %.0f deg):%n", ball.toUpperCase(), dist, Math.toDegrees(bearing));
                     out.printf(Locale.ROOT, "  hood %.1f deg, flywheel %.0f rpm, exit speed %.2f m/s%n", s.hoodDeg(), s.rpm(), s.exitSpeed());
-                    out.printf(Locale.ROOT, "  scores with exit speed %.2f-%.2f m/s (+/-%.1f%%) and launch angle %.1f-%.1f deg%n",
-                            s.speedLow(), s.speedHigh(), 50 * s.tolerance(), s.hoodDeg() - s.angleLowDeg(), s.hoodDeg() + s.angleHighDeg());
-                    out.printf(Locale.ROOT, "  make probability %.1f%% (95%% interval %.1f-%.1f%%, %d trials); misses: %s%n",
-                            100 * p.probability(), 100 * p.low95(), 100 * p.high95(), p.trials(), p.outcomes());
+                    out.printf(Locale.ROOT, "  scores with exit speed %.2f-%.2f m/s (+/-%.1f%%) and launch angle %.1f-%.1f deg%n", s.speedLow(), s.speedHigh(), 50 * s.tolerance(), s.hoodDeg() - s.angleLowDeg(), s.hoodDeg() + s.angleHighDeg());
+                    out.printf(Locale.ROOT, "  make probability %.1f%% (95%% interval %.1f-%.1f%%, %d trials); misses: %s%n", 100 * p.probability(), 100 * p.low95(), 100 * p.high95(), p.trials(), p.outcomes());
                     if (probe != null) {
-                        // a burst of every ball held, fired as soon as the flywheel is ready, on that battery
                         double rInt = rp.req("battery.internal_resistance_ohm"), drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
                         int count = Math.max(1, (int) Math.round(held));
-                        double[] b = LauncherScenario.burstMake(L, lp, v -> new Battery(v, rInt, drop), volts, rp.electronicsCurrent(), ball, cell, s, e,
-                                count, Math.max(200, a.integer("trials", 2000) / 2), new Rng((long) a.num("seed", 1) + 1), dist);
+                        double[] b = LauncherScenario.burstMake(L, lp, v -> new Battery(v, rInt, drop), volts, rp.electronicsCurrent(), ball, cell, s, e, count, Math.max(200, a.integer("trials", 2000) / 2), new Rng((long) a.num("seed", 1) + 1), dist);
                         out.printf(Locale.ROOT, "  burst of %d on a %.2f V battery: %.1f%% per ball (+/-%.1f%%)%n", count, volts, 100 * b[1], 100 * b[2]);
                     }
                     if (!rp.assumptions().isEmpty()) out.println("  assumptions: " + String.join("; ", rp.assumptions()));
@@ -441,10 +414,8 @@ public final class Main {
                     if (Double.isNaN(amount)) throw new IllegalArgumentException(turn ? "predict turn needs --angle DEG" : "predict drive needs --distance M");
                     DriveTimePredictor.Move m = DriveTimePredictor.timeTo(p, () -> rp.battery(voc), other, axis, amount);
                     double overhead = rp.opt("drive.path_overhead_factor", 1.0);
-                    out.printf(Locale.ROOT, "%s %s on a %.2f V battery: %.2f s physics limit, about %.2f s with path overhead x%.2f%n",
-                            axis.name().toLowerCase(Locale.ROOT), turn ? a.num("angle", 0) + " deg" : amount + " m", voc, m.timeS(), m.timeS() * overhead, overhead);
-                    out.printf(Locale.ROOT, "  peak speed %.2f %s, peak drive current %.1f A, battery dips to %.2f V%n",
-                            turn ? Math.toDegrees(m.peakSpeed()) : m.peakSpeed(), turn ? "deg/s" : "m/s", m.peakCurrentA(), m.minBusV());
+                    out.printf(Locale.ROOT, "%s %s on a %.2f V battery: %.2f s physics limit, about %.2f s with path overhead x%.2f%n", axis.name().toLowerCase(Locale.ROOT), turn ? a.num("angle", 0) + " deg" : amount + " m", voc, m.timeS(), m.timeS() * overhead, overhead);
+                    out.printf(Locale.ROOT, "  peak speed %.2f %s, peak drive current %.1f A, battery dips to %.2f V%n", turn ? Math.toDegrees(m.peakSpeed()) : m.peakSpeed(), turn ? "deg/s" : "m/s", m.peakCurrentA(), m.minBusV());
                     if (!rp.placeholderInputs().isEmpty()) out.println("  uses PLACEHOLDER inputs: " + String.join(", ", rp.placeholderInputs()));
                     return 0;
                 }
@@ -460,14 +431,14 @@ public final class Main {
         }
     }
 
-    // ------------------------------------------------------------------ helpers
-
     private static String need(String v, String usage) {
+
         if (v == null) throw new IllegalArgumentException("usage: " + usage);
         return v;
     }
 
     private static Double parseNum(String s) {
+
         try {
             return Double.parseDouble(s);
         } catch (NumberFormatException e) {

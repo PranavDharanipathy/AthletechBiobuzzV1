@@ -1,12 +1,12 @@
 package org.athletech.sim.utility;
 
-/** Immutable 3D vector. Field frame: +z up. */
 public final class Vec3 {
     private final double x;
     private final double y;
     private final double z;
 
     public Vec3(double x, double y, double z) {
+
         this.x = x;
         this.y = y;
         this.z = z;
@@ -18,12 +18,11 @@ public final class Vec3 {
 
     @Override
     public boolean equals(Object other) {
+
         if (this == other) return true;
         if (!(other instanceof Vec3)) return false;
         Vec3 o = (Vec3) other;
-        return Double.compare(x, o.x) == 0
-                && Double.compare(y, o.y) == 0
-                && Double.compare(z, o.z) == 0;
+        return Double.compare(x, o.x) == 0 && Double.compare(y, o.y) == 0 && Double.compare(z, o.z) == 0;
     }
 
     @Override
@@ -47,10 +46,10 @@ public final class Vec3 {
     public double norm() { return Math.sqrt(x * x + y * y + z * z); }
 
     public Vec3 normalized() {
+
         double n = norm();
         return n == 0 ? this : times(1 / n);
     }
 
-    /** Horizontal part (z dropped). */
     public Vec2 xy() { return new Vec2(x, y); }
 }

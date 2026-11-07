@@ -54,7 +54,41 @@ Everything runs through Gradle from the repo root (PowerShell needs the `./`):
   measurements remain stored; consumers must honor the capability flags. Missing flags
   are reported as missing inputs, so existing profiles need these two settings after updating.
 
+## Code in the loop: the robot's own control code
+
+`sim turret` and `sim flywheel` don't use a model of the controller. They run TeamCode's real
+classes, copied in at build time (`copyTeamCodeSources` in `build.gradle.kts`, compiled against the
+SDK stand-ins in `src/ftcStubs`):
+
+- **`sim turret`**: `TurretAutotuneEngine` (STATIONARY, then DRIVING) and `TurretController` with
+  the robot's `TurretConstants`, against `robot/CrServoTurret`. That turret has speed per volt, lag,
+  dead time, stick-slip friction and encoder noise, from `turret.*`. It prints:
+  - what the autotuner would find;
+  - how the robot's current constants and the tuned ones do on a 30° step and with the robot spinning;
+  - time to turn.
+
+  `--faults` adds broken turrets (reversed encoder, fighting servos, dead servo, jam) to check the
+  autotuner's diagnostics. `profile import-autotune` loads a real Turret Autotuner run into `turret.*`,
+  so the sim turret becomes the robot's turret.
+- **`sim flywheel`**: `Flywheel` (PIDVS, voltage compensation, velocity filter) and `ShotGate`, with
+  `FlywheelConstants` as they are, against the sim flywheel + battery from `launcher.*` / `battery.*`.
+  It does spin-up to the `FLYWHEEL_VELOCITIES` targets and bursts of `robot.max_pollen_held` balls
+  with and without the gate, on a full and a 12 V battery.
+- Both take `--loop-ms` / `--loop-jitter` (default: `control.loop_time_ms`, else 20 ms ±30%). They
+  write CSV traces to `out/`. Robot time goes through `TeamCode/.../Utility/Clock`, which the sim points
+  at sim time.
+
 ## Trying it before you have data
+
+Add `--assume` to any `sim` or `predict`. It copies the profile to `out/assumed_profile.db`, fills only the
+missing entries with placeholders, and runs there. Every real value is kept, and the output lists each
+placeholder it used:
+
+```bash
+./gradlew :Sim:run --args="sim all --assume"
+```
+
+Or start from nothing:
 
 ```bash
 ./gradlew :Sim:run --args="profile init --example --db out/example_profile.db"

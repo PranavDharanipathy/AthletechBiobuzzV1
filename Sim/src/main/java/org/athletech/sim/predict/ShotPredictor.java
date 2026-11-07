@@ -13,16 +13,10 @@ import org.athletech.sim.utility.Vec3;
 import java.util.EnumMap;
 import java.util.Map;
 
-/**
- * Monte Carlo make probability: fires many simulated shots, each with random errors drawn from
- * the profile's distributions (flywheel speed, hood, ball-to-ball variation, turret aim, and the
- * robot not being exactly where it thinks it is), and counts how many score.
- */
 public final class ShotPredictor {
     private ShotPredictor() {
     }
 
-    /** The random errors applied to every simulated shot. */
     public static final class Errors {
         private final Distribution rpm;
         private final Distribution hoodDeg;
@@ -37,9 +31,8 @@ public final class ShotPredictor {
             this(rpm, hoodDeg, exitSpeedFrac, exitAngleDeg, aimDeg, poseAxisM, headingDeg, Distribution.none("loop rpm", "rpm"));
         }
 
-        /** @param loopRpm extra flywheel speed error from loop timing (control.flywheel_rpm_error_from_loop) */
-        public Errors(Distribution rpm, Distribution hoodDeg, Distribution exitSpeedFrac, Distribution exitAngleDeg, Distribution aimDeg, Distribution poseAxisM,
-                      Distribution headingDeg, Distribution loopRpm) {
+        public Errors(Distribution rpm, Distribution hoodDeg, Distribution exitSpeedFrac, Distribution exitAngleDeg, Distribution aimDeg, Distribution poseAxisM, Distribution headingDeg, Distribution loopRpm) {
+
             this.rpm = rpm;
             this.hoodDeg = hoodDeg;
             this.exitSpeedFrac = exitSpeedFrac;
@@ -61,17 +54,11 @@ public final class ShotPredictor {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Errors)) return false;
             Errors o = (Errors) other;
-            return java.util.Objects.equals(rpm, o.rpm)
-                    && java.util.Objects.equals(hoodDeg, o.hoodDeg)
-                    && java.util.Objects.equals(exitSpeedFrac, o.exitSpeedFrac)
-                    && java.util.Objects.equals(exitAngleDeg, o.exitAngleDeg)
-                    && java.util.Objects.equals(aimDeg, o.aimDeg)
-                    && java.util.Objects.equals(poseAxisM, o.poseAxisM)
-                    && java.util.Objects.equals(headingDeg, o.headingDeg)
-                    && java.util.Objects.equals(loopRpm, o.loopRpm);
+            return java.util.Objects.equals(rpm, o.rpm) && java.util.Objects.equals(hoodDeg, o.hoodDeg) && java.util.Objects.equals(exitSpeedFrac, o.exitSpeedFrac) && java.util.Objects.equals(exitAngleDeg, o.exitAngleDeg) && java.util.Objects.equals(aimDeg, o.aimDeg) && java.util.Objects.equals(poseAxisM, o.poseAxisM) && java.util.Objects.equals(headingDeg, o.headingDeg) && java.util.Objects.equals(loopRpm, o.loopRpm);
         }
 
         @Override
@@ -84,13 +71,12 @@ public final class ShotPredictor {
             return "Errors[rpm=" + rpm + ", hoodDeg=" + hoodDeg + ", exitSpeedFrac=" + exitSpeedFrac + ", exitAngleDeg=" + exitAngleDeg + ", aimDeg=" + aimDeg + ", poseAxisM=" + poseAxisM + ", headingDeg=" + headingDeg + ", loopRpm=" + loopRpm + "]";
         }
 
-        /** Combined 1-sigma launch angle error (hood + ball-to-ball), degrees. */
         public double angleSigmaDeg() {
             return Math.hypot(sd(hoodDeg), sd(exitAngleDeg));
         }
 
-        /** Combined 1-sigma exit speed error (m/s) at exit speed v: ball-to-ball scatter plus flywheel rpm error. */
         public java.util.function.DoubleUnaryOperator speedSigma(Launcher launcher, String ball) {
+
             return v -> {
                 double rpm = launcher.rpmForExitSpeed(ball, v);
                 double rpmFrac = rpm > 0 && Double.isFinite(rpm) ? Math.hypot(sd(this.rpm), sd(loopRpm)) / rpm : 0;
@@ -98,8 +84,8 @@ public final class ShotPredictor {
             };
         }
 
-        /** Standard deviation of a distribution (0 when unknown). */
         static double sd(Distribution d) {
+
             switch (d.kind()) {
                 case NONE:
                 case CONSTANT:
@@ -133,6 +119,7 @@ public final class ShotPredictor {
         private final Map<Projectile.Outcome, Integer> outcomes;
 
         public Prediction(double probability, double stdErr, double low95, double high95, int trials, Map<Projectile.Outcome, Integer> outcomes) {
+
             this.probability = probability;
             this.stdErr = stdErr;
             this.low95 = low95;
@@ -150,15 +137,11 @@ public final class ShotPredictor {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Prediction)) return false;
             Prediction o = (Prediction) other;
-            return Double.compare(probability, o.probability) == 0
-                    && Double.compare(stdErr, o.stdErr) == 0
-                    && Double.compare(low95, o.low95) == 0
-                    && Double.compare(high95, o.high95) == 0
-                    && trials == o.trials
-                    && java.util.Objects.equals(outcomes, o.outcomes);
+            return Double.compare(probability, o.probability) == 0 && Double.compare(stdErr, o.stdErr) == 0 && Double.compare(low95, o.low95) == 0 && Double.compare(high95, o.high95) == 0 && trials == o.trials && java.util.Objects.equals(outcomes, o.outcomes);
         }
 
         @Override
@@ -172,12 +155,8 @@ public final class ShotPredictor {
         }
     }
 
-    /**
-     * @param rpmBeforeShot actual wheel speed when the ball is fed (from a burst simulation), or
-     *                      NaN to use the aim solution's target speed (rested flywheel)
-     */
-    public static Prediction predict(Launcher launcher, String ball, Aperture target, AimSolver.Solution aim,
-                                     double bearingRad, double rpmBeforeShot, Errors e, int trials, Rng rng) {
+    public static Prediction predict(Launcher launcher, String ball, Aperture target, AimSolver.Solution aim, double bearingRad, double rpmBeforeShot, Errors e, int trials, Rng rng) {
+
         Map<Projectile.Outcome, Integer> outcomes = new EnumMap<>(Projectile.Outcome.class);
         if (!aim.reachable()) {
             outcomes.put(Projectile.Outcome.SHORT, trials);
@@ -189,15 +168,12 @@ public final class ShotPredictor {
         double baseRpm = Double.isNaN(rpmBeforeShot) ? aim.rpm() : rpmBeforeShot;
         int made = 0;
         for (int i = 0; i < trials; i++) {
-            // where the robot really is: believed spot plus localization error; it still aims from the believed spot
             double dx = e.poseAxisM().sample(rng), dy = e.poseAxisM().sample(rng);
             Vec3 launch = believed.launchPoint().plus(new Vec3(dx, dy, 0));
             double rpm = baseRpm + e.rpm().sample(rng) + e.loopRpm().sample(rng);
             double speed = launcher.exitSpeed(ball, rpm) * (1 + e.exitSpeedFrac().sample(rng));
-            // the hood cannot go past its stops; ball-to-ball angle scatter is on top of that
             double hood = Math.max(lp.hoodMinDeg(), Math.min(lp.hoodMaxDeg(), aim.hoodDeg() + e.hoodDeg().sample(rng)));
             double elev = Physics.rad(hood + e.exitAngleDeg().sample(rng));
-            // believed heading error turns the whole aim (the turret angle is relative to the robot)
             double yaw = believed.yawToTarget() + Physics.rad(e.aimDeg().sample(rng) + e.headingDeg().sample(rng));
             Projectile.Result r = Projectile.fly(b, launch, Launcher.launchVelocity(yaw, elev, speed, Vec2.ZERO), target);
             outcomes.merge(r.outcome(), 1, Integer::sum);

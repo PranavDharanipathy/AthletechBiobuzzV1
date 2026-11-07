@@ -29,7 +29,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-/** The profile database: catalog, priorities, curves, exports and imports. */
 public class ProfileDbTest {
     Path dir;
     ProfileDb db;
@@ -37,12 +36,14 @@ public class ProfileDbTest {
 
     @Before
     public void open() throws Exception {
+
         dir = Files.createTempDirectory("profile-test");
         db = ProfileDb.open(dir.resolve("p.db"));
     }
 
     @After
     public void close() throws Exception {
+
         db.close();
         try (java.util.stream.Stream<Path> s = Files.walk(dir)) {
             s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
@@ -51,6 +52,7 @@ public class ProfileDbTest {
 
     @Test
     public void newProfileHasEveryCatalogEntryEmptyExceptGameManual() throws Exception {
+
         assertEquals(Catalog.PARAMS.size(), db.params("").size());
         assertEquals(Catalog.CURVES.size(), db.curves("").size());
         assertNull(db.value("robot.mass_kg"));
@@ -61,6 +63,7 @@ public class ProfileDbTest {
 
     @Test
     public void reopeningKeepsValuesAndDoesNotDuplicate() throws Exception {
+
         long src = db.addSource(SourceKind.MANUAL, "test", null);
         db.setParam("robot.mass_kg", 12.5, null, 0.1, src, false);
         db.close();
@@ -72,6 +75,7 @@ public class ProfileDbTest {
 
     @Test
     public void lowerPriorityNeverOverwritesHigher() throws Exception {
+
         long measured = db.addSource(SourceKind.MEASURED, "scale", null);
         long sim = db.addSource(SourceKind.SIM, "sim", null);
         long ph = db.addSource(SourceKind.PLACEHOLDER, "example", null);
@@ -86,11 +90,12 @@ public class ProfileDbTest {
 
     @Test
     public void curvesSurfacesDistributionsActionsRoundTrip() throws Exception {
+
         long src = db.addSource(SourceKind.SIM, "t", null);
         db.setCurve("drive.time_to_distance", Arrays.asList(new double[]{1, 0.9}, new double[]{0.5, 0.6, 0.01, 10}), src, false);
         ProfileDb.CurveRow c = db.curve("drive.time_to_distance");
         assertEquals(2, c.points().size());
-        assertEquals(0.5, c.points().get(0)[0], 0); // sorted by x
+        assertEquals(0.5, c.points().get(0)[0], 0); //sorted by x
         assertEquals(10, c.points().get(0)[3], 0);
         db.setSurface("drive.time_to_distance_vs_battery", Arrays.asList(new double[]{1, 12, 0.95}, new double[]{1, 13, 0.9}), src, false);
         assertEquals(2, db.surface("drive.time_to_distance_vs_battery").points().size());
@@ -104,6 +109,7 @@ public class ProfileDbTest {
 
     @Test
     public void examplesMakeEveryRequiredInputAvailableToTheSims() throws Exception {
+
         db.fillExamples();
         RobotParams rp = new RobotParams(db);
         assertNotNull(rp.drive());
@@ -115,6 +121,7 @@ public class ProfileDbTest {
     }
 
     @Test public void pollenOnlyLauncherDoesNotRequireNectarShotInputs() throws Exception {
+
         db.fillExamples();
         long source = db.addSource(SourceKind.MANUAL, "current pollen-only hardware", null);
         db.setParam("launcher.nectar.enabled", 0.0, null, null, source, false);
@@ -140,6 +147,7 @@ public class ProfileDbTest {
     }
 
     @Test public void launcherCapabilitiesMustBeExplicitAndBinary() throws Exception {
+
         db.fillExamples();
         db.clear("launcher.nectar.enabled");
         RobotParams rp = new RobotParams(db);
@@ -162,6 +170,7 @@ public class ProfileDbTest {
 
     @Test
     public void missingInputsAreListed() throws Exception {
+
         RobotParams rp = new RobotParams(db);
         rp.drive();
         try {
@@ -175,6 +184,7 @@ public class ProfileDbTest {
 
     @Test
     public void jsonExportParsesBack() throws Exception {
+
         Path f = dir.resolve("p.json");
         ProfileExport.json(db, f);
         Object j = Json.parse(new String(Files.readAllBytes(f), StandardCharsets.UTF_8));
@@ -188,6 +198,7 @@ public class ProfileDbTest {
 
     @Test
     public void monitorImportFitsBatteryResistance() throws Exception {
+
         Path s = dir.resolve("HardwareMonitor/sessions/20261023-010000_Test");
         Files.createDirectories(s);
         StringBuilder csv = new StringBuilder("t_s,loop_ms,battery_v,total_current_a\n");
@@ -208,18 +219,17 @@ public class ProfileDbTest {
 
     @Test
     public void monitorImportMeasuresLoopParts() throws Exception {
+
         Path s = dir.resolve("HardwareMonitor/sessions/20261023-020000_Loop");
         Files.createDirectories(s);
         StringBuilder sys = new StringBuilder("t_s,loop_ms,loop_avg_ms,hw_ms_per_loop,battery_v,total_current_a\n");
         for (int i = 0; i < 400; i++) {
-            double loop = i % 100 == 50 ? 40 : 10; // a few spikes
+            double loop = i % 100 == 50 ? 40 : 10; //a few spikes
             sys.append(i * 0.1).append(',').append(loop).append(",10,6,12.5,5\n");
         }
         Files.write(s.resolve("system.csv"), sys.toString().getBytes(StandardCharsets.UTF_8));
-        Files.write(s.resolve("devices.csv"), ("id,name,type,device_class,cache_reads,connection\n"
-                + "0,lf,DcMotorEx,X,1,hub\n1,imu,IMU,X,0,i2c\n2,claw,Servo,X,0,hub\n").getBytes(StandardCharsets.UTF_8));
+        Files.write(s.resolve("devices.csv"), ("id,name,type,device_class,cache_reads,connection\n" + "0,lf,DcMotorEx,X,1,hub\n1,imu,IMU,X,0,i2c\n2,claw,Servo,X,0,hub\n").getBytes(StandardCharsets.UTF_8));
         StringBuilder ev = new StringBuilder("t_s,device_id,device,op,kind,flag,latency_us\n");
-        // 400 loops of 10 ms: 2 motor writes (1 repeated), 1 IMU read, 1 cached + 1 real motor read per loop
         for (int i = 0; i < 400; i++) {
             double t = i * 0.01;
             ev.append(t).append(",0,lf,setPower,W,0,1500\n");
@@ -242,9 +252,9 @@ public class ProfileDbTest {
 
     @Test
     public void disconnectLogBecomesMeasuredRates() throws Exception {
+
         Path f = dir.resolve("disconnects.csv");
-        Files.write(f, ("match,type,outage_s,humidity_pct\nQ1,none,,25\nQ2,i2c_lockup,4,25\nQ2,usb_camera_drop,3,25\nQ3,none,,55\nQ4,none,,55\n")
-                .getBytes(StandardCharsets.UTF_8));
+        Files.write(f, ("match,type,outage_s,humidity_pct\nQ1,none,,25\nQ2,i2c_lockup,4,25\nQ2,usb_camera_drop,3,25\nQ3,none,,55\nQ4,none,,55\n").getBytes(StandardCharsets.UTF_8));
         ObservationImport.importDisconnects(db, f, quiet, false);
         assertEquals(0.5, db.value("disconnect.measured_per_match"), 1e-12);
         assertEquals(0.25, db.value("disconnect.measured_prob_per_match"), 1e-12);
@@ -264,6 +274,7 @@ public class ProfileDbTest {
 
     @Test
     public void schemaOneUpgradesToTwo() throws Exception {
+
         Path p = dir.resolve("old.db");
         ProfileDb.open(p).close();
         try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + p.toAbsolutePath());
@@ -279,12 +290,12 @@ public class ProfileDbTest {
 
     @Test
     public void shotLogBecomesMeasuredMakeProbability() throws Exception {
+
         StringBuilder csv = new StringBuilder("ball,distance_m,result,target_rpm,actual_rpm\n");
         for (int i = 0; i < 20; i++) csv.append("pollen,2.0,").append(i < 15 ? "make" : "miss_short").append(",3000,").append(2990 + i).append('\n');
         Path f = dir.resolve("shots.csv");
         Files.write(f, csv.toString().getBytes(StandardCharsets.UTF_8));
         ObservationImport.importShots(db, f, quiet, false);
-        // real shots go to the measured_* curve; the sim's own curve stays untouched
         ProfileDb.CurveRow c = db.curve("launcher.pollen.measured_make_prob_vs_distance");
         assertTrue(db.curve("launcher.pollen.make_prob_vs_distance").points().isEmpty());
         assertEquals(1, c.points().size());
@@ -296,6 +307,7 @@ public class ProfileDbTest {
 
     @Test
     public void poseRowWithoutPositionsIsRejected() throws Exception {
+
         Path f = dir.resolve("poses.csv");
         Files.write(f, "elapsed_s,true_x_m,true_y_m,est_x_m,est_y_m\n10,0.5,0.5,0.52,0.49\n20,0.5,,0.5,0.5\n".getBytes(StandardCharsets.UTF_8));
         try {
@@ -308,6 +320,7 @@ public class ProfileDbTest {
 
     @Test
     public void simSaverClearsResultsItCouldNotProduce() throws Exception {
+
         SimContext ctx = new SimContext(db, dir, true, false, 1, 10, quiet, "test");
         RobotParams rp = new RobotParams(db);
         SimContext.Saver first = ctx.saver(rp, "first run");
@@ -323,6 +336,7 @@ public class ProfileDbTest {
 
     @Test
     public void clearWorksForEveryKind() throws Exception {
+
         db.setCurve("launcher.pollen.make_prob_vs_distance", Arrays.asList(new double[]{1, 0.5}), db.addSource(SourceKind.MANUAL, "t", ""), false);
         assertEquals("curve", db.clear("launcher.pollen.make_prob_vs_distance"));
         assertTrue(db.curve("launcher.pollen.make_prob_vs_distance").points().isEmpty());

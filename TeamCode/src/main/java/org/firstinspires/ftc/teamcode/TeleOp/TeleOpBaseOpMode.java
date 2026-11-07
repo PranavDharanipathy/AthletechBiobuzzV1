@@ -9,17 +9,16 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.DrivetrainConstants;
+import org.firstinspires.ftc.teamcode.Constants.FieldConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
-import org.firstinspires.ftc.teamcode.Constants.HoodConstants;
 import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
-import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
+import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
-import org.firstinspires.ftc.teamcode.Systems.Hood.Hood;
-import org.firstinspires.ftc.teamcode.Systems.Hood.HoodAngler;
+import org.firstinspires.ftc.teamcode.Systems.Shooter;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
@@ -29,6 +28,7 @@ import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredServo;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
 import java.util.List;
+import java.util.Locale;
 
 public abstract class TeleOpBaseOpMode extends OpMode {
 
@@ -47,14 +47,30 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
     public TurretBase turret;
 
-    public HoodAngler hoodAngler;
-    public Hood hood;
-
     public Flywheel flywheel;
 
     private List<LynxModule> robotHubs;
 
-    /// initializes/creates LynxModule
+    //keeps what the turret learned about the lanyards for next time
+    @Override
+    public void stop() {
+        if (turret != null) turret.saveLanyards();
+    }
+
+    /// pose and the relocalize button on the Driver Station. The lines are made once and only filled in when telemetry
+    /// is sent (4 times a second), so nothing is built per loop
+    public void addDriverTelemetry(final Shooter shooter) {
+
+        telemetry.setAutoClear(false);
+        telemetry.addData("Pose", () -> {
+
+            Pose pose = follower.pose();
+            return String.format(Locale.US, "x %.1f  y %.1f  heading %.0f deg", pose.x(), pose.y(), Math.toDegrees(pose.heading()));
+        });
+        telemetry.addData("Relocalize (gamepad 1 PS/guide)", () -> (controller1.curr_main_button ? "button DOWN" : "button up") + ", done " + shooter.getRelocalizations() + "x, to the " + Garden.forAlliance(alliance.getAlliance()) + " GARDEN corner");
+    }
+
+    //lynx module setup
     public void setUpLynxModule() {
 
         robotHubs = hardwareMap.getAll(LynxModule.class);
@@ -64,7 +80,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         }
     }
 
-    /// Clears cache of LynxModule
+    //clears lynx cache
     public void clearCacheOfLynxModule() {
 
         for (LynxModule hub : robotHubs) {
@@ -74,7 +90,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         HardwareMonitor.get().update();
     }
 
-    /// Initializing devices
+    //creates devices
     public void initializeComponents(Alliance alliance) {
 
         this.alliance = new AllianceState(alliance);
@@ -94,14 +110,11 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         turret = new TurretBase(hardwareMap);
 
-        hoodAngler = new HoodAngler(hardwareMap, DeviceConstants.hoodServoDeviceName);
-        hood = new Hood(hoodAngler);
-
         controller1 = new BetterGamepad(gamepad1);
         controller2 = new BetterGamepad(gamepad2);
     }
 
-    /// Provide traits
+    //sets device traits
     public void applyComponentTraits() {
 
         left_front.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -112,7 +125,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         right_front.setDirection(DcMotorSimple.Direction.REVERSE);
         right_back.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        follower.setPose(new Pose(0,0));
+        follower.setPose(FieldConstants.START_POSE);
 
         intake.setVelocityPDFCoefficients(
                 IntakeConstants.INTAKE_PDF_COEFFICIENTS[0],
@@ -122,12 +135,6 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         flywheel.initVoltageSensor(hardwareMap);
         flywheel.setVelocityPIDVSCoefficients(FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS);
-
-        turret.setPositionalCoefficients(TurretConstants.TURRET_POSITIONAL_COEFFICIENTS);
-        //turret.reverse();
-
-        hoodAngler.setSafePosition(HoodConstants.HOOD_ANGLER_MAX_POSITION);
-
     }
 
 }

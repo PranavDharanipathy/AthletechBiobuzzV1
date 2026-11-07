@@ -5,11 +5,9 @@ import org.athletech.sim.utility.Csv;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Line charts as inline SVG (no libraries, so reports open anywhere, offline). */
 public final class SvgChart {
     public static final String[] PALETTE = {"#4e79a7", "#f28e2b", "#e15759", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f", "#79706e"};
 
-    /** One line; {@code band} (optional, same length) draws a +/- shaded area. */
     public static final class Series {
         private final String name;
         private final double[] x;
@@ -17,6 +15,7 @@ public final class SvgChart {
         private final double[] band;
 
         public Series(String name, double[] x, double[] y, double[] band) {
+
             this.name = name;
             this.x = x;
             this.y = y;
@@ -30,13 +29,11 @@ public final class SvgChart {
 
         @Override
         public boolean equals(Object other) {
+
             if (this == other) return true;
             if (!(other instanceof Series)) return false;
             Series o = (Series) other;
-            return java.util.Objects.equals(name, o.name)
-                    && java.util.Objects.equals(x, o.x)
-                    && java.util.Objects.equals(y, o.y)
-                    && java.util.Objects.equals(band, o.band);
+            return java.util.Objects.equals(name, o.name) && java.util.Objects.equals(x, o.x) && java.util.Objects.equals(y, o.y) && java.util.Objects.equals(band, o.band);
         }
 
         @Override
@@ -61,22 +58,26 @@ public final class SvgChart {
     private Double yMinFixed, yMaxFixed;
 
     public SvgChart(String title, String xLabel, String yLabel) {
+
         this.title = title;
         this.xLabel = xLabel;
         this.yLabel = yLabel;
     }
 
     public SvgChart add(Series s) {
+
         if (s != null && s.x().length > 0) series.add(s);
         return this;
     }
 
     public SvgChart zeroBased() {
+
         zeroBased = true;
         return this;
     }
 
     public SvgChart yRange(double min, double max) {
+
         yMinFixed = min;
         yMaxFixed = max;
         return this;
@@ -87,6 +88,7 @@ public final class SvgChart {
     }
 
     public String svg() {
+
         boolean legend = series.size() > 1 || (!series.isEmpty() && !series.get(0).name().isEmpty());
         int legendRows = legend ? (series.size() + 2) / 3 : 0;
         int w = 640, h = 300 + legendRows * 15, L = 62, R = 14, T = 30 + legendRows * 15, B = 44;
@@ -113,7 +115,7 @@ public final class SvgChart {
         if (zeroBased) ymin = Math.min(0, ymin);
         if (yMinFixed != null) ymin = yMinFixed;
         if (yMaxFixed != null) ymax = yMaxFixed;
-        if (ymax - ymin <= 1e-4 * Math.max(Math.abs(ymax), Math.abs(ymin))) { // flat data: show it as a flat line, not noise
+        if (ymax - ymin <= 1e-4 * Math.max(Math.abs(ymax), Math.abs(ymin))) { //flat data: show it as a flat line, not noise
             double d = Math.abs(ymax) > 1e-12 ? Math.abs(ymax) * 0.1 : 1;
             ymax += d;
             ymin -= d;
@@ -167,8 +169,7 @@ public final class SvgChart {
             if (s.x().length <= 30) {
                 for (int i = 0; i < s.x().length; i++) {
                     if (!Double.isFinite(s.y()[i])) continue;
-                    sb.append(String.format(java.util.Locale.ROOT, "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"2.6\" fill=\"%s\"><title>%s: %s, %s</title></circle>",
-                            X.applyAsDouble(s.x()[i]), Y.applyAsDouble(s.y()[i]), col, esc(s.name()), Csv.fmt(s.x()[i]), Csv.fmt(s.y()[i])));
+                    sb.append(String.format(java.util.Locale.ROOT, "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"2.6\" fill=\"%s\"><title>%s: %s, %s</title></circle>", X.applyAsDouble(s.x()[i]), Y.applyAsDouble(s.y()[i]), col, esc(s.name()), Csv.fmt(s.x()[i]), Csv.fmt(s.y()[i])));
                 }
             }
         }
@@ -192,6 +193,7 @@ public final class SvgChart {
     }
 
     static List<Double> ticks(double lo, double hi, int count) {
+
         List<Double> out = new ArrayList<>();
         double span = hi - lo;
         if (!(span > 0)) {

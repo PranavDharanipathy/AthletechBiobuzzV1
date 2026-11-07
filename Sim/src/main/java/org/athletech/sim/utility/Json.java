@@ -5,18 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Tiny JSON reader/writer. Objects become {@code LinkedHashMap<String,Object>}, arrays
- * {@code List<Object>}, numbers {@code Double}. Enough for HardwareMonitor's summary.json and the
- * profile export; not a general-purpose library.
- */
 public final class Json {
     private Json() {
     }
 
-    // ------------------------------------------------------------------ writing
-
     public static String write(Object v) {
+
         StringBuilder sb = new StringBuilder();
         write(sb, v, 0, true);
         return sb.toString();
@@ -24,16 +18,21 @@ public final class Json {
 
     @SuppressWarnings("unchecked")
     private static void write(StringBuilder sb, Object v, int indent, boolean pretty) {
+
         if (v == null) {
             sb.append("null");
-        } else if (v instanceof String) {
+        }
+        else if (v instanceof String) {
             quote(sb, (String) v);
-        } else if (v instanceof Number) {
+        }
+        else if (v instanceof Number) {
             double d = ((Number) v).doubleValue();
             sb.append(Double.isFinite(d) ? Csv.fmt(d) : "null");
-        } else if (v instanceof Boolean) {
+        }
+        else if (v instanceof Boolean) {
             sb.append(v);
-        } else if (v instanceof Map<?, ?>) {
+        }
+        else if (v instanceof Map<?, ?>) {
             Map<?, ?> m = (Map<?, ?>) v;
             if (m.isEmpty()) {
                 sb.append("{}");
@@ -51,7 +50,8 @@ public final class Json {
             }
             if (pretty) newline(sb, indent);
             sb.append('}');
-        } else if (v instanceof List<?>) {
+        }
+        else if (v instanceof List<?>) {
             List<?> l = (List<?>) v;
             boolean flat = l.stream().allMatch(x -> x == null || x instanceof Number || x instanceof String || x instanceof Boolean);
             sb.append('[');
@@ -62,21 +62,25 @@ public final class Json {
             }
             if (pretty && !flat && !l.isEmpty()) newline(sb, indent);
             sb.append(']');
-        } else if (v instanceof double[]) {
+        }
+        else if (v instanceof double[]) {
             List<Object> l = new ArrayList<>();
             for (double d : (double[]) v) l.add(d);
             write(sb, l, indent, pretty);
-        } else {
+        }
+        else {
             quote(sb, v.toString());
         }
     }
 
     private static void newline(StringBuilder sb, int indent) {
+
         sb.append('\n');
         for (int k = 0; k < indent; k++) sb.append("  ");
     }
 
     private static void quote(StringBuilder sb, String s) {
+
         sb.append('"');
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
@@ -104,9 +108,8 @@ public final class Json {
         sb.append('"');
     }
 
-    // ------------------------------------------------------------------ reading
-
     public static Object parse(String text) {
+
         Parser p = new Parser(text);
         p.ws();
         Object v = p.value();
@@ -117,22 +120,26 @@ public final class Json {
 
     @SuppressWarnings("unchecked")
     public static Map<String, Object> obj(Object o, String key) {
+
         Object v = get(o, key);
         return v instanceof Map<?, ?> ? (Map<String, Object>) v : new LinkedHashMap<String, Object>();
     }
 
     @SuppressWarnings("unchecked")
     public static List<Object> arr(Object o, String key) {
+
         Object v = get(o, key);
         return v instanceof List<?> ? (List<Object>) v : new ArrayList<Object>();
     }
 
     public static double num(Object o, String key) {
+
         Object v = get(o, key);
         return v instanceof Number ? ((Number) v).doubleValue() : Double.NaN;
     }
 
     public static String str(Object o, String key) {
+
         Object v = get(o, key);
         return v == null ? null : v.toString();
     }
@@ -158,6 +165,7 @@ public final class Json {
         }
 
         Object value() {
+
             if (i >= s.length()) throw error("unexpected end");
             char c = s.charAt(i);
             switch (c) {
@@ -172,11 +180,13 @@ public final class Json {
         }
 
         void expect(String word) {
+
             if (!s.startsWith(word, i)) throw error("expected " + word);
             i += word.length();
         }
 
         Map<String, Object> object() {
+
             Map<String, Object> m = new LinkedHashMap<>();
             i++;
             ws();
@@ -199,6 +209,7 @@ public final class Json {
         }
 
         List<Object> array() {
+
             List<Object> l = new ArrayList<>();
             i++;
             ws();
@@ -217,6 +228,7 @@ public final class Json {
         }
 
         String string() {
+
             if (s.charAt(i) != '"') throw error("expected string");
             i++;
             StringBuilder sb = new StringBuilder();
@@ -250,13 +262,15 @@ public final class Json {
                             sb.append(e);
                             break;
                     }
-                } else {
+                }
+                else {
                     sb.append(c);
                 }
             }
         }
 
         Double number() {
+
             int start = i;
             while (i < s.length() && "+-0123456789.eE".indexOf(s.charAt(i)) >= 0) i++;
             if (start == i) throw error("unexpected character '" + s.charAt(i) + "'");

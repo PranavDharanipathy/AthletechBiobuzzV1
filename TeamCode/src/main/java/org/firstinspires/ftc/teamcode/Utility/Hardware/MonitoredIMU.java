@@ -11,18 +11,6 @@ import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 import org.firstinspires.ftc.robotcore.external.navigation.Quaternion;
 import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
-/**
- * Drop-in {@link IMU} that counts and times every call and can cache reads.
- *
- * <pre>
- * IMU imu = new MonitoredIMU(hardwareMap, "imu", true);
- * </pre>
- *
- * IMU reads are I2C transactions (typically a few ms each) and are <b>not</b> covered by REV
- * hub bulk caching, so read caching here is often the single biggest loop-time win: heading
- * can be read from drive code, telemetry and a turn controller in the same loop for the cost of
- * one transaction.
- */
 public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     private final CacheSlot yprSlot;
@@ -39,6 +27,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
     }
 
     public MonitoredIMU(IMU imu, String name, boolean cacheReads) {
+
         super(imu, name, "IMU", cacheReads);
         yprSlot = tracker.newSlot();
         orientationSlot = tracker.newSlot();
@@ -48,6 +37,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public boolean initialize(Parameters parameters) {
+
         long t0 = tracker.start();
         boolean ok = device.initialize(parameters);
         tracker.write(HwOp.IMU_INITIALIZE, t0, false);
@@ -56,6 +46,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public void resetYaw() {
+
         long t0 = tracker.start();
         device.resetYaw();
         tracker.write(HwOp.IMU_RESET_YAW, t0, false);
@@ -63,6 +54,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public YawPitchRollAngles getRobotYawPitchRollAngles() {
+
         if (tracker.cacheHit(HwOp.GET_YAW_PITCH_ROLL, yprSlot, CacheSlot.NO_KEY)) {
             return (YawPitchRollAngles) yprSlot.o;
         }
@@ -75,6 +67,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public Orientation getRobotOrientation(AxesReference reference, AxesOrder order, AngleUnit angleUnit) {
+
         long key = ord(reference) * 10_000L + ord(order) * 100L + ord(angleUnit);
         if (tracker.cacheHit(HwOp.GET_ORIENTATION, orientationSlot, key)) {
             return (Orientation) orientationSlot.o;
@@ -88,6 +81,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public Quaternion getRobotOrientationAsQuaternion() {
+
         if (tracker.cacheHit(HwOp.GET_QUATERNION, quaternionSlot, CacheSlot.NO_KEY)) {
             return (Quaternion) quaternionSlot.o;
         }
@@ -100,6 +94,7 @@ public class MonitoredIMU extends MonitoredDevice<IMU> implements IMU {
 
     @Override
     public AngularVelocity getRobotAngularVelocity(AngleUnit angleUnit) {
+
         long key = ord(angleUnit);
         if (tracker.cacheHit(HwOp.GET_ANGULAR_VELOCITY, angularVelocitySlot, key)) {
             return (AngularVelocity) angularVelocitySlot.o;

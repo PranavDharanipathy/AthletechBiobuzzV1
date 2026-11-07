@@ -9,12 +9,6 @@ import org.firstinspires.ftc.teamcode.Utility.Monitoring.MonitorStore;
 
 import java.util.Locale;
 
-/**
- * Deletes the whole HardwareMonitor database from the Driver Station. Works during INIT.
- * Hold A + B on gamepad 1 for one second to confirm, so it cannot happen by accident.
- *
- * <p>From code, the same command is {@link HardwareMonitor#clearDatabase()}.
- */
 @TeleOp(name = "Hardware Monitor: Clear Database", group = "Diagnostics")
 public class HardwareMonitorClear extends LinearOpMode {
 
@@ -22,6 +16,7 @@ public class HardwareMonitorClear extends LinearOpMode {
 
     @Override
     public void runOpMode() {
+
         ElapsedTime held = new ElapsedTime();
         boolean holding = false;
         int deleted = -1;
@@ -35,18 +30,21 @@ public class HardwareMonitorClear extends LinearOpMode {
             if (deleted >= 0) {
                 telemetry.addLine(String.format(Locale.US, "Deleted %d session(s).", deleted));
                 telemetry.addLine("You can stop this OpMode.");
-            } else {
+            }
+            else {
                 telemetry.addLine(String.format(Locale.US, "%d session(s), %.1f MB", sessions, bytes / 1048576.0));
                 telemetry.addLine("");
                 if (sessions == 0) {
                     telemetry.addLine("Nothing to delete.");
-                } else {
+                }
+                else {
                     telemetry.addLine("Hold A + B for 1 second to delete EVERYTHING.");
                     boolean both = gamepad1.a && gamepad1.b;
                     if (both && !holding) {
                         holding = true;
                         held.reset();
-                    } else if (!both) {
+                    }
+                    else if (!both) {
                         holding = false;
                     }
                     if (holding) {

@@ -42,8 +42,7 @@ public class FlywheelPIDVSCoefficients {
             double maxD
     ) {
 
-        updateCoefficients(kpFar, kpClose, kiFar, kiClose, kd, kv, ks, ksSignWidth,
-                iSwitch, pSwitch, kISmash, minP, maxP, minI, maxI, minD, maxD);
+        updateCoefficients(kpFar, kpClose, kiFar, kiClose, kd, kv, ks, ksSignWidth, iSwitch, pSwitch, kISmash, minP, maxP, minI, maxI, minD, maxD);
     }
 
     public void updateCoefficients(

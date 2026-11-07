@@ -24,11 +24,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
 
-/**
- * Launcher sims: flywheel spin-up and recovery (with battery sag), the shooting lookup table
- * (hood + rpm per distance), Monte Carlo make probabilities for single shots and full bursts, and
- * how a draining battery changes them. Fills the launcher.* derived entries.
- */
 public final class LauncherScenario {
     private LauncherScenario() {
     }
@@ -36,8 +31,8 @@ public final class LauncherScenario {
     static final double DT = 0.001;
     static final double[] VOLTS = {11.5, 12.0, 12.5, 13.0, 13.5};
 
-    /** Spin-up from {@code startRpm} to {@code target}: time until within tolerance (and staying there 0.1 s). */
     static double spinUp(Launcher.Params lp, Battery b, double other, double startRpm, double target, Recorder rec) {
+
         Flywheel f = new Flywheel(lp.flywheel());
         f.setRpm(startRpm);
         f.setTargetRpm(target);
@@ -54,18 +49,17 @@ public final class LauncherScenario {
         return Double.isNaN(inSince) ? Double.NaN : inSince;
     }
 
-    /** Rpm drop of one shot at {@code rpm} and the time to recover within tolerance. */
     static double[] shotAndRecover(Launcher.Params lp, Battery b, double other, String ball, double rpm) {
+
         Flywheel f = new Flywheel(lp.flywheel());
         f.setTargetRpm(rpm);
         f.setRpm(rpm);
-        for (int i = 0; i < 500; i++) f.step(DT, b, other); // settle at target under the controller
+        for (int i = 0; i < 500; i++) f.step(DT, b, other); //settle at target under the controller
         double before = f.rpm();
         Launcher.BallFit fit = lp.ball(ball);
         f.fire(fit.ball().massKg(), fit.exitSpeedRatio(), fit.energyLossFactor());
         double drop = before - f.rpm();
         // recovered = 90% of the lost speed back (measured against the pre-shot speed, which can sit a
-        // little below target on a weak battery because of controller steady-state error)
         double t = 0, done = Math.max(1, 0.1 * drop);
         while (t < 8 && before - f.rpm() > done) {
             f.step(DT, b, other);
@@ -74,8 +68,8 @@ public final class LauncherScenario {
         return new double[]{drop, t};
     }
 
-    /** Fires {@code count} balls back to back from a flywheel at speed; returns rpm before each shot and total time. */
     static double[] burst(Launcher.Params lp, Battery b, double other, String ball, double target, int count) {
+
         Flywheel f = new Flywheel(lp.flywheel());
         f.setTargetRpm(target);
         f.setRpm(target);
@@ -86,9 +80,7 @@ public final class LauncherScenario {
         int fired = 0;
         while (fired < count) {
             boolean intervalOk = t - lastShot >= lp.feedIntervalS();
-            // after 10 s of waiting for one ball give up on "ready" (a weak battery may never reach tolerance)
-            boolean ready = !lp.waitForReady() || Math.abs(f.rpm() - target) <= lp.readyToleranceRpm()
-                    || t - Math.max(lastShot, 0) > 10;
+            boolean ready = !lp.waitForReady() || Math.abs(f.rpm() - target) <= lp.readyToleranceRpm() || t - Math.max(lastShot, 0) > 10;
             if (intervalOk && ready) {
                 out[fired] = f.rpm();
                 f.fire(fit.ball().massKg(), fit.exitSpeedRatio(), fit.energyLossFactor());
@@ -100,17 +92,18 @@ public final class LauncherScenario {
             f.step(DT, b, other);
             t += DT;
         }
-        out[count] = lastShot + out[count]; // time from first to last ball
+        out[count] = lastShot + out[count]; //time from first to last ball
         return out;
     }
 
     public static void run(SimContext ctx) throws Exception {
+
         RobotParams rp = new RobotParams(ctx.db);
         Launcher.Params lp = rp.launcher();
         Aperture cell = rp.cell();
         rp.battery(Double.NaN);
         double rInt = rp.req("battery.internal_resistance_ohm"), drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
-        java.util.function.DoubleFunction<Battery> bat = v -> new Battery(v, rInt, drop); // no DB access: safe in parallel
+        java.util.function.DoubleFunction<Battery> bat = v -> new Battery(v, rInt, drop); //no DB access: safe in parallel
         double other = rp.electronicsCurrent();
         List<String> ballTypes = rp.launcherBallTypes();
         int[] held = new int[ballTypes.size()];
@@ -127,7 +120,6 @@ public final class LauncherScenario {
         Reports.provenance(r, rp, ctx);
         ctx.log.println("Launcher sim  (flywheel free speed " + Math.round(lp.flywheel().freeSpeedRpm()) + " rpm, max " + lp.maxRpm() + " rpm, battery " + voc + " V)");
 
-        // ---- spin-up
         Recorder spin = new Recorder(0.01, "t_s", "rpm", "motor_current_a", "battery_current_a", "bus_v");
         spinUp(lp, bat.apply(voc), other, 0, lp.maxRpm(), spin);
         double spinT = spinUp(lp, bat.apply(voc), other, 0, lp.maxRpm(), null);
@@ -167,7 +159,6 @@ public final class LauncherScenario {
             String B = ball.toUpperCase();
             int count = Math.max(1, held[bi]);
 
-            // ---- one shot: drop and recovery
             double[] sr = shotAndRecover(lp, bat.apply(voc), other, ball, lp.maxRpm());
             List<double[]> recVsV = new ArrayList<>(), burstVsV = new ArrayList<>();
             for (double v : VOLTS) {
@@ -192,7 +183,6 @@ public final class LauncherScenario {
             save.curve("launcher." + ball + ".exit_speed_vs_rpm", exit);
             exitChart.add(Reports.series(B, exit));
 
-            // ---- shooting table: arc-consistent across distances (see AimSolver.solveTable)
             java.util.function.DoubleUnaryOperator speedSigma = errors.speedSigma(L, ball);
             AimSolver.Table table = AimSolver.solveTable(L, ball, cell, dists, 0, speedSigma, errors.angleSigmaDeg());
             AimSolver.Solution[] sol = table.solutions();
@@ -209,11 +199,8 @@ public final class LauncherScenario {
             save.param("launcher." + ball + ".max_range_m", maxRange);
             rpmLut.add(Reports.series(B, rpmPts));
             hoodLut.add(Reports.series(B, hoodPts));
-            ctx.log.printf("  %s: %d of %d distances reachable (max range %.2f m%s); 1 shot drops %.0f rpm, recovers in %.2f s%n",
-                    B, reachable, dists.length, maxRange, table.switchPoints().isEmpty() ? "" : ", " + table.switchPoints().size() / 2 + " arc switch(es)",
-                    sr[0], sr[1]);
+            ctx.log.printf("  %s: %d of %d distances reachable (max range %.2f m%s); 1 shot drops %.0f rpm, recovers in %.2f s%n", B, reachable, dists.length, maxRange, table.switchPoints().isEmpty() ? "" : ", " + table.switchPoints().size() / 2 + " arc switch(es)", sr[0], sr[1]);
 
-            // ---- Monte Carlo: single shot (rested) and full burst
             final int bIdx = bi;
             double[][] single = new double[dists.length][];
             double[][] burstP = new double[dists.length][];
@@ -223,14 +210,12 @@ public final class LauncherScenario {
                 single[i] = new double[]{dists[i], p.probability(), p.stdErr(), p.trials()};
                 burstP[i] = burstMake(L, lp, bat, voc, other, ball, cell, sol[i], errors, count, ctx.trials, rng, dists[i]);
             });
-            // unreachable distances stay in as 0 % so "hold the end value" readers never extrapolate a make
             List<double[]> singleList = Arrays.asList(single), burstList = Arrays.asList(burstP);
             save.curve("launcher." + ball + ".make_prob_vs_distance", singleList);
             save.curve("launcher." + ball + ".burst_make_prob_vs_distance", burstList);
             makeChart.add(Reports.series(B + " single shot", singleList, true));
             makeChart.add(Reports.series(B + " burst of " + count, burstList, true));
 
-            // ---- burst make probability vs distance and battery (fewer trials per point)
             List<double[]> surf = new ArrayList<>();
             int sTrials = Math.max(100, ctx.trials / 3);
             for (double v : VOLTS) {
@@ -247,15 +232,12 @@ public final class LauncherScenario {
             List<List<String>> lut = new ArrayList<>();
             for (int i = 0; i < dists.length; i++) {
                 AimSolver.Solution s = sol[i];
-                lut.add(s.reachable()
-                        ? Reports.row(dists[i], s.rpm(), s.hoodDeg(), s.exitSpeed(), 100 * s.tolerance(), single[i][1], burstP[i][1])
-                        : Reports.row(dists[i], "out of reach", "", "", "", "", ""));
+                lut.add(s.reachable() ? Reports.row(dists[i], s.rpm(), s.hoodDeg(), s.exitSpeed(), 100 * s.tolerance(), single[i][1], burstP[i][1]) : Reports.row(dists[i], "out of reach", "", "", "", "", ""));
             }
             r.table(Arrays.asList("distance m", "flywheel rpm", "hood deg", "exit speed m/s", "speed tolerance %", "P(make) single", "P(make) burst"), lut);
             for (int k = 0; k + 1 < table.switchPoints().size(); k += 2) {
                 AimSolver.Solution a = table.switchPoints().get(k), b = table.switchPoints().get(k + 1);
-                r.note("info", "Arc switch at " + Reports.round(0.5 * (a.distanceM() + b.distanceM())) + " m: hood " + Reports.round(a.hoodDeg())
-                        + " -> " + Reports.round(b.hoodDeg()) + " deg. The table has two points 1 mm apart there, so interpolating never mixes the two arcs.");
+                r.note("info", "Arc switch at " + Reports.round(0.5 * (a.distanceM() + b.distanceM())) + " m: hood " + Reports.round(a.hoodDeg()) + " -> " + Reports.round(b.hoodDeg()) + " deg. The table has two points 1 mm apart there, so interpolating never mixes the two arcs.");
             }
             SvgChart sc = new SvgChart(B + ": burst make probability by battery", "distance to CELL (m)", "probability").yRange(0, 1);
             for (double v : VOLTS) {
@@ -279,26 +261,22 @@ public final class LauncherScenario {
             for (int a = 0; a <= 180; a += 15) tt.add(new double[]{a, turret.timeToTurn(a)});
             save.curve("turret.time_to_turn", tt);
             r.chart(new SvgChart("Turret move time", "angle (deg)", "s").zeroBased().add(Reports.series("turret", tt)));
-        } else {
+        }
+        else {
             r.note("warn", "turret.max_speed_dps / turret.max_accel_dps2 not set: turret timing skipped.");
         }
         r.heading("Summary");
         r.table(Arrays.asList("quantity", "value", "unit"), summary);
         r.heading("Error model used for the Monte Carlo");
-        r.bullets(Arrays.asList("flywheel speed error: " + errors.rpm().describe(), "hood error: " + errors.hoodDeg().describe(),
-                "exit speed variation: " + errors.exitSpeedFrac().describe(), "exit angle variation: " + errors.exitAngleDeg().describe(),
-                "turret aim error: " + errors.aimDeg().describe(), "robot position error (per axis): " + errors.poseAxisM().describe(),
-                "robot heading error: " + errors.headingDeg().describe(),
-                "flywheel speed error from loop timing: " + (errors.loopRpm().isKnown() ? errors.loopRpm().describe()
-                        : "not added (run sim loop first, or launcher.rpm_error is measured and already includes it)")));
+        r.bullets(Arrays.asList("flywheel speed error: " + errors.rpm().describe(), "hood error: " + errors.hoodDeg().describe(), "exit speed variation: " + errors.exitSpeedFrac().describe(), "exit angle variation: " + errors.exitAngleDeg().describe(), "turret aim error: " + errors.aimDeg().describe(), "robot position error (per axis): " + errors.poseAxisM().describe(), "robot heading error: " + errors.headingDeg().describe(), "flywheel speed error from loop timing: " + (errors.loopRpm().isKnown() ? errors.loopRpm().describe() : "not added (run sim loop first, or launcher.rpm_error is measured and already includes it)")));
         r.write(ctx.outDir.resolve("launcher/report.html"));
         spin.write(ctx.outDir.resolve("launcher/spinup.csv"));
         ctx.log.println("  report: " + ctx.outDir.resolve("launcher/report.html"));
         save.report();
     }
 
-    /** Do not leave earlier simulated nectar shots usable after switching to pollen-only. */
     static void clearDisabledResults(SimContext.Saver save, List<String> enabled) throws java.sql.SQLException {
+
         for (String ball : Catalog.BALLS) {
             if (enabled.contains(ball)) continue;
             String prefix = "launcher." + ball + ".";
@@ -314,34 +292,24 @@ public final class LauncherScenario {
         }
     }
 
-    /**
-     * The shot error model from the profile. Loop-timing flywheel error (from the loop sim) is added
-     * unless launcher.rpm_error is measured, because real shot logs already include it.
-     */
     public static ShotPredictor.Errors errors(RobotParams rp) throws java.sql.SQLException {
+
         org.athletech.sim.config.ProfileDb.DistRow measured = rp.db().dist("launcher.rpm_error");
         boolean rpmMeasured = measured != null && measured.hasData() && measured.sourceKind() == org.athletech.sim.config.SourceKind.MEASURED;
         org.athletech.sim.config.ProfileDb.DistRow loop = rp.db().dist("control.flywheel_rpm_error_from_loop");
-        org.athletech.sim.undeterminables.Distribution loopRpm = !rpmMeasured && loop != null && loop.hasData()
-                ? rp.dist("control.flywheel_rpm_error_from_loop") : org.athletech.sim.undeterminables.Distribution.none("loop rpm", "rpm");
-        return new ShotPredictor.Errors(rp.dist("launcher.rpm_error"), rp.dist("launcher.hood_error_deg"),
-                rp.dist("launcher.exit_speed_variation"), rp.dist("launcher.exit_angle_variation_deg"), rp.dist("turret.aim_error_deg"),
-                rp.dist("localization.pose_error_m"), rp.dist("localization.heading_error_deg"), loopRpm);
+        org.athletech.sim.undeterminables.Distribution loopRpm = !rpmMeasured && loop != null && loop.hasData() ? rp.dist("control.flywheel_rpm_error_from_loop") : org.athletech.sim.undeterminables.Distribution.none("loop rpm", "rpm");
+        return new ShotPredictor.Errors(rp.dist("launcher.rpm_error"), rp.dist("launcher.hood_error_deg"), rp.dist("launcher.exit_speed_variation"), rp.dist("launcher.exit_angle_variation_deg"), rp.dist("turret.aim_error_deg"), rp.dist("localization.pose_error_m"), rp.dist("localization.heading_error_deg"), loopRpm);
     }
 
-    /** 0.5 m up to the field diagonal (the farthest any shot on the field can be), every 0.2 m. */
     static double[] distances(double maxM) {
+
         List<Double> d = new ArrayList<>();
         for (int i = 0; 0.5 + 0.2 * i <= maxM + 0.1; i++) d.add(Math.round((0.5 + 0.2 * i) * 100) / 100.0);
         return d.stream().mapToDouble(Double::doubleValue).toArray();
     }
 
-    /**
-     * Farthest scoring distance: bisection between the last reachable grid point and the next one,
-     * or the grid end if everything out to the field diagonal is reachable.
-     */
-    static double maxRange(Launcher L, String ball, Aperture cell, double[] dists, AimSolver.Solution[] sol,
-                           java.util.function.DoubleUnaryOperator speedSigma, double angleSigma) {
+    static double maxRange(Launcher L, String ball, Aperture cell, double[] dists, AimSolver.Solution[] sol, java.util.function.DoubleUnaryOperator speedSigma, double angleSigma) {
+
         int last = -1;
         for (int i = 0; i < sol.length; i++) if (sol[i].reachable()) last = i;
         if (last < 0) return Double.NaN;
@@ -355,10 +323,8 @@ public final class LauncherScenario {
         return lo;
     }
 
-    /** Average make probability per ball over a full burst at battery {@code voc}: {distance, p, stdErr, n}. */
-    public static double[] burstMake(Launcher L, Launcher.Params lp, java.util.function.DoubleFunction<Battery> bat, double voc, double other,
-                              String ball, Aperture cell, AimSolver.Solution s, ShotPredictor.Errors errors, int count, int trials,
-                              Rng rng, double dist) {
+    public static double[] burstMake(Launcher L, Launcher.Params lp, java.util.function.DoubleFunction<Battery> bat, double voc, double other, String ball, Aperture cell, AimSolver.Solution s, ShotPredictor.Errors errors, int count, int trials, Rng rng, double dist) {
+
         if (!s.reachable()) return new double[]{dist, 0, 0, 0};
         double[] before = burst(lp, bat.apply(voc), other, ball, s.rpm(), count);
         long made = 0, n = 0;
@@ -370,8 +336,8 @@ public final class LauncherScenario {
         return new double[]{dist, (double) made / n, Stats.proportionStd(made, n), n};
     }
 
-    /** Side view of the nominal trajectories at a few distances (robot on the +x side of the CELL). */
     static SvgChart trajectoryChart(Launcher L, String ball, Aperture cell, AimSolver.Solution[] sol) {
+
         SvgChart c = new SvgChart(ball.toUpperCase() + ": nominal trajectories (side view)", "distance from CELL center (m)", "height (m)").zeroBased();
         Launcher.Params lp = L.params();
         Projectile.Ball b = lp.ball(ball).ball();
@@ -380,8 +346,7 @@ public final class LauncherScenario {
             if (!s.reachable()) continue;
             AimSolver.Spot spot = AimSolver.spot(lp, cell, s.distanceM(), 0);
             List<Vec3> trace = new ArrayList<>();
-            Projectile.fly(b, spot.launchPoint(), Launcher.launchVelocity(spot.yawToTarget(), Math.toRadians(s.hoodDeg()), s.exitSpeed(), Vec2.ZERO),
-                    cell, Physics.AIR_DENSITY, 0.002, 4, trace);
+            Projectile.fly(b, spot.launchPoint(), Launcher.launchVelocity(spot.yawToTarget(), Math.toRadians(s.hoodDeg()), s.exitSpeed(), Vec2.ZERO), cell, Physics.AIR_DENSITY, 0.002, 4, trace);
             List<double[]> pts = new ArrayList<>();
             for (int k = 0; k < trace.size(); k += 5) pts.add(new double[]{trace.get(k).x() - cell.center().x(), trace.get(k).z()});
             Vec3 last = trace.get(trace.size() - 1);

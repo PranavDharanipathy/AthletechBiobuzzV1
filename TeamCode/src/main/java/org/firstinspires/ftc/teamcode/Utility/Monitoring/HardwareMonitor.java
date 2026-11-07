@@ -33,84 +33,24 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Watches the robot's "undeterminable" variables - the ones you can't know until it runs - and
- * records them in an on-robot database you can review after the OpMode stops.
- *
- * <h3>What it measures</h3>
- * <ul>
- *   <li><b>Loop timing</b>: loop time avg/min/max/std-dev, p50/p90/p95/p99, frequency.</li>
- *   <li><b>Hardware I/O per loop</b>: time blocked in hardware calls, share of the loop,
- *       reads/writes/cache hits per loop.</li>
- *   <li><b>Every device</b> (via the {@code Monitored*} wrappers): reads, writes, cache hits,
- *       redundant writes, read/write frequency, latency, and a timestamp for every call.</li>
- *   <li><b>Power</b>: battery voltage (start/min/avg/end, brown-out dips), total current from all
- *       hubs, total power, energy used (Wh) and charge drawn (mAh).</li>
- *   <li><b>Each REV hub</b>: current, input voltage, 5 V rail, I2C and GPIO bus current,
- *       temperature, "not responding" events.</li>
- *   <li><b>Each motor</b>: current, velocity, back-EMF (from velocity, and from current if a
- *       winding resistance is set), back-EMF as a fraction of battery voltage, electrical power
- *       and energy.</li>
- *   <li><b>The JVM and the monitor itself</b>: heap use, CPU use, and how much time the monitor
- *       spent on its own sampling.</li>
- * </ul>
- *
- * <h3>Using it</h3>
- * <pre>
- * DcMotorEx lift = new MonitoredDcMotorEx(hardwareMap, "lift", true);
- * IMU imu       = new MonitoredIMU(hardwareMap, "imu", true);
- * waitForStart();
- * while (opModeIsActive()) {
- *     HardwareMonitor.get().update();   // once per loop: timing, cache refresh, sampling
- *     ...
- *     HardwareMonitor.get().addTelemetry(telemetry);
- *     telemetry.update();
- * }
- * </pre>
- * Sessions start and are saved automatically when OpModes init and stop ({@link
- * MonitorOpModeHook}). {@link #start(OpMode)} / {@link #stop()} are there for manual control.
- * Review results with the "Hardware Monitor Viewer" OpMode or
- * {@code adb pull /sdcard/FIRST/data/HardwareMonitor}; wipe them with {@link #clearDatabase()}.
- *
- * <h3>Cost</h3>
- * Counting a call costs well under a microsecond. The monitor's own sampling (battery, hubs,
- * motor current) is limited to {@link Config#maxSampleReadsPerUpdate} hardware reads per
- * {@link #update()} and re-uses any value your code already read through a wrapper. All file
- * writing happens on a background thread.
- */
 public final class HardwareMonitor {
 
     public static final String TAG = "HardwareMonitor";
 
-    /** Tunables. Change them before the OpMode starts; most take effect on the next session. */
     public static final class Config {
-        /** Master switch. When false nothing is sampled or saved; wrappers still count and cache. */
         public volatile boolean enabled = true;
-        /** Save sessions to the on-robot database. */
         public volatile boolean persist = true;
-        /** Log every individual read/write with its timestamp (events.csv). */
         public volatile boolean logEvents = true;
-        /** Stop logging individual events once events.csv reaches this size (bytes). */
         public volatile long maxEventLogBytes = 64L * 1024 * 1024;
-        /** Safety net for read caching: a cached value older than this is re-read anyway. */
         public volatile long cacheMaxAgeMs = 50;
-        /** Hardware reads the monitor may spend on its own sampling per update(). 0 = none. */
         public volatile int maxSampleReadsPerUpdate = 1;
         public volatile long batterySamplePeriodMs = 100;
         public volatile long hubCurrentSamplePeriodMs = 200;
-        /** Hub input voltage, 5 V rail, I2C/GPIO current and temperature. */
         public volatile long hubDetailSamplePeriodMs = 1000;
         public volatile long motorSamplePeriodMs = 200;
-        /** How often a row is added to system.csv. */
         public volatile long timeSeriesPeriodMs = 50;
-        /** How often summary.json is refreshed while recording. */
         public volatile long summaryPeriodMs = 5000;
-        /** Battery dips below this count as low-voltage events. */
         public volatile double lowVoltageThreshold = 9.0;
-        /**
-         * If set, applied to every REV hub when the hardware map is seen. MANUAL caches are
-         * cleared at the start of every {@link #update()}. Null leaves the hubs alone.
-         */
         public volatile LynxModule.BulkCachingMode bulkCachingMode = null;
     }
 
@@ -127,17 +67,13 @@ public final class HardwareMonitor {
         return INSTANCE;
     }
 
-    /** Internal: the read-cache generation. Advances on every {@link #update()}. */
     public static long currentCycle() {
         return cycle;
     }
 
-    /** Internal: max age of a cached read, in nanoseconds. */
     public static long cacheMaxAgeNs() {
         return CONFIG.cacheMaxAgeMs * 1_000_000L;
     }
-
-    // ------------------------------------------------------------------ state
 
     private final AtomicLong ioNs = new AtomicLong();
     private final AtomicLong ioReads = new AtomicLong();
@@ -147,7 +83,6 @@ public final class HardwareMonitor {
     private volatile Session session;
     private volatile boolean hooked;
 
-    // guarded by "this"
     private final List<DeviceTracker> devices = new ArrayList<>();
     private final List<MonitoredDcMotor> motors = new ArrayList<>();
     private HardwareMap hardwareMap;
@@ -159,14 +94,8 @@ public final class HardwareMonitor {
     private HardwareMonitor() {
     }
 
-    // ================================================================== public API
-
-    /**
-     * Starts (or joins) monitoring for {@code opMode}. Optional: when the lifecycle hook is active
-     * sessions begin on their own. If you call it, call it first in init, before creating
-     * {@code Monitored*} devices.
-     */
     public static HardwareMonitor start(OpMode opMode) {
+
         HardwareMonitor m = INSTANCE;
         synchronized (m) {
             if (opMode != null && m.pendingOpMode.get() != opMode) {
@@ -184,20 +113,16 @@ public final class HardwareMonitor {
         return m;
     }
 
-    /** Ends the session now and saves it. Monitoring stays off until the next OpMode (or start()). */
     public void stop() {
+
         synchronized (this) {
             stoppedByUser = true;
             endSessionLocked("stop() called");
         }
     }
 
-    /**
-     * Call once per loop. Measures loop time, refreshes the read cache of every
-     * {@code Monitored*} device, takes a few budgeted samples (battery, hubs, motors) and queues
-     * a time-series row.
-     */
     public void update() {
+
         long now = System.nanoTime();
         cycle++;
         if (!CONFIG.enabled) return;
@@ -226,46 +151,44 @@ public final class HardwareMonitor {
         }
     }
 
-    /** Deletes every stored session except the one currently recording. Returns how many. */
     public static int clearDatabase() {
+
         Session s = INSTANCE.session;
         return MonitorStore.clearAll(s != null ? s.id : null);
     }
 
-    /** Whether a session is currently being recorded. */
     public boolean isRecording() {
         return session != null;
     }
 
-    /** Id (folder name) of the current session, or null. */
     public String getSessionId() {
+
         Session s = session;
         return s == null ? null : s.id;
     }
 
-    /** Folder of the current session, or null when not persisting. */
     public File getSessionDir() {
+
         Session s = session;
         return s == null || s.store == null ? null : s.store.dir();
     }
 
-    /** Whether OpMode init/stop are detected automatically (see {@link MonitorOpModeHook}). */
     public boolean isLifecycleHookActive() {
         return hooked;
     }
 
-    /** Devices registered in the current OpMode. */
     public synchronized List<DeviceTracker> getDevices() {
         return new ArrayList<>(devices);
     }
 
     public double getLastLoopMs() {
+
         Session s = session;
         return s == null ? Double.NaN : s.lastLoopMs;
     }
 
-    /** Average loop time over the last {@value #RECENT_LOOPS} loops. */
     public double getAverageLoopMs() {
+
         Session s = session;
         if (s == null) return Double.NaN;
         synchronized (s) {
@@ -274,11 +197,13 @@ public final class HardwareMonitor {
     }
 
     public double getBatteryVoltage() {
+
         Session s = session;
         return s == null ? Double.NaN : s.batteryLatest;
     }
 
     public double getTotalCurrentAmps() {
+
         Session s = session;
         if (s == null) return Double.NaN;
         synchronized (s) {
@@ -287,27 +212,23 @@ public final class HardwareMonitor {
     }
 
     public double getEnergyWh() {
+
         Session s = session;
         return s == null ? 0 : s.energyWh;
     }
 
-    /**
-     * The current session's statistics as JSON (same format as summary.json), computed now.
-     * Null when nothing is recording. Used by the web dashboard's live view.
-     */
     public String liveSummaryJson() {
+
         Session s = session;
         return s == null ? null : buildSummary(s, false);
     }
 
-    // ================================================================== telemetry
-
-    /** Adds a compact live summary (including one line per device) to telemetry. */
     public void addTelemetry(Telemetry telemetry) {
         addTelemetry(telemetry, true);
     }
 
     public void addTelemetry(Telemetry telemetry, boolean perDevice) {
+
         Session s = session;
         if (s == null) {
             telemetry.addData("HW Monitor", CONFIG.enabled ? "idle (call update() each loop)" : "disabled");
@@ -324,37 +245,27 @@ public final class HardwareMonitor {
         }
         synchronized (s) {
             double avg = s.recentMean();
-            telemetry.addData("HW Monitor", "%s  %.1f s%s", s.opModeName,
-                    (System.nanoTime() - s.startNs) / 1e9, hooked ? "" : "  (no lifecycle hook)");
-            telemetry.addData("Loop", "%.1f ms (%.0f Hz)  p95 %.1f  max %.1f",
-                    avg, avg > 0 ? 1000.0 / avg : 0, s.recentPercentile(95), s.loopMs.max());
+            telemetry.addData("HW Monitor", "%s  %.1f s%s", s.opModeName, (System.nanoTime() - s.startNs) / 1e9, hooked ? "" : "  (no lifecycle hook)");
+            telemetry.addData("Loop", "%.1f ms (%.0f Hz)  p95 %.1f  max %.1f", avg, avg > 0 ? 1000.0 / avg : 0, s.recentPercentile(95), s.loopMs.max());
             double hw = s.hwMsPerLoop.mean();
-            telemetry.addData("HW I/O", "%.2f ms/loop (%.0f%%)  %.1f R  %.1f W  %.1f cached",
-                    hw, avg > 0 ? 100.0 * hw / avg : 0,
-                    s.readsPerLoop.mean(), s.writesPerLoop.mean(), s.hitsPerLoop.mean());
-            telemetry.addData("Battery", "%.2f V (min %.2f)  %.2f A  %.3f Wh",
-                    s.batteryLatest, s.battery.min(), s.totalCurrentLatest(), s.energyWh);
+            telemetry.addData("HW I/O", "%.2f ms/loop (%.0f%%)  %.1f R  %.1f W  %.1f cached", hw, avg > 0 ? 100.0 * hw / avg : 0, s.readsPerLoop.mean(), s.writesPerLoop.mean(), s.hitsPerLoop.mean());
+            telemetry.addData("Battery", "%.2f V (min %.2f)  %.2f A  %.3f Wh", s.batteryLatest, s.battery.min(), s.totalCurrentLatest(), s.energyWh);
             for (HubState h : s.hubs) {
-                telemetry.addData(h.name, "%.2f A  in %.2f V  5V %.2f  %.0f C",
-                        h.current.last(), h.inputV.last(), h.auxV.last(), h.tempC.last());
+                telemetry.addData(h.name, "%.2f A  in %.2f V  5V %.2f  %.0f C", h.current.last(), h.inputV.last(), h.auxV.last(), h.tempC.last());
             }
             for (MotorState m : s.motors) {
-                telemetry.addData(m.motor.getName(), "%.2f A  %.0f t/s  bemf %.2f V",
-                        m.latestCurrent, m.latestVelocity, m.latestBemf);
+                telemetry.addData(m.motor.getName(), "%.2f A  %.0f t/s  bemf %.2f V", m.latestCurrent, m.latestVelocity, m.latestBemf);
             }
         }
         if (snaps != null) {
             for (DeviceStats.Snapshot d : snaps) {
-                telemetry.addData(d.name, "%.0f r/s  %.0f w/s  cache %.0f%%  rd %.2f ms",
-                        d.recentReadHz, d.recentWriteHz, d.cacheHitPercent(), d.avgReadLatencyUs / 1000.0);
+                telemetry.addData(d.name, "%.0f r/s  %.0f w/s  cache %.0f%%  rd %.2f ms", d.recentReadHz, d.recentWriteHz, d.cacheHitPercent(), d.avgReadLatencyUs / 1000.0);
             }
         }
     }
 
-    // ================================================================== called by wrappers
-
-    /** Internal: a {@code Monitored*} device was created. */
     public void register(DeviceTracker tracker) {
+
         synchronized (this) {
             devices.add(tracker);
             Session s = session;
@@ -362,16 +273,15 @@ public final class HardwareMonitor {
                 synchronized (s) {
                     addDevice(s, tracker);
                 }
-            } else if (pendingName != null && !stoppedByUser && CONFIG.enabled) {
-                // We already know which OpMode is initialising (lifecycle hook or start()), so
-                // open the session now: init-time I/O (IMU init, setMode, ...) gets logged too.
+            }
+            else if (pendingName != null && !stoppedByUser && CONFIG.enabled) {
                 ensureSessionLocked();
             }
         }
     }
 
-    /** Internal: a monitored motor was created (enables current / back-EMF sampling). */
     public void registerMotor(MonitoredDcMotor motor) {
+
         synchronized (this) {
             motors.add(motor);
             Session s = session;
@@ -383,22 +293,20 @@ public final class HardwareMonitor {
         }
     }
 
-    /** Internal: gives the monitor access to hubs and the battery sensor. */
     public void attachHardwareMap(HardwareMap hw) {
+
         synchronized (this) {
             attachHardwareMapLocked(hw);
         }
     }
 
-    /**
-     * Internal: one hardware call finished. {@code flag} is "served from cache" for reads and
-     * "re-sent the same value" for writes. Hot path: no locks except the event buffer's.
-     */
     public void onIo(DeviceTracker tracker, HwOp op, long t0, long t1, boolean flag) {
+
         boolean read = op.isRead();
         if (read && flag) {
             ioCacheHits.incrementAndGet();
-        } else {
+        }
+        else {
             ioNs.addAndGet(t1 - t0);
         }
         if (read) ioReads.incrementAndGet();
@@ -412,8 +320,6 @@ public final class HardwareMonitor {
             }
         }
     }
-
-    // ================================================================== OpMode lifecycle
 
     void setHooked(boolean hooked) {
         this.hooked = hooked;
@@ -448,13 +354,11 @@ public final class HardwareMonitor {
     }
 
     private static boolean isDefaultOpMode(OpMode opMode) {
-        // The SDK's idle "$Stop$Robot$" OpMode runs between user OpModes.
         return opMode == null || opMode.getClass().getSimpleName().contains("DefaultOpMode");
     }
 
-    // ================================================================== session management
-
     private void resetPendingLocked() {
+
         devices.clear();
         motors.clear();
         hardwareMap = null;
@@ -469,6 +373,7 @@ public final class HardwareMonitor {
     }
 
     private Session ensureSessionLocked() {
+
         Session s = session;
         if (s != null || !CONFIG.enabled) return s;
         String name = pendingName != null ? pendingName : "UnknownOpMode";
@@ -479,8 +384,7 @@ public final class HardwareMonitor {
         if (CONFIG.persist) {
             s.events = CONFIG.logEvents ? new EventBuffer(EVENT_BUFFER_CAPACITY) : null;
             final Session fs = s;
-            s.store = new MonitorStore(new File(MonitorStore.sessionsDir(), id), s.events,
-                    CONFIG.maxEventLogBytes, CONFIG.summaryPeriodMs, new MonitorStore.Provider() {
+            s.store = new MonitorStore(new File(MonitorStore.sessionsDir(), id), s.events, CONFIG.maxEventLogBytes, CONFIG.summaryPeriodMs, new MonitorStore.Provider() {
                 @Override
                 public String summaryJson(boolean complete) {
                     return buildSummary(fs, complete);
@@ -511,6 +415,7 @@ public final class HardwareMonitor {
     }
 
     private void endSessionLocked(String reason) {
+
         Session s = session;
         if (s == null) return;
         session = null;
@@ -522,6 +427,7 @@ public final class HardwareMonitor {
     }
 
     private void attachHardwareMapLocked(HardwareMap hw) {
+
         if (hw == null) return;
         if (hardwareMap == null) hardwareMap = hw;
         LynxModule.BulkCachingMode mode = CONFIG.bulkCachingMode;
@@ -541,18 +447,19 @@ public final class HardwareMonitor {
     }
 
     private static void addDevice(Session s, DeviceTracker t) {
+
         if (s.devices.contains(t)) return;
         int id = s.devices.size();
         s.devices.add(t);
         t.assignMonitorId(id);
         if (s.store != null) {
-            String row = id + "," + MonitorStore.csv(t.getName()) + "," + t.getType() + ","
-                    + t.getDeviceClass() + "," + t.isCachingReads() + "," + MonitorStore.csv(t.getConnectionInfo());
+            String row = id + "," + MonitorStore.csv(t.getName()) + "," + t.getType() + "," + t.getDeviceClass() + "," + t.isCachingReads() + "," + MonitorStore.csv(t.getConnectionInfo());
             s.store.addDevice(id, t.getName(), row);
         }
     }
 
     private static void addMotor(Session s, MonitoredDcMotor motor) {
+
         for (MotorState m : s.motors) if (m.motor == motor) return;
         MotorState state = new MotorState(motor);
         s.motors.add(state);
@@ -564,6 +471,7 @@ public final class HardwareMonitor {
     }
 
     private static void buildSystemTasks(Session s, HardwareMap hw) {
+
         if (s.systemTasksBuilt || hw == null) return;
         s.systemTasksBuilt = true;
         try {
@@ -593,18 +501,17 @@ public final class HardwareMonitor {
     }
 
     private static String hubName(HardwareMap hw, LynxModule module, int index) {
+
         try {
             Set<String> names = hw.getNamesOf(module);
             if (names != null && !names.isEmpty()) return names.iterator().next();
         } catch (RuntimeException ignored) {
-            // fall through
         }
         return "Hub" + index;
     }
 
-    // ================================================================== per-loop work
-
     private void onUpdate(Session s, long now, long reads, long writes, long hits, long io) {
+
         if (s.lastUpdateNs > 0) {
             double loopMs = (now - s.lastUpdateNs) / 1e6;
             double hwMs = io / 1e6;
@@ -633,7 +540,6 @@ public final class HardwareMonitor {
                 try {
                     h.module.clearBulkCache();
                 } catch (RuntimeException ignored) {
-                    // hub went away; sampling will record it as not responding
                 }
             }
         }
@@ -650,8 +556,8 @@ public final class HardwareMonitor {
         }
     }
 
-    /** Runs the most overdue sample tasks, spending at most the configured number of reads. */
     private static void runSampler(Session s, long now) {
+
         if (s.tasks.isEmpty()) return;
         int budget = Math.max(0, CONFIG.maxSampleReadsPerUpdate);
         long stamp = s.updates;
@@ -680,7 +586,8 @@ public final class HardwareMonitor {
                 budget--;
                 best.lastNs = now;
                 best.runs++;
-            } else if (result == SampleTask.NO_IO) {
+            }
+            else if (result == SampleTask.NO_IO) {
                 best.lastNs = now;
                 best.runs++;
             }
@@ -688,6 +595,7 @@ public final class HardwareMonitor {
     }
 
     private static void integrate(Session s, double dtSeconds) {
+
         double v = s.batteryLatest;
         double amps = s.totalCurrentLatest();
         if (isFinite(v) && isFinite(amps)) {
@@ -701,6 +609,7 @@ public final class HardwareMonitor {
     }
 
     private static void sampleJvm(Session s, long now) {
+
         Runtime rt = Runtime.getRuntime();
         double heapMb = (rt.totalMemory() - rt.freeMemory()) / 1048576.0;
         s.heapMb.add(heapMb);
@@ -716,9 +625,8 @@ public final class HardwareMonitor {
     }
 
     private static String systemHeader(Session s) {
-        StringBuilder sb = new StringBuilder("t_s,loop_ms,loop_avg_ms,loop_hz,hw_ms_per_loop,hw_pct,"
-                + "reads_per_loop,writes_per_loop,cache_hits_per_loop,battery_v,total_current_a,"
-                + "total_power_w,energy_wh,charge_mah,heap_mb,cpu_pct");
+
+        StringBuilder sb = new StringBuilder("t_s,loop_ms,loop_avg_ms,loop_hz,hw_ms_per_loop,hw_pct," + "reads_per_loop,writes_per_loop,cache_hits_per_loop,battery_v,total_current_a," + "total_power_w,energy_wh,charge_mah,heap_mb,cpu_pct");
         for (HubState h : s.hubs) {
             String n = MonitorStore.csv(h.name).replace(' ', '_');
             sb.append(',').append(n).append("_current_a,").append(n).append("_input_v,")
@@ -729,6 +637,7 @@ public final class HardwareMonitor {
     }
 
     private static void emitSystemRow(Session s, long now) {
+
         if (!s.store.hasSystemHeader()) s.store.setSystemHeader(systemHeader(s));
         int n = Math.max(1, s.serLoops);
         double avg = s.serLoops > 0 ? s.serLoopMs / n : Double.NaN;
@@ -762,20 +671,16 @@ public final class HardwareMonitor {
         s.store.addSystemRow(sb.toString());
     }
 
-    // ================================================================== summary / index
-
     private static String buildIndexRow(Session s) {
+
         synchronized (s) {
             long end = s.endNs > 0 ? s.endNs : System.nanoTime();
-            return MonitorStore.csv(s.id) + "," + MonitorStore.csv(s.opModeName) + ","
-                    + formatWall(s.startWallMs) + "," + f((end - s.startNs) / 1e9, 1) + ","
-                    + s.loops + "," + f(s.loopMs.mean(), 2) + "," + f(s.loopHist.percentile(95), 2) + ","
-                    + f(s.battery.min(), 2) + "," + f(s.energyWh, 4) + "," + f(s.chargeMah, 1) + ","
-                    + s.devices.size() + ",true";
+            return MonitorStore.csv(s.id) + "," + MonitorStore.csv(s.opModeName) + "," + formatWall(s.startWallMs) + "," + f((end - s.startNs) / 1e9, 1) + "," + s.loops + "," + f(s.loopMs.mean(), 2) + "," + f(s.loopHist.percentile(95), 2) + "," + f(s.battery.min(), 2) + "," + f(s.energyWh, 4) + "," + f(s.chargeMah, 1) + "," + s.devices.size() + ",true";
         }
     }
 
     private String buildSummary(Session s, boolean complete) {
+
         try {
             JSONObject root = new JSONObject();
             root.put("format", "HardwareMonitor/1");
@@ -980,6 +885,7 @@ public final class HardwareMonitor {
     }
 
     private static JSONObject stats(RunningStats r) throws JSONException {
+
         JSONObject o = new JSONObject();
         o.put("n", r.count());
         num(o, "avg", r.mean());
@@ -990,31 +896,29 @@ public final class HardwareMonitor {
         return o;
     }
 
-    /** Puts a number, writing null for NaN/infinity (which JSON cannot represent). */
     private static void num(JSONObject o, String key, double v) throws JSONException {
+
         if (isFinite(v)) o.put(key, round(v, 4));
         else o.put(key, JSONObject.NULL);
     }
 
     private static double round(double v, int decimals) {
+
         if (!isFinite(v)) return 0;
         double scale = Math.pow(10, decimals);
         return Math.round(v * scale) / scale;
     }
 
-    /** Seconds since session start for a nanoTime value, NaN for "never". */
     private static double rel(Session s, long ns) {
         return ns < 0 ? Double.NaN : (ns - s.startNs) / 1e9;
     }
-
-    // ================================================================== helpers
 
     static boolean isFinite(double v) {
         return !Double.isNaN(v) && !Double.isInfinite(v);
     }
 
-    /** Fixed-decimal CSV number; empty for NaN. */
     static String f(double v, int decimals) {
+
         if (!isFinite(v)) return "";
         return String.format(Locale.US, "%." + decimals + "f", v);
     }
@@ -1024,8 +928,8 @@ public final class HardwareMonitor {
     }
 
     private static String uniqueSessionId(long wallMs, String name) {
-        String base = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date(wallMs))
-                + "_" + sanitize(name);
+
+        String base = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date(wallMs)) + "_" + sanitize(name);
         File dir = MonitorStore.sessionsDir();
         String id = base;
         for (int i = 2; new File(dir, id).exists(); i++) id = base + "-" + i;
@@ -1033,6 +937,7 @@ public final class HardwareMonitor {
     }
 
     private static String sanitize(String name) {
+
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < name.length() && sb.length() < 40; i++) {
             char c = name.charAt(i);
@@ -1041,8 +946,8 @@ public final class HardwareMonitor {
         return sb.length() == 0 ? "OpMode" : sb.toString();
     }
 
-    /** The name shown on the Driver Station, falling back to the class name. */
     static String displayName(OpMode opMode) {
+
         if (opMode == null) return "UnknownOpMode";
         Class<?> cls = opMode.getClass();
         TeleOp tele = cls.getAnnotation(TeleOp.class);
@@ -1051,8 +956,6 @@ public final class HardwareMonitor {
         if (auto != null && !auto.name().isEmpty()) return auto.name();
         return cls.getSimpleName();
     }
-
-    // ================================================================== session data
 
     private static final class Session {
         final String id;
@@ -1071,9 +974,8 @@ public final class HardwareMonitor {
         final List<SampleTask> tasks = new ArrayList<>();
         boolean systemTasksBuilt;
 
-        // loop
         final RunningStats loopMs = new RunningStats();
-        final Histogram loopHist = new Histogram(0.25, 1200); // 0..300 ms
+        final Histogram loopHist = new Histogram(0.25, 1200); //0..300 ms
         final RunningStats hwMsPerLoop = new RunningStats();
         final RunningStats readsPerLoop = new RunningStats();
         final RunningStats writesPerLoop = new RunningStats();
@@ -1087,7 +989,6 @@ public final class HardwareMonitor {
         long loops;
         double lastLoopMs = Double.NaN;
 
-        // time-series accumulators since the last system.csv row
         long lastSeriesNs;
         double serLoopMs;
         double serHwMs;
@@ -1096,7 +997,6 @@ public final class HardwareMonitor {
         long serHits;
         int serLoops;
 
-        // power
         final RunningStats battery = new RunningStats();
         final RunningStats totalCurrent = new RunningStats();
         final RunningStats totalPower = new RunningStats();
@@ -1107,7 +1007,6 @@ public final class HardwareMonitor {
         double energyWh;
         double chargeMah;
 
-        // jvm
         final RunningStats heapMb = new RunningStats();
         final RunningStats cpuPct = new RunningStats();
         double latestHeapMb = Double.NaN;
@@ -1115,13 +1014,13 @@ public final class HardwareMonitor {
         long lastCpuMs = -1;
         long lastCpuWallNs;
 
-        // monitor
         long overheadNs;
         long sampleReads;
         long sampleReadNs;
         long sampleErrors;
 
         Session(String id, String opModeName, long startWallMs, long startNs, OpMode opMode) {
+
             this.id = id;
             this.opModeName = opModeName;
             this.startWallMs = startWallMs;
@@ -1130,12 +1029,14 @@ public final class HardwareMonitor {
         }
 
         void pushRecent(double v) {
+
             recent[recentHead] = v;
             recentHead = (recentHead + 1) % recent.length;
             if (recentSize < recent.length) recentSize++;
         }
 
         double recentMean() {
+
             if (recentSize == 0) return Double.NaN;
             double sum = 0;
             for (int i = 0; i < recentSize; i++) sum += recent[i];
@@ -1143,6 +1044,7 @@ public final class HardwareMonitor {
         }
 
         double recentPercentile(double p) {
+
             if (recentSize == 0) return Double.NaN;
             System.arraycopy(recent, 0, scratch, 0, recentSize);
             Arrays.sort(scratch, 0, recentSize);
@@ -1151,11 +1053,13 @@ public final class HardwareMonitor {
         }
 
         void monitorRead(long ns) {
+
             sampleReads++;
             sampleReadNs += Math.max(0, ns);
         }
 
         double totalCurrentLatest() {
+
             double sum = 0;
             boolean any = false;
             for (HubState h : hubs) {
@@ -1169,6 +1073,7 @@ public final class HardwareMonitor {
         }
 
         void onBattery(double volts) {
+
             if (!isFinite(volts) || volts <= 0) return;
             battery.add(volts);
             batteryLatest = volts;
@@ -1177,12 +1082,14 @@ public final class HardwareMonitor {
             if (!belowThreshold && volts < threshold) {
                 belowThreshold = true;
                 lowVoltageEvents++;
-            } else if (belowThreshold && volts > threshold + 0.2) {
+            }
+            else if (belowThreshold && volts > threshold + 0.2) {
                 belowThreshold = false;
             }
         }
 
         void onHubCurrent() {
+
             double amps = totalCurrentLatest();
             if (!isFinite(amps)) return;
             totalCurrent.add(amps);
@@ -1190,24 +1097,20 @@ public final class HardwareMonitor {
         }
 
         void onMotorSample(MotorState m, long now) {
+
             MonitoredDcMotor motor = m.motor;
             double duty = motor.getCommandedPower();
             m.latestBemf = MotorElectricalModel.backEmfFromVelocity(m.latestVelocity, m.type);
-            m.latestBemfElectrical = MotorElectricalModel.backEmfFromCurrent(
-                    duty, batteryLatest, m.latestCurrent, motor.getWindingResistance());
+            m.latestBemfElectrical = MotorElectricalModel.backEmfFromCurrent(duty, batteryLatest, m.latestCurrent, motor.getWindingResistance());
             m.latestPowerW = MotorElectricalModel.inputPowerWatts(duty, batteryLatest, m.latestCurrent);
-            double ratio = isFinite(batteryLatest) && batteryLatest > 0
-                    ? Math.abs(m.latestBemf) / batteryLatest : Double.NaN;
+            double ratio = isFinite(batteryLatest) && batteryLatest > 0 ? Math.abs(m.latestBemf) / batteryLatest : Double.NaN;
             m.bemf.add(m.latestBemf);
             m.bemfElectrical.add(m.latestBemfElectrical);
             m.bemfRatio.add(ratio);
             m.power.add(m.latestPowerW);
             m.samples++;
             if (store != null) {
-                store.addMotorRow(f((now - startNs) / 1e9, 4) + "," + MonitorStore.csv(motor.getName()) + ","
-                        + f(duty, 3) + "," + f(m.latestCurrent, 3) + "," + f(m.latestVelocity, 1) + ","
-                        + f(m.latestBemf, 3) + "," + f(m.latestBemfElectrical, 3) + "," + f(ratio, 3) + ","
-                        + f(m.latestPowerW, 2) + "," + f(m.energyWh, 5));
+                store.addMotorRow(f((now - startNs) / 1e9, 4) + "," + MonitorStore.csv(motor.getName()) + "," + f(duty, 3) + "," + f(m.latestCurrent, 3) + "," + f(m.latestVelocity, 1) + "," + f(m.latestBemf, 3) + "," + f(m.latestBemfElectrical, 3) + "," + f(ratio, 3) + "," + f(m.latestPowerW, 2) + "," + f(m.energyWh, 5));
             }
         }
     }
@@ -1224,11 +1127,13 @@ public final class HardwareMonitor {
         long notRespondingSamples;
 
         HubState(LynxModule module, String name) {
+
             this.module = module;
             this.name = name;
         }
 
         String bulkCachingMode() {
+
             try {
                 return String.valueOf(module.getBulkCachingMode());
             } catch (RuntimeException e) {
@@ -1255,17 +1160,18 @@ public final class HardwareMonitor {
         long samples;
 
         MotorState(MonitoredDcMotor motor) {
+
             this.motor = motor;
             MotorConfigurationType t = null;
             try {
                 t = motor.peekMotorType();
             } catch (RuntimeException ignored) {
-                // leave null: back-EMF from velocity will be NaN
             }
             this.type = t;
         }
 
         String typeName() {
+
             try {
                 return type == null ? "unknown" : type.getName();
             } catch (RuntimeException e) {
@@ -1273,8 +1179,6 @@ public final class HardwareMonitor {
             }
         }
     }
-
-    // ================================================================== sample tasks
 
     private abstract static class SampleTask {
         static final int DID_IO = 0;
@@ -1288,11 +1192,11 @@ public final class HardwareMonitor {
         long runs;
 
         SampleTask(String name, long periodMs) {
+
             this.name = name;
             this.periodNs = Math.max(1, periodMs) * 1_000_000L;
         }
 
-        /** @return DID_IO, NO_IO (served without touching hardware) or SKIPPED (needed I/O, none allowed) */
         abstract int run(Session s, long now, boolean allowIo);
     }
 
@@ -1300,12 +1204,14 @@ public final class HardwareMonitor {
         final VoltageSensor sensor;
 
         BatteryTask(VoltageSensor sensor, long periodMs) {
+
             super("battery", periodMs);
             this.sensor = sensor;
         }
 
         @Override
         int run(Session s, long now, boolean allowIo) {
+
             if (!allowIo) return SKIPPED;
             long t0 = System.nanoTime();
             double v = sensor.getVoltage();
@@ -1327,6 +1233,7 @@ public final class HardwareMonitor {
         final int metric;
 
         HubTask(HubState hub, int metric, long periodMs) {
+
             super(hub.name + "#" + metric, periodMs);
             this.hub = hub;
             this.metric = metric;
@@ -1334,6 +1241,7 @@ public final class HardwareMonitor {
 
         @Override
         int run(Session s, long now, boolean allowIo) {
+
             if (!allowIo) return SKIPPED;
             LynxModule m = hub.module;
             long t0 = System.nanoTime();
@@ -1374,6 +1282,7 @@ public final class HardwareMonitor {
         final int kind;
 
         MotorTask(String name, long periodMs, MotorState state, int kind) {
+
             super(name, periodMs);
             this.state = state;
             this.kind = kind;
@@ -1381,17 +1290,19 @@ public final class HardwareMonitor {
 
         @Override
         int run(Session s, long now, boolean allowIo) {
+
             MonitoredDcMotor m = state.motor;
             long seenNs = kind == CURRENT ? m.getObservedCurrentNs() : m.getObservedVelocityNs();
             int result;
             double value;
             if (seenNs > 0 && now - seenNs < periodNs) {
-                // your code already read it this period: reuse instead of another bus transaction
                 value = kind == CURRENT ? m.getObservedCurrentAmps() : m.getObservedVelocity();
                 result = NO_IO;
-            } else if (!allowIo) {
+            }
+            else if (!allowIo) {
                 return SKIPPED;
-            } else {
+            }
+            else {
                 long t0 = System.nanoTime();
                 value = kind == CURRENT ? m.sampleCurrentAmps() : m.sampleVelocity();
                 s.monitorRead(System.nanoTime() - t0);
@@ -1400,7 +1311,8 @@ public final class HardwareMonitor {
             if (kind == CURRENT) {
                 state.latestCurrent = value;
                 state.current.add(value);
-            } else {
+            }
+            else {
                 state.latestVelocity = value;
                 state.velocity.add(value);
             }

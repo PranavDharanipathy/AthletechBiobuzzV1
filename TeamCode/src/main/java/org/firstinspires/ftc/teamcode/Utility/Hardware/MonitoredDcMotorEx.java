@@ -8,19 +8,6 @@ import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
-/**
- * Drop-in {@link DcMotorEx} that counts and times every call and can cache reads. Also usable
- * anywhere a {@code DcMotor} is expected.
- *
- * <pre>
- * DcMotorEx lift = new MonitoredDcMotorEx(hardwareMap, "lift", true);  // true = cache reads
- * </pre>
- *
- * Cached values (when caching is on): position, power, busy, velocity, current, over-current.
- * Current is cached in amps, so one hardware read serves both {@code AMPS} and
- * {@code MILLIAMPS}. Every value you read here is also handed to the
- * {@code HardwareMonitor}, so reading current yourself means the monitor never has to.
- */
 public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     private final DcMotorEx ex;
@@ -37,12 +24,12 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         this(lookup(hardwareMap, DcMotorEx.class, name), name, cacheReads);
     }
 
-    /** Same as {@code new MonitoredDcMotorEx(hardwareMap, name, false)} (no read caching). */
     public MonitoredDcMotorEx(HardwareMap hardwareMap, String name) {
         this(hardwareMap, name, false);
     }
 
     public MonitoredDcMotorEx(DcMotorEx motor, String name, boolean cacheReads) {
+
         super(motor, name, "DcMotorEx", cacheReads);
         this.ex = motor;
         velocitySlot = tracker.newSlot();
@@ -56,10 +43,9 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         return ex;
     }
 
-    // ------------------------------------------------------------------ enable / disable
-
     @Override
     public void setMotorEnable() {
+
         long t0 = tracker.start();
         ex.setMotorEnable();
         tracker.write(HwOp.SET_MOTOR_ENABLE, t0, false, powerSlot, busySlot);
@@ -67,6 +53,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setMotorDisable() {
+
         long t0 = tracker.start();
         ex.setMotorDisable();
         tracker.write(HwOp.SET_MOTOR_DISABLE, t0, false, powerSlot, busySlot);
@@ -74,24 +61,24 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public boolean isMotorEnabled() {
+
         long t0 = tracker.start();
         boolean v = ex.isMotorEnabled();
         tracker.read(HwOp.IS_MOTOR_ENABLED, t0);
         return v;
     }
 
-    // ------------------------------------------------------------------ velocity
-
     @Override
     public void setPower(double power) {
+
         super.setPower(power);
-        // back in power mode: the next setVelocity is a real change even if the value matches
         lastVelocity = Double.NaN;
         lastVelocityUnit = null;
     }
 
     @Override
     public void setVelocity(double angularRate) {
+
         long t0 = tracker.start();
         ex.setVelocity(angularRate);
         boolean redundant = angularRate == lastVelocity && lastVelocityUnit == null;
@@ -103,6 +90,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setVelocity(double angularRate, AngleUnit unit) {
+
         long t0 = tracker.start();
         ex.setVelocity(angularRate, unit);
         boolean redundant = angularRate == lastVelocity && unit == lastVelocityUnit;
@@ -112,9 +100,9 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         onVelocityCommand(t0);
     }
 
-    /** Velocity in encoder ticks per second. */
     @Override
     public double getVelocity() {
+
         if (tracker.cacheHit(HwOp.GET_VELOCITY, velocitySlot, CacheSlot.NO_KEY)) {
             return velocitySlot.d;
         }
@@ -129,6 +117,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public double getVelocity(AngleUnit unit) {
+
         long key = unit == null ? CacheSlot.NO_KEY : unit.ordinal();
         if (tracker.cacheHit(HwOp.GET_VELOCITY, velocityUnitSlot, key)) return velocityUnitSlot.d;
         long t0 = tracker.start();
@@ -138,12 +127,11 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
         return v;
     }
 
-    // ------------------------------------------------------------------ PIDF
-
     @Deprecated
     @Override
     @SuppressWarnings("deprecation")
     public void setPIDCoefficients(RunMode mode, PIDCoefficients pidCoefficients) {
+
         long t0 = tracker.start();
         ex.setPIDCoefficients(mode, pidCoefficients);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
@@ -151,6 +139,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setPIDFCoefficients(RunMode mode, PIDFCoefficients pidfCoefficients) {
+
         long t0 = tracker.start();
         ex.setPIDFCoefficients(mode, pidfCoefficients);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
@@ -158,6 +147,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setVelocityPIDFCoefficients(double p, double i, double d, double f) {
+
         long t0 = tracker.start();
         ex.setVelocityPIDFCoefficients(p, i, d, f);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
@@ -165,6 +155,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setPositionPIDFCoefficients(double p) {
+
         long t0 = tracker.start();
         ex.setPositionPIDFCoefficients(p);
         tracker.writeKeepCache(HwOp.SET_PIDF, t0, false);
@@ -174,6 +165,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
     @Override
     @SuppressWarnings("deprecation")
     public PIDCoefficients getPIDCoefficients(RunMode mode) {
+
         long t0 = tracker.start();
         PIDCoefficients v = ex.getPIDCoefficients(mode);
         tracker.read(HwOp.GET_PIDF, t0);
@@ -182,16 +174,16 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public PIDFCoefficients getPIDFCoefficients(RunMode mode) {
+
         long t0 = tracker.start();
         PIDFCoefficients v = ex.getPIDFCoefficients(mode);
         tracker.read(HwOp.GET_PIDF, t0);
         return v;
     }
 
-    // ------------------------------------------------------------------ tolerance
-
     @Override
     public void setTargetPositionTolerance(int tolerance) {
+
         long t0 = tracker.start();
         ex.setTargetPositionTolerance(tolerance);
         tracker.write(HwOp.SET_TARGET_POSITION_TOLERANCE, t0, tolerance == lastTolerance, busySlot);
@@ -200,16 +192,16 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public int getTargetPositionTolerance() {
+
         long t0 = tracker.start();
         int v = ex.getTargetPositionTolerance();
         tracker.read(HwOp.GET_TARGET_POSITION_TOLERANCE, t0);
         return v;
     }
 
-    // ------------------------------------------------------------------ current
-
     @Override
     public double getCurrent(CurrentUnit unit) {
+
         if (tracker.cacheHit(HwOp.GET_CURRENT, currentSlot, CacheSlot.NO_KEY)) {
             return fromAmps(currentSlot.d, unit);
         }
@@ -224,6 +216,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public double getCurrentAlert(CurrentUnit unit) {
+
         long t0 = tracker.start();
         double v = ex.getCurrentAlert(unit);
         tracker.read(HwOp.GET_CURRENT_ALERT, t0);
@@ -232,6 +225,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public void setCurrentAlert(double current, CurrentUnit unit) {
+
         long t0 = tracker.start();
         ex.setCurrentAlert(current, unit);
         tracker.write(HwOp.SET_CURRENT_ALERT, t0, false, overCurrentSlot);
@@ -239,6 +233,7 @@ public class MonitoredDcMotorEx extends MonitoredDcMotor implements DcMotorEx {
 
     @Override
     public boolean isOverCurrent() {
+
         if (tracker.cacheHit(HwOp.IS_OVER_CURRENT, overCurrentSlot, CacheSlot.NO_KEY)) {
             return overCurrentSlot.b;
         }

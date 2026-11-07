@@ -245,8 +245,22 @@ Turret slew speed and accuracy.
 |---|---|---|---|---|---|
 | parameter | `turret.max_speed_dps` | deg/s | input |  | Turret top slew speed. |
 | parameter | `turret.max_accel_dps2` | deg/s^2 | input |  | Turret acceleration. |
+| parameter | `turret.coast_decel_dps2` | deg/s^2 | input |  | How fast the turret slows when the command drops but stays the same way (the servos coast, they only brake when reversed). Turret Autotuner. |
+| parameter | `turret.neutral_decel_dps2` | deg/s^2 | input |  | How fast the turret slows at 0 V. Turret Autotuner. |
 | parameter | `turret.settle_time_s` | s | input |  | Extra time to settle on target after a move. |
 | parameter | `turret.range_deg` | deg | input |  | Total turret travel. |
+| parameter | `turret.ticks_per_degree` | ticks/deg | input |  | Turret encoder ticks per turret degree (TeamCode ShooterConstants.TURRET_TICKS_PER_DEGREE). |
+| parameter | `turret.servo_speed_dps_per_v` | deg/s/V | input |  | Turret speed per volt past friction, both CR servos together. Turret Autotuner gain / ticks per degree. |
+| parameter | `turret.servo_time_constant_s` | s | input |  | How long the turret speed lags a voltage change (first-order time constant). Turret Autotuner. |
+| parameter | `turret.servo_dead_time_s` | s | input |  | Delay before a turret command starts acting while the turret is already moving (servo PWM + mechanism). Turret Autotuner, from braking. |
+| parameter | `turret.servo_start_delay_s` | s | input |  | From rest, how long a command past breakaway takes to get the turret moving (backlash, servo deadband). At least the dead time. Turret Autotuner. |
+| parameter | `turret.kinetic_friction_v` | V | input |  | Volts lost to friction while the turret slides. Turret Autotuner. |
+| parameter | `turret.breakaway_friction_v` | V | input |  | Volts needed to start the turret moving from rest. Turret Autotuner. |
+| parameter | `turret.velocity_noise_dps` | deg/s | input |  | Noise on the turret velocity the hub reports. |
+| parameter | `turret.vibration_deg` | deg | input |  | RMS turret shake with the flywheel at full speed (TunerTeleOp: TURRET_VIBRATION_RMS while holding, flywheel on). |
+| parameter | `turret.autotune_bandwidth_rad_s` | rad/s | derived |  | Bandwidth the robot's Turret Autotuner settles on against the sim turret (sim turret). |
+| parameter | `turret.step_overshoot_deg` | deg | derived |  | Overshoot on a 30 deg turret step with the robot's TurretController (sim turret). |
+| parameter | `turret.spin_tracking_error_deg` | deg | derived |  | RMS turret aim error while the robot spins in place, real TurretController (sim turret). |
 | curve | `turret.time_to_turn` | deg -> s | derived |  | Turret move + settle time. |
 | distribution | `turret.aim_error_deg` | deg per shot | input | yes | Yaw aim error at the moment of the shot. |
 
