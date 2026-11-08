@@ -100,6 +100,7 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
         drivetrain = createDrivetrain();
         intake.provideComponents(new Intake(super.intake), controller1);
 
+        record(null, null, intake, drivetrain);
         setUpLynxModule();
 
         telemetry.addLine("Load balls, press START and don't shoot until it says so.");

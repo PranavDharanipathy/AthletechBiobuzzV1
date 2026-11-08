@@ -6,24 +6,21 @@ import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Drive;
 import org.firstinspires.ftc.teamcode.Systems.AthletechRobot;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeHubHook;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 
-import dev.nextftc.robot.opmode.BlazeOpMode;
 import dev.nextftc.robot.opmode.NextAutonomous;
+import dev.nextftc.robot.opmode.NextOpMode;
 
 import static org.firstinspires.ftc.teamcode.Constants.Autos.RedParkConstants.*;
 
 @NextAutonomous(name = "Red Park", group = "A_Match")
-public final class RedPark extends BlazeOpMode {
+public final class RedPark extends NextOpMode {
 
     private final AthletechRobot robot;
     private final Command routine;
 
     public RedPark(AthletechRobot robot) {
 
-        super(robot, new BlazeHubHook(true), new BlazeHubHook(false));
-        BlazeSession.beginNext(hardwareMap);
+        super(robot);
         this.robot = robot;
 
         Pose start = Drive.pose(START);
@@ -44,6 +41,9 @@ public final class RedPark extends BlazeOpMode {
 
     @Override
     public void start() {
+
+        robot.handOffAs("Red Park");
+        robot.shooter.lockHome();
         Scheduler.schedule(routine);
     }
 

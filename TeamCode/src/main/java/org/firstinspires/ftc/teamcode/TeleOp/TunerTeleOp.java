@@ -73,6 +73,7 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
         flywheelHubVoltage = new MonitoredVoltageSensor(flywheel.getVoltageSensor(), "tunerFlywheelHub", false);
         turretHubVoltage = turret.getVoltageSensor() == flywheel.getVoltageSensor() ? null : new MonitoredVoltageSensor(turret.getVoltageSensor(), "tunerTurretHub", false);
 
+        record(shooter, blocker, intake, drivetrain);
         setUpLynxModule();
     }
 

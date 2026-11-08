@@ -27,21 +27,21 @@ public class TunedConstants {
     public static double SHOT_GATE_HOLD_BAND = 52;
     public static double SHOT_GATE_DWELL = 0.06;
 
-    public static double TURRET_GAIN = 10673.9;
-    public static double TURRET_TIME_CONSTANT = 0.0593;
-    public static double TURRET_DEAD_TIME = 0.0223;
-    public static double TURRET_KINETIC_FRICTION = 1.094;
-    public static double TURRET_BREAKAWAY_FRICTION = 1.217;
-    public static double TURRET_BANDWIDTH = 3.09;
+    public static double TURRET_GAIN = 11374.8;
+    public static double TURRET_TIME_CONSTANT = 0.046;
+    public static double TURRET_DEAD_TIME = 0.0361;
+    public static double TURRET_KINETIC_FRICTION = 1.011;
+    public static double TURRET_BREAKAWAY_FRICTION = 1.163;
+    public static double TURRET_BANDWIDTH = 3.2;
     public static double TURRET_DAMPING = 0.9;
     public static double TURRET_INTEGRAL_RATIO = 0.3;
     public static double TURRET_FRICTION_SCALE = 1;
-    public static double TURRET_MAX_SPEED = 25849.1;
-    public static double TURRET_MAX_ACCELERATION = 114305;
-    public static double TURRET_START_DELAY = 0.0734;
-    public static double TURRET_MAX_DECELERATION = 75758.3;
-    public static double TURRET_SHAKE_BANDWIDTH = 3.09;
-    public static String TURRET_AUTOTUNE = "20280508-052931-stationary";
+    public static double TURRET_MAX_SPEED = 26233.1;
+    public static double TURRET_MAX_ACCELERATION = 118456;
+    public static double TURRET_START_DELAY = 0.0828;
+    public static double TURRET_MAX_DECELERATION = 71701.9;
+    public static double TURRET_SHAKE_BANDWIDTH = 3.2;
+    public static String TURRET_AUTOTUNE = "20280507-210857-driving";
 
     public static double DRIVE_FORWARD_KS = 0.06;
     public static double DRIVE_FORWARD_KV = 0.01053;

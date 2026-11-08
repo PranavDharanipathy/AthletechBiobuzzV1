@@ -35,9 +35,17 @@ public class TurretController {
     //how hard it pushes while holding, learned: running past the target under its own push takes overshootCut off, and it creeps
     //back to 1 over holdRecoverTime s (the robot's turret slid on 0.65 V where STATIONARY said 1.01). Kicks still start it
     public double holdScale = 1, minHoldScale = 0.4, overshootCut = 0.1, holdRecoverTime = 20;
+    //stuck near an end: the lanyards go taut past ~150 deg and pull back harder than friction + kicks, and resync kept dragging the
+    //plan onto the stalled turret, so it sat ~20 deg short of 180 (DRIVING 20280507-210857: 7 short at -155 pushing 1.2 V). With
+    //the target within stuckEndZone ticks of a travel end, no real progress (slower than arriving within 1 s) for stuckWait s and
+    //outside the hold tolerance, it pushes stuckRate V/s harder, up to stuckMax. Drops to 0 when it crosses the target, fades once
+    //it's moving well. Total output stays under stuckVoltsLimit (TurretBase's frozen-encoder cutoff latches at 3 V stalled).
+    //Only near the ends: mid-travel the servo breaks free at ~1.16 V but slides on ~0.65, so any extra push there overshoots (sim)
+    public double stuckEndZone = 60 * 68.27, stuckRate = 2, stuckMax = 1.5, stuckWait = 0.2, stuckRelease = 0.2, stuckVoltsLimit = 2.9;
     //ticks. Off its own plan by more than this (it lagged, coasted on or stalled), the plan restarts from where the turret really
     //is instead of the two fighting each other to 0 V (the robot's log: 31% of loops 15+ deg off, stuck 2 s at 30 deg)
     public double resyncBand = 500;
+    public boolean resyncStopsAtTarget = true;
     public double accelerationFraction = 0.8; //of maxAcceleration, separate from maxVelocityFraction
     //ticks. Cruising or speeding up, the friction push fades from full ahead to full reverse (the only way these servos brake) as
     //the turret gets this far ahead of its plan. Slowing down, or 0, it flips at 2 x frictionErrorWidth (hard braking for stops;
@@ -74,7 +82,7 @@ public class TurretController {
     private double lastKick = -1e9, kickUntil, kickBoost, lastGap;
     private int kickLoops = 1;
     private boolean movedSinceKick = true, planWasMoving;
-    private double lastRate, lastRate2, rateNoise, lastHoldError, lastPosition;
+    private double lastRate, lastRate2, rateNoise, lastHoldError, lastPosition, lastAway, stuckVolts, stuckSince = Double.NaN;
     private double learnDirection = Double.NaN, learnTime, learnLast, learnResidual, learnDegrees;
     private int updates = 0;
     private boolean started = false;
@@ -140,8 +148,22 @@ public class TurretController {
         this.movingVelocity = movingVelocity;
     }
 
+    public double getRateNoise() {
+        return rateNoise;
+    }
+
+    public double getKickBoost() {
+        return kickBoost;
+    }
+
+    public double getHoldScale() {
+        return holdScale;
+    }
+
     public void reset(double position) {
 
+        lastAway = stuckVolts = 0;
+        stuckSince = Double.NaN;
         plan = reference = position;
         planVelocity = referenceVelocity = 0;
         integral = 0;
@@ -197,7 +219,7 @@ public class TurretController {
 
         if (updates > 3) {
             lookBack(time - lead);
-            if (Math.abs(reference - position) > resyncBand) resync(position, velocity, maxVelocity);
+            if (Math.abs(reference - position) > resyncBand) resync(position, velocity, maxVelocity, target, slowStep);
         }
 
         if (updates == 1) lastTargetVelocity = targetVelocity;
@@ -358,20 +380,42 @@ public class TurretController {
         }
 
         lastPosition = position;
-        volts = clamp(p + i + d + f + v + lanyard, -availableVolts, availableVolts);
+        double away = target - position;
+        if (away * lastAway < 0) stuckVolts = 0;
+        lastAway = away;
+        double toward = velocity * Math.signum(away);
+        boolean nearEnd = target > travelMax - stuckEndZone || target < travelMin + stuckEndZone;
+        boolean noProgress = nearEnd && Math.abs(away) > holdTolerance && Math.abs(aimVelocity) < 4 * movingVelocity && toward < Math.max(movingVelocity, Math.abs(away));
+        if (!noProgress) stuckSince = Double.NaN;
+        else if (Double.isNaN(stuckSince)) stuckSince = time;
+        if (noProgress && time - stuckSince >= stuckWait) stuckVolts = clamp(stuckVolts + Math.signum(away) * stuckRate * dt, -stuckMax, stuckMax);
+        else if (toward > Math.max(4 * movingVelocity, 2 * Math.abs(away))) stuckVolts *= Math.exp(-dt / Math.max(stuckRelease, 1e-6));
+        double base = p + i + d + f + v + lanyard;
+        double push = stuckVolts > 0 ? clamp(Math.min(base + stuckVolts, stuckVoltsLimit) - base, 0, stuckVolts) : clamp(Math.max(base + stuckVolts, -stuckVoltsLimit) - base, stuckVolts, 0);
+        volts = clamp(base + push, -availableVolts, availableVolts);
         sentVolts = volts;
         return volts;
+    }
+
+    public double getStuckVolts() {
+        return stuckVolts;
     }
 
     //the plan (and what it already sent) moves over onto where the turret really is, no fight, no restart. Behind, it keeps its
     //speed (the measured one lags while the turret gets going); ahead, it takes the turret's, so stops get planned from the real
     //speed. Never outside the travel
-    private void resync(double position, double velocity, double maxVelocity) {
+    private void resync(double position, double velocity, double maxVelocity, double target, double slowStep) {
 
         double offset = position - reference;
         if (offset * planVelocity >= 0) {
             double was = planVelocity;
+            //the turret's speed, but no faster toward the target than still stops there, and none away from it: carrying an
+            //overshooting turret's speed into the plan ran it past again and again, +-10-15 deg at 150-250 deg/s (MatchLog
+            //20280508-121951-BlueTeleOp, 400 s)
+            double gap = target - position;
+            double stop = stoppingSpeed(Math.abs(gap), slowStep);
             planVelocity = clamp(velocity, -maxVelocity, maxVelocity);
+            if (resyncStopsAtTarget) planVelocity = gap >= 0 ? clamp(planVelocity, 0, stop) : clamp(planVelocity, -stop, 0);
             for (int k = 0; k < HISTORY; k++) historyVelocity[k] += planVelocity - was;
         }
         offset = clamp(plan + offset, travelMin, travelMax) - plan;

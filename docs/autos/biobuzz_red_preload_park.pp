@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "startPoint": {
     "x": 9.72,
-    "y": 64,
+    "y": 87.77,
     "headingDeg": 0,
     "locked": false
   },
@@ -14,7 +14,7 @@
       "locked": false,
       "waitBeforeMs": 3500,
       "waitAfterMs": 0,
-      "waitBeforeName": "Shoot 4 preload (FAR cell)",
+      "waitBeforeName": "Shoot 4 preload (goal in front)",
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {

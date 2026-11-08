@@ -5,11 +5,14 @@ package org.firstinspires.ftc.teamcode.Systems.Turret;
 /// have to stop. No hardware calls, the sims run it
 public class TurretRoute {
 
-    private double unwrapped = Double.NaN;
+    private double unwrapped = Double.NaN, outsideSince = Double.NaN, lastSwing = Double.NEGATIVE_INFINITY;
     private boolean swung;
 
     public void reset() {
+
         unwrapped = Double.NaN;
+        outsideSince = Double.NaN;
+        lastSwing = Double.NEGATIVE_INFINITY;
     }
 
     /// aim: any turn, deg. aimRate: deg/s. turretNow: deg, picks the starting turn. lead: s before the turret reacts.
@@ -31,20 +34,31 @@ public class TurretRoute {
     }
 
     /// match aim: uses the whole travel. It follows the aim right to the ends (the controller's plan stops it there in time) and
-    /// only swings a full turn once the aim is past an end by margin and not coming back in within RETURN_SECONDS
-    public double update(double aim, double aimRate, double turretNow, double min, double max, double margin) {
+    /// swings a full turn only once the aim has stayed past an end by margin for SWING_DELAY s and isn't coming back in within
+    /// RETURN_SECONDS, or is FAR_PAST deg past. Not again within SWING_COOLDOWN s unless far past: a quick turn and back swung it
+    /// one way then the other 0.3 s later, the turret stuck halfway (MatchLog 20280508-121951-BlueTeleOp, 297 s and 322 s).
+    /// now = s
+    public double update(double aim, double aimRate, double turretNow, double min, double max, double margin, double now) {
 
         if (Double.isNaN(unwrapped)) unwrapped = nearest(aim, turretNow, min, max);
         else unwrapped += Math.IEEEremainder(aim - unwrapped, 360);
         boolean upper = unwrapped > 0.5 * (min + max);
         double outside = upper ? unwrapped - max : min - unwrapped;
         double inward = upper ? -aimRate : aimRate;
-        swung = outside > margin && inward * RETURN_SECONDS < outside - margin;
-        if (swung) unwrapped += upper ? -360 : 360;
+        boolean past = outside > margin && inward * RETURN_SECONDS < outside - margin;
+        if (!past) outsideSince = Double.NaN;
+        else if (Double.isNaN(outsideSince)) outsideSince = now;
+        boolean farPast = outside > FAR_PAST;
+        swung = farPast || past && now - outsideSince >= SWING_DELAY && now - lastSwing >= SWING_COOLDOWN;
+        if (swung) {
+            unwrapped += upper ? -360 : 360;
+            lastSwing = now;
+            outsideSince = Double.NaN;
+        }
         return clamp(unwrapped, min, max);
     }
 
-    public static final double RETURN_SECONDS = 1;
+    public static final double RETURN_SECONDS = 1, SWING_DELAY = 0.25, SWING_COOLDOWN = 1, FAR_PAST = 45;
 
     /// waiting at an end for the aim to come round
     public boolean isOutside(double min, double max) {

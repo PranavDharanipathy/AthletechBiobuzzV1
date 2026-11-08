@@ -60,6 +60,9 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         intakeComponent = new Intake(intake);
         shooter.provideComponents(flywheel, turret, follower);
         turret.setVolts(0, 0);
+        recorder.channel("interp", "velocity", "ticks/s", "speed being tried", () -> FLYWHEEL_VELOCITY);
+        recorder.channel("interp", "points", "", "recorded so far", () -> distances.size());
+        record(shooter, null, intakeComponent, drivetrain);
         setUpLynxModule();
     }
 

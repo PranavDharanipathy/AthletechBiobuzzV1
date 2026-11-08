@@ -3,6 +3,64 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-07 — Turret from a real match (MatchLog 20280508-121951-BlueTeleOp) + recording everything
+
+- **The match (421 s, 13 shots):** shots 1-3 had auto aim off (gamepad 2 right bumper at 2 s, back on at 101 s). Of the rest, 7
+  of 10 left with the turret 1-4.6 deg off, several while it was still slewing. Error by how fast the robot turned: 1.6 deg
+  median still, 8 at 10-60 deg/s, 15 at 60-150, 22 above. After the aim stopped: 3.8 deg off at 0.5 s, 1.7 at 1 s.
+- **Swing flip-flops:** turning one way and back (+-310 deg/s, 297 s and 322 s) took the aim past an end, the route swung a full
+  turn, then swung back 0.3 s later; the turret ended up stuck between the two (or 228 deg off chasing the first). Now a swing
+  needs the aim past the end for 0.25 s (or 45 deg past), and none within 1 s of the last unless it's 45 past
+  (`TurretRoute.SWING_*`).
+- **Hunting after an overshoot (400 s):** target still, turret +-10-15 deg at 150-250 deg/s. Resync put the plan onto the turret
+  with the turret's own speed, so the plan coasted past again. Now the plan takes at most the speed that still stops at the target,
+  and none away from it. Sim: neutral on moves, worst error while turning 27 -> 21 deg on the slippery servo.
+- **Cell switches:** crossing y = 72 jumps the aim 40-55 deg (close to the HIVE). A 3 in band now stops it flipping when driving
+  along the line (`CELL_SWITCH_BAND_INCHES`).
+- **Not fixed yet:** the lag while the robot turns is the plan (8.9 deg median behind the target, the turret 2.2 behind the plan),
+  turret speed ~55% of the aim rate. Next run's recording has the plan's internals to go after it.
+- **Recording:** MatchLog is replaced by `Utility/Recording` (every OpMode, ~170 channels, events, constants, hardware), read with
+  `tools/robot_log.py`.
+
+## 2026-11-07 — Turret: first shot missed; ~20 deg short of 180; match log
+
+- **Match TeleOps didn't log the turret** (HardwareMonitor only has timing). `MatchLog` now records it every loop.
+- **What the old TeleOp data shows** (TunerTeleOp BLUE 20280507-230429, 13 shots, robot still, target settled 0.6-1.8 s): 6
+  shots fired with the turret 4-11 deg off. After every big move it landed 4-6 deg short or past, then crept in at 2-5 deg/s
+  pushing 0.6-0.9 V: P is ~0.02 V/deg (bandwidth 3.2), the hold push sits at the friction guess (scaled down by overshoots).
+- **Sim of that** (robot's servo, 36 ms loops, moves of 10-90 deg, real friction 0.65 / 1.0 / 1.3 V vs the 1.01 guess), error
+  0.75 s after a move: 1.5 / 2.4 / 11 deg, overshoot up to 4.5. Tried, all rejected because they made mid-travel worse:
+  - a stuck push everywhere (overshoot up to 26-39 deg);
+  - a speed loop for the last degrees (rings: 15-37 deg overshoot, the learned volts escalate move to move);
+  - measuring friction while moving (estimates within ~0.15 V, still 2-6 deg worse: this controller is that sensitive);
+  - a terminal integral (overshoot 5-10 deg);
+  - bandwidth 5 / 6.5 (better with the right friction, worse overshoot with low friction).
+  The limit: it breaks free at ~1.16 V but slides on ~0.65 V, and ~70 ms passes before it can react, so extra push turns into
+  60-80 deg/s and 4-6 deg past. Next: a real match log (MatchLog) before changing the mid-travel controller again.
+- **~20 deg short of 180:** past ~150 deg the lanyards pull back; off the integral zone the most it pushed was friction + a
+  kick, and resync moved the plan onto the stalled turret so its error read 0 (robot: 7 short at -155 pushing 1.2 V, DRIVING
+  20280507-210857; sim, lanyard pulling up to 1.2 V: 15.5 short at 185, 17 at 198). **Fix:** `TurretController` stuck push,
+  only with the target within 60 deg of an end: no real progress for 0.2 s -> 2 V/s more toward the real target, up to 1.5 V,
+  output kept under 2.9 V (the frozen-encoder cutoff latches at 3 V stalled), dropped on crossing, faded once moving.
+  Sim: end holds 16-18 deg -> ends within 1 deg; mid-travel moves identical to before.
+
+## 2026-11-07 — Auto shot, turret hunting and swings (robot logs 2028-05-08)
+
+- **Auto shot:** the blocker opened twice for ~0.35 s (the ShotGate closed it on every flywheel dip), then the shot timed
+  out. Now `shoot` waits only for flywheel speed, then feeds once for the feed time. `AutoShotWindow` is gone.
+- **Turret dead after the routine:** `stopAll()` at the end of the steps left it wherever it was (5 s into a 28 s auto).
+  Now the turret goes home and holds there; the OpMode's `end()` still stops everything.
+- **Autos off Blaze:** every auto run logged `retransmitting` on both hubs; the TeleOps in between didn't. Autos are
+  plain `NextOpMode` now.
+- **Turret tune:** `TunedConstants` had the Blaze-contaminated STATIONARY run (16% overshoot). `TuningAnalyzer` now skips a
+  run whose folder has an `IGNORED` file; 20280508-052931 has one (tuning-data is git-ignored, so only on this computer), so
+  the build went back to 20280507-210857-driving.
+- **Hunting at rest:** DRIVING run 20280508-054432, robot still, target steady to 0.1 deg: the turret rocked +-3-5 deg with
+  volts flipping +-1.3 V (the friction push). Hold tolerance 0.15 -> 0.5 deg, friction ramp 0.5 -> 1 deg. Sim with the
+  robot's slide (0.65-0.9 V) and 36 ms loops: under 0.9 deg with no volts flipping for both tunes.
+- **Swing off the hive while driving:** SOTM aimed at goal - v T (T ~0.8 s on the 72 deg arc), ~30 in off at 40 in/s.
+  `SOTM_ENABLED` is off: the turret points at the hive itself. ShotSolverTest turns it on for itself.
+
 ## 2026-11-07 — Autos rewritten command based (Ivy on NextFTC)
 
 - **Why:** the user wanted command-based autos. The split version rebuilt drive, shoot, fault and telemetry plumbing inside

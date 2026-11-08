@@ -8,13 +8,15 @@ import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredServo;
 
 import dev.nextftc.robot.Mechanism;
 
-/// flower-intake arm. Nothing is sent at INIT, so the arm stays where it was set up until an auto deploys it
+/// flower-intake arm. RETRACT is sent at INIT in every auto, until an auto deploys it
 public final class FIArm implements Mechanism {
 
     public final org.firstinspires.ftc.teamcode.Systems.Intake.FIArm arm;
 
     public FIArm(HardwareMap hardwareMap) {
+
         arm = new org.firstinspires.ftc.teamcode.Systems.Intake.FIArm(new MonitoredServo(hardwareMap, DeviceConstants.fiArmLeftServoDeviceName, false), new MonitoredServo(hardwareMap, DeviceConstants.fiArmRightServoDeviceName, false));
+        set(false);
     }
 
     public void set(boolean deployed) {

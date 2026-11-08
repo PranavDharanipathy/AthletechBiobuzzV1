@@ -63,6 +63,11 @@ public class Drivetrain {
         return controller;
     }
 
+    /// powers sent to lf, rf, lb, rb last update
+    public double[] getWheels() {
+        return wheels;
+    }
+
     public double[] getCommand() {
         return command;
     }

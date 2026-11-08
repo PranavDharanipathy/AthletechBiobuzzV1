@@ -69,7 +69,6 @@ val teamCodeSources = tasks.register<Sync>("copyTeamCodeSources") {
         include("org/firstinspires/ftc/teamcode/Utility/InterpolationData.java")
         include("org/firstinspires/ftc/teamcode/Utility/DynamicTrapezoidalSum.java")
         include("org/firstinspires/ftc/teamcode/Utility/Clock.java")
-        include("org/firstinspires/ftc/teamcode/Autonomous/AutoSubsystems/AutoShotWindow.java")
         include("org/firstinspires/ftc/teamcode/Constants/TunedConstants.java")
         include("org/firstinspires/ftc/teamcode/Constants/FlywheelConstants.java")
         include("org/firstinspires/ftc/teamcode/Constants/ShooterConstants.java")

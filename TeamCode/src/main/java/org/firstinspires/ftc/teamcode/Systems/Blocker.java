@@ -125,7 +125,8 @@ public class Blocker extends Subsystem {
         }
 
         //Shooter.shotWillScore: a ball fired at the flywheel's actual speed, with the robot moving as it is, lands in the CELL
-        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady() && Shooter.shotWillScore()) {
+        //if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady() && Shooter.shotWillScore()) {
+        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD)) {
             setState(BlockerState.CLEAR);
         }
         else {

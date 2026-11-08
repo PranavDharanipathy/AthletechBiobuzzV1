@@ -66,6 +66,7 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
 
         flywheelHubVoltage = new MonitoredVoltageSensor(flywheel.getVoltageSensor(), "flywheelLoadTuner", false);
 
+        record(null, blocker, intake, drivetrain);
         setUpLynxModule();
 
         telemetry.addLine("Drive and run everything like in a match. Press BACK on gamepad 1 to finish.");

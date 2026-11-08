@@ -1,0 +1,319 @@
+package org.firstinspires.ftc.teamcode.Utility.Recording;
+
+import com.pedropathing.follower.Follower;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
+import com.qualcomm.hardware.lynx.LynxModule;
+import com.qualcomm.robotcore.hardware.HardwareDevice;
+import com.qualcomm.robotcore.hardware.HardwareMap;
+
+import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
+import org.firstinspires.ftc.teamcode.Systems.Blocker;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.DriveController;
+import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
+import org.firstinspires.ftc.teamcode.Systems.Intake.FIArm;
+import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
+import org.firstinspires.ftc.teamcode.Systems.Shooter;
+import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
+import org.firstinspires.ftc.teamcode.Systems.Turret.TurretController;
+import org.firstinspires.ftc.teamcode.Utility.AutoHandoff;
+import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
+import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.Date;
+
+/// what Recorder records: each piece of the robot adds its channels here (cached state only, no hardware calls), and context()
+/// writes everything that explains a run (every constant, the hardware, the start). TeleOpBaseOpMode, AthletechRobot (autos) and
+/// the tuners call these; a new subsystem gets a method here
+public final class RobotRecording {
+
+    private RobotRecording() {}
+
+    //every Constants class: their values at the start of a run go into meta.tsv
+    static final String[] CONSTANTS = {
+            "BlazeConstants", "BlockerConstants", "DeviceConstants", "DrivetrainConstants", "FieldConstants", "FlywheelConstants",
+            "GeneralConstants", "IntakeConstants", "ShooterConstants", "TunedConstants", "TurretConstants", "VisionConstants",
+            "Autos.BlueParkConstants", "Autos.BluePreloadParkConstants", "Autos.BlueTwoTipGardenConstants",
+            "Autos.RedParkConstants", "Autos.RedPreloadParkConstants", "Autos.RedTwoTipGardenConstants"
+    };
+
+    public static Recorder open(String opMode) {
+        return new Recorder(Recorder.folderFor(opMode));
+    }
+
+    private static double tpd() {
+        return ShooterConstants.TURRET_TICKS_PER_DEGREE;
+    }
+
+    /// loop timing, battery, power, memory (HardwareMonitor's cached samples)
+    public static void loop(Recorder r) {
+
+        final Runtime runtime = Runtime.getRuntime();
+        r.channel("loop", "loop_ms", "ms", "last loop (HardwareMonitor)", () -> HardwareMonitor.get().getLastLoopMs());
+        r.channel("loop", "loop_avg_ms", "ms", "average loop so far", () -> HardwareMonitor.get().getAverageLoopMs());
+        r.channel("power", "battery_v", "V", "battery (sampled)", () -> HardwareMonitor.get().getBatteryVoltage());
+        r.channel("power", "current_a", "A", "all hubs (sampled)", () -> HardwareMonitor.get().getTotalCurrentAmps());
+        r.channel("power", "energy_wh", "Wh", "used so far", () -> HardwareMonitor.get().getEnergyWh());
+        r.channel("loop", "heap_mb", "MB", "Java heap in use", () -> (runtime.totalMemory() - runtime.freeMemory()) / 1048576.0);
+    }
+
+    /// every stick, trigger and button
+    public static void gamepad(Recorder r, String name, final BetterGamepad g) {
+
+        if (g == null) return;
+        r.channel(name, "left_x", "", "stick", () -> g.left_stick_x());
+        r.channel(name, "left_y", "", "stick (up is -)", () -> g.left_stick_y());
+        r.channel(name, "right_x", "", "stick", () -> g.right_stick_x());
+        r.channel(name, "right_y", "", "stick (up is -)", () -> g.right_stick_y());
+        r.channel(name, "left_trigger", "", "0-1", () -> g.left_trigger());
+        r.channel(name, "right_trigger", "", "0-1", () -> g.right_trigger());
+        r.flag(name, "a", "", g::a);
+        r.flag(name, "b", "", g::b);
+        r.flag(name, "x", "", g::x);
+        r.flag(name, "y", "", g::y);
+        r.flag(name, "dpad_up", "", g::dpad_up);
+        r.flag(name, "dpad_down", "", g::dpad_down);
+        r.flag(name, "dpad_left", "", g::dpad_left);
+        r.flag(name, "dpad_right", "", g::dpad_right);
+        r.flag(name, "left_bumper", "", g::left_bumper);
+        r.flag(name, "right_bumper", "", g::right_bumper);
+        r.flag(name, "back", "", g::back);
+        r.flag(name, "options", "start", g::options);
+        r.flag(name, "share", "", g::share);
+        r.flag(name, "main", "PS / guide", g::main_button);
+        r.flag(name, "left_stick_button", "", g::left_stick_button);
+        r.flag(name, "right_stick_button", "", g::right_stick_button);
+    }
+
+    private static final class Motion {
+        double x = Double.NaN, y = Double.NaN, heading = Double.NaN, vx = Double.NaN, vy = Double.NaN, omega = Double.NaN;
+    }
+
+    /// pose and velocity (Pinpoint through Pedro), read once per sample
+    public static void pose(Recorder r, final Follower follower) {
+
+        if (follower == null) return;
+        final Motion m = new Motion();
+        r.prepare(() -> {
+            Pose p = follower.pose();
+            Velocity v = follower.velocity();
+            m.x = p.x();
+            m.y = p.y();
+            m.heading = p.heading();
+            m.vx = v.vx;
+            m.vy = v.vy;
+            m.omega = v.omega;
+        });
+        r.channel("pose", "x", "in", "field (FieldConstants frame)", () -> m.x);
+        r.channel("pose", "y", "in", "field", () -> m.y);
+        r.channel("pose", "heading", "deg", "field, unwrapped as Pedro gives it", () -> Math.toDegrees(m.heading));
+        r.channel("pose", "vx", "in/s", "field", () -> m.vx);
+        r.channel("pose", "vy", "in/s", "field", () -> m.vy);
+        r.channel("pose", "speed", "in/s", "", () -> Math.hypot(m.vx, m.vy));
+        r.channel("pose", "omega", "deg/s", "turn rate (+ = counterclockwise)", () -> Math.toDegrees(m.omega));
+    }
+
+    /// TeleOp drive: sticks after shaping, the pose hold, the wheels
+    public static void drivetrain(Recorder r, final Drivetrain d) {
+
+        if (d == null) return;
+        r.flag("drive", "holding", "pose hold on and trusting its pose", d::isHolding);
+        r.channel("drive", "cmd_forward", "", "what it asked for (-1..1)", () -> d.getCommand()[0]);
+        r.channel("drive", "cmd_strafe", "", "", () -> d.getCommand()[1]);
+        r.channel("drive", "cmd_turn", "", "", () -> d.getCommand()[2]);
+        r.channel("drive", "wheel_lf", "", "power sent", () -> d.getWheels()[0]);
+        r.channel("drive", "wheel_rf", "", "", () -> d.getWheels()[1]);
+        r.channel("drive", "wheel_lb", "", "", () -> d.getWheels()[2]);
+        r.channel("drive", "wheel_rb", "", "", () -> d.getWheels()[3]);
+        final DriveController c = d.getController();
+        if (c == null) return;
+        r.channel("drive", "ref_x", "in", "pose hold reference", c::referenceX);
+        r.channel("drive", "ref_y", "in", "", c::referenceY);
+        r.channel("drive", "ref_heading", "deg", "", () -> Math.toDegrees(c.referenceHeading()));
+        r.channel("drive", "err_forward", "", "hold error, forward axis", () -> c.error[0]);
+        r.channel("drive", "err_strafe", "", "", () -> c.error[1]);
+        r.channel("drive", "err_turn", "", "", () -> c.error[2]);
+        r.channel("drive", "power_forward", "", "hold output", () -> c.power[0]);
+        r.channel("drive", "power_strafe", "", "", () -> c.power[1]);
+        r.channel("drive", "power_turn", "", "", () -> c.power[2]);
+    }
+
+    /// the turret and everything its controller is thinking. Angles in deg from home
+    public static void turret(Recorder r, final TurretBase t) {
+
+        if (t == null) return;
+        final TurretController c = t.getController();
+        r.channel("turret", "target", "deg", "where it's told to go", () -> (t.getTargetPosition() - t.startPosition) / tpd());
+        r.channel("turret", "position", "deg", "encoder", () -> (t.getCurrentPosition() - t.startPosition) / tpd());
+        r.channel("turret", "reference", "deg", "the plan, a dead time back", () -> (t.getReference() - t.startPosition) / tpd());
+        r.channel("turret", "error", "deg", "target - position", () -> (t.getTargetPosition() - t.getCurrentPosition()) / tpd());
+        r.channel("turret", "aim_error", "deg", "what the aim gate checks (smoothed)", t::getAimErrorDegrees);
+        r.channel("turret", "velocity", "deg/s", "filtered", () -> t.getVelocity() / tpd());
+        r.channel("turret", "raw_velocity", "deg/s", "encoder", () -> t.getRawVelocity() / tpd());
+        r.channel("turret", "target_velocity", "deg/s", "feedforward rate (robot spin, aim motion)", () -> t.getTargetVelocity() / tpd());
+        r.channel("turret", "reference_velocity", "deg/s", "", () -> c.getReferenceVelocity() / tpd());
+        r.channel("turret", "plan_velocity", "deg/s", "", () -> c.getPlannedVelocity() / tpd());
+        r.channel("turret", "power", "", "servo power (-1..1)", t::getPower);
+        r.channel("turret", "volts", "V", "controller output", () -> c.volts);
+        r.channel("turret", "servo_left", "", "", () -> t.getServoPowers()[0]);
+        r.channel("turret", "servo_right", "", "", () -> t.getServoPowers()[1]);
+        r.channel("turret", "supply_v", "V", "what the volts are scaled against", t::getCompensationVolts);
+        r.channel("turret", "p", "V", "", () -> c.p);
+        r.channel("turret", "i", "V", "", () -> c.i);
+        r.channel("turret", "d", "V", "", () -> c.d);
+        r.channel("turret", "f", "V", "friction push / brake / kick", () -> c.f);
+        r.channel("turret", "v", "V", "plan feedforward", () -> c.v);
+        r.channel("turret", "lanyard", "V", "lanyard map", () -> c.lanyard);
+        r.channel("turret", "stuck_v", "V", "stuck push near the ends", c::getStuckVolts);
+        r.channel("turret", "kp", "V/tick", "", () -> c.kp);
+        r.channel("turret", "ki", "V/tick/s", "", () -> c.ki);
+        r.channel("turret", "kd", "V/(tick/s)", "", () -> c.kd);
+        r.channel("turret", "bandwidth", "rad/s", "after vibration rejection", t::getEffectiveBandwidth);
+        r.channel("turret", "vibration", "deg", "shake it measures", t::getVibrationDegrees);
+        r.channel("turret", "hold_scale", "", "learned hold push share", c::getHoldScale);
+        r.channel("turret", "kick_boost", "V", "learned extra on kicks", c::getKickBoost);
+        r.channel("turret", "rate_noise", "deg/s", "target rate jitter it measured", () -> c.getRateNoise() / tpd());
+        r.channel("turret", "resyncs", "", "count: plan moved onto the turret", () -> c.resyncs);
+        r.channel("turret", "landings", "", "count", () -> c.landings);
+        r.flag("turret", "landing", "", () -> c.landing);
+        r.flag("turret", "on_target", "aim gate", t::isOnTarget);
+        r.flag("turret", "encoder_frozen", "cut off for good this OpMode", t::isEncoderFrozen);
+        r.channel("turret", "loop_dt", "s", "its own update gap", t::getLoopDt);
+        r.channel("turret", "filter_hz", "Hz", "velocity filter", t::getFilterBandwidth);
+    }
+
+    /// the flywheel and its controller
+    public static void flywheel(Recorder r, final Flywheel f) {
+
+        if (f == null) return;
+        r.channel("flywheel", "target", "ticks/s", "", f::getTargetVelocity);
+        r.channel("flywheel", "velocity", "ticks/s", "filtered", f::getCurrentVelocity);
+        r.channel("flywheel", "raw_velocity", "ticks/s", "", f::getRawVelocity);
+        r.channel("flywheel", "estimate", "ticks/s", "", f::getVelocityEstimate);
+        r.channel("flywheel", "error", "ticks/s", "", f::getError);
+        r.channel("flywheel", "power", "", "sent", f::getPower);
+        r.channel("flywheel", "volts", "V", "filtered supply", f::getFilteredVolts);
+        r.channel("flywheel", "p", "", "", () -> f.p);
+        r.channel("flywheel", "v", "", "", () -> f.v);
+        r.channel("flywheel", "s", "", "", () -> f.s);
+        r.channel("flywheel", "load", "", "", () -> f.load);
+        r.channel("flywheel", "boost", "", "", () -> f.boost);
+        r.channel("flywheel", "feed_boost_v", "V", "", () -> f.feedBoostVolts);
+        r.flag("flywheel", "feeding", "", f::isFeeding);
+        r.channel("flywheel", "shots_seen", "", "count", () -> f.shotsSeen);
+        r.channel("flywheel", "loop_dt", "s", "", f::getLoopDt);
+        r.channel("flywheel", "filter_hz", "Hz", "", () -> f.getEncoder().getFilterBandwidth());
+    }
+
+    /// the match aim: goal, cell, route, shot solution
+    public static void shooter(Recorder r, final Shooter s) {
+
+        if (s == null) return;
+        r.flag("shooter", "on", "flywheel toggle", s::isShooterOn);
+        r.flag("shooter", "auto_aim", "", s::isAutoAimOn);
+        r.flag("shooter", "locked", "turret held at 0 (gamepad 1 Y)", s::isTurretLocked);
+        r.flag("shooter", "aim_usable", "inside the travel, not mid-swing", s::isAimSolutionUsable);
+        r.flag("shooter", "close_cell", "aiming at the CLOSE cell", s::isCloseCell);
+        r.channel("shooter", "aim_raw", "deg", "aim before routing (-180..180)", () -> s.rawAimDegrees);
+        r.channel("shooter", "aim", "deg", "aim after routing (the turret's target)", () -> s.tt);
+        r.channel("shooter", "aim_rate", "deg/s", "", () -> s.aimRateDegrees);
+        r.channel("shooter", "goal_x", "in", "", () -> s.goalCoordinate != null ? s.goalCoordinate.x() : Double.NaN);
+        r.channel("shooter", "goal_y", "in", "", () -> s.goalCoordinate != null ? s.goalCoordinate.y() : Double.NaN);
+        r.channel("shooter", "virtual_goal_x", "in", "goal - v T (SOTM)", () -> s.virtualGoal != null ? s.virtualGoal.x() : Double.NaN);
+        r.channel("shooter", "virtual_goal_y", "in", "", () -> s.virtualGoal != null ? s.virtualGoal.y() : Double.NaN);
+        r.channel("shooter", "turret_x", "in", "turret on the field", () -> s.turretPose != null ? s.turretPose.x() : Double.NaN);
+        r.channel("shooter", "turret_y", "in", "", () -> s.turretPose != null ? s.turretPose.y() : Double.NaN);
+        r.channel("shooter", "distance", "in", "turret to the (virtual) goal", () -> s.distanceToGoal);
+        r.channel("shooter", "flywheel_target", "ticks/s", "what the aim asked for", () -> s.flywheelTargetVelocity);
+        r.channel("shooter", "manual_velocity", "ticks/s", "tuner/auto override (NaN = none)", () -> s.manualFlywheelVelocity);
+        r.channel("shooter", "shot_distance", "in", "still distance the flywheel speed is for", () -> s.shotDistance);
+        r.channel("shooter", "shot_time", "s", "flight time used", () -> s.shotTime);
+        r.channel("shooter", "shot_miss", "in", "+ long / - short with the speed it's at", () -> s.shotMissInches);
+        r.flag("shooter", "will_score", "miss gate", Shooter::shotWillScore);
+        r.channel("shooter", "swings", "", "count: full-turn swings", s::getSwings);
+        r.channel("shooter", "relocalizations", "", "count", s::getRelocalizations);
+    }
+
+    public static void blocker(Recorder r, final Blocker b, boolean gates) {
+
+        if (b == null) return;
+        r.flag("blocker", "clear", "open: balls go to the flywheel", () -> b.getState() == Blocker.BlockerState.CLEAR);
+        r.channel("blocker", "position", "", "servo (its state's)", () -> b.getState().getPosition());
+        if (!gates) return;
+        r.flag("blocker", "flywheel_ready", "shot gate", b::isFlywheelReady);
+        r.flag("blocker", "aim_ready", "aim gate", b::isAimReady);
+    }
+
+    public static void intake(Recorder r, final Intake i) {
+
+        if (i == null) return;
+        r.channel("intake", "state", "", "1 in, -1 reverse, 0 idle", () -> i.getState() == Intake.IntakeState.INTAKE ? 1 : i.getState() == Intake.IntakeState.REVERSE_INTAKE ? -1 : 0);
+        r.channel("intake", "target_velocity", "ticks/s", "its state's", () -> i.getState().getVelocity());
+    }
+
+    public static void veloMotor(Recorder r, String group, final GeneralVeloMotor m) {
+
+        if (m == null) return;
+        r.channel(group, "velocity", "ticks/s", "", m::getVelocity);
+        r.channel(group, "power", "", "", m::getPower);
+        r.channel(group, "p", "", "", () -> m.p);
+        r.channel(group, "d", "", "", () -> m.d);
+        r.channel(group, "ff", "", "", () -> m.ff);
+    }
+
+    public static void fiArm(Recorder r, final FIArm a) {
+
+        if (a == null) return;
+        r.flag("fiarm", "deployed", "", () -> a.getState() == FIArm.FIArmState.DEPLOY);
+        r.channel("fiarm", "left", "", "servo (its state's)", () -> a.getState().getLeftPosition());
+        r.channel("fiarm", "right", "", "servo (its state's)", () -> a.getState().getRightPosition());
+    }
+
+    /// what explains a run: the OpMode, every constant, the hardware, where it started from
+    public static void context(Recorder r, String opMode, String alliance, HardwareMap hardwareMap) {
+
+        r.meta("opmode", opMode);
+        r.meta("alliance", alliance);
+        r.meta("started", new Date());
+        r.meta("start_from", AutoHandoff.lastResult);
+        r.meta("turret_ticks_per_degree", ShooterConstants.TURRET_TICKS_PER_DEGREE);
+        for (String name : CONSTANTS) constants(r, "org.firstinspires.ftc.teamcode.Constants." + name);
+        if (hardwareMap == null) return;
+        try {
+            for (HardwareDevice device : hardwareMap.getAll(HardwareDevice.class)) {
+                StringBuilder names = new StringBuilder();
+                for (String n : hardwareMap.getNamesOf(device)) names.append(names.length() > 0 ? "/" : "").append(n);
+                r.meta("hw." + names, device.getDeviceName() + " | " + device.getConnectionInfo() + " | v" + device.getVersion());
+            }
+            for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) r.meta("hub." + hub.getModuleAddress(), (hub.isParent() ? "parent " : "child ") + hub.getBulkCachingMode());
+        } catch (Exception e) {
+            r.meta("hw.error", e.toString());
+        }
+    }
+
+    private static void constants(Recorder r, String className) {
+
+        try {
+            Class<?> c = Class.forName(className);
+            String prefix = className.substring(className.lastIndexOf("Constants.") + "Constants.".length()) + ".";
+            for (Field field : c.getDeclaredFields()) {
+                if (!Modifier.isStatic(field.getModifiers())) continue;
+                field.setAccessible(true);
+                Object value = field.get(null);
+                String text;
+                if (value instanceof double[]) text = Arrays.toString((double[]) value);
+                else if (value instanceof int[]) text = Arrays.toString((int[]) value);
+                else if (value instanceof Object[]) text = Arrays.deepToString((Object[]) value);
+                else text = String.valueOf(value);
+                r.meta(prefix + field.getName(), text);
+            }
+        } catch (Throwable e) {
+            r.meta("constants." + className, "unreadable: " + e);
+        }
+    }
+}

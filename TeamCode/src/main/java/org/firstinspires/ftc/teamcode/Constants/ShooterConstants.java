@@ -13,6 +13,7 @@ public class ShooterConstants {
     /// <p>
     /// Middle of the field: y above it (away from the audience) aims at the CLOSE point, below it at the FAR point.
     public static double FAR_ZONE_CLOSE_ZONE_BARRIER = 72;
+    public static double CELL_SWITCH_BAND_INCHES = 3; //the aim's CELL only switches this far past the line
 
     //20 deg past straight back each way
     public static double MIN_TURRET_POSITION_IN_DEGREES = -200, MAX_TURRET_POSITION_IN_DEGREES = 200;
@@ -46,7 +47,9 @@ public class ShooterConstants {
     //its flight time T, comes from the flywheel alone. So a moving shot gets the flywheel speed of the still distance
     //D = |goal - v T(D)| (slower driving at the goal, faster away or across), the turret aims along goal - v T, and T is
     //taken from the speed the flywheel is actually at when the ball goes
-    public static boolean SOTM_ENABLED = true;
+    //off: the turret always points at the hive itself. On, it aimed at goal - velocity x flight time (~0.8 s), so driving
+    //swung it far off the hive and back when stopping
+    public static boolean SOTM_ENABLED = false;
     //measured s from leaving the turret to the CELL at each FLYWHEEL_DISTANCES distance. All 0 = use the projectile below
     public static List<Double> SHOT_TIMES_OF_FLIGHT = new ArrayList<>(Arrays.asList(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
     //projectile: 72 deg fits the tuned speed table best with exit speed proportional to flywheel speed (13.6 ticks/s RMS),

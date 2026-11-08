@@ -43,6 +43,10 @@ public class DrivetrainAutotuner extends TeleOpBaseOpMode {
         applyComponentTraits();
         battery = new MonitoredVoltageSensor(flywheel.getVoltageSensor(), "driveAutotuneBattery", false);
         engine = new DriveAutotuneEngine();
+        recorder.channel("autotune", "power_forward", "", "what the engine drives", () -> engine != null ? engine.getPower()[0] : Double.NaN);
+        recorder.channel("autotune", "power_strafe", "", "", () -> engine != null ? engine.getPower()[1] : Double.NaN);
+        recorder.channel("autotune", "power_turn", "", "", () -> engine != null ? engine.getPower()[2] : Double.NaN);
+        record(null, null, null, null);
         setUpLynxModule();
     }
 

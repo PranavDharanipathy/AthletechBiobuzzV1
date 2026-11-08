@@ -5,7 +5,7 @@ Six NextFTC autos, group **A_Match**:
 | Auto | OpMode | What it does |
 | --- | --- | --- |
 | Red Park / Blue Park | `RedPark`, `BluePark` | Leaves the wall and parks in the LOADING ZONE. |
-| Red Preload + Park / Blue Preload + Park | `RedPreloadPark`, `BluePreloadPark` | Shoots the 4 preload POLLEN into the upward CELL from the start, then parks. |
+| Red Preload + Park / Blue Preload + Park | `RedPreloadPark`, `BluePreloadPark` | Starts at the y of its goal, facing it, so the turret's home points straight at it, shoots the 4 preload POLLEN, then parks. |
 | Red 2 Tip Garden + Park / Blue 2 Tip Garden + Park | `RedTwoTipGarden`, `BlueTwoTipGarden` | Starts against the audience wall (red) / far wall (blue) straight in line with the upward CELL and shoots the preload into it (tip 1). Takes the GARDEN's POLLEN with the intake only (FIArm stays up, no FLOWERS), then shoots them from the LOADING ZONE into the CELL that came up (tip 2), parked. |
 
 The autos are command based (Ivy on NextFTC). Each auto builds its paths from its own `Constants/Autos/<Auto>Constants`,
@@ -23,8 +23,10 @@ What each command does:
 
 - **`drive.follow(path)`:** Ivy's `PedroCommands.follow`, finished once the robot is really at the end (tolerance). A
   timeout faults the auto.
-- **`robot.shoot(pose)`:** holds the pose, waits for flywheel speed, aim, a still robot, and a shot that scores
-  (`Shooter.shotWillScore`). Then it feeds for the feed time.
+- **`robot.shoot(pose)`:** holds the pose and waits for the flywheel to be up to speed (within `FLYWHEEL_ERROR_TICKS_PER_SECOND`
+  of its target, or feeds anyway after `SHOT_TIMEOUT_SECONDS`), then opens the blocker and runs the intake for
+  `SHOT_FEED_SECONDS` in one go. No per-ball gating. The Preload autos hold the flywheel at `FLYWHEEL_VELOCITY` (1465).
+- **End of the routine:** everything stops, and the turret goes back home and holds there (TeleOp takes its INIT position as home).
 - **`robot.collect()` / `stow()`:** arm down and intake on / arm up and intake off (no auto uses them now; 2 Tip Garden uses `intake.run()`/`stop()` with the arm up).
 - **`robot.autonomous(...)`:** runs the steps in order, stopped by the time limit or a fault (loop timing, localization, a
   path timeout), then makes everything safe.
@@ -58,7 +60,8 @@ Everything uses the turret's frame (`FieldConstants`): Pedro inches, (0, 0) in t
 
 | | Red | Blue |
 | --- | --- | --- |
-| Start | (9.72, 64, 0°), back on the red wall | (134.28, 78, 180°), back on the blue wall |
+| Park start | (9.72, 64, 0°), back on the red wall | (134.28, 78, 180°), back on the blue wall |
+| Preload start | (9.72, 87.77, 0°), back on the red wall at the y of the red goal in front (59.25, 87.77), turret home straight at it | (134.28, 56.23, 180°), the same at the blue goal (84.75, 56.23) |
 | Park (LOADING ZONE) | (15, 108, 0°), red LZ x 0–11, y 96–120 | (129, 36, 180°), blue LZ x 133–144, y 24–48 |
 | 2 Tip Garden start | (59.25, 9.72, 90°), back on the audience wall under the FAR CELL | (84.75, 134.28, −90°), back on the far wall over the CLOSE CELL |
 | 2 Tip Garden: to GARDEN | (8.64, 22, −90°), controls (34, 34), (34, 39) | (135.36, 122, 90°), controls (110, 110), (110, 105) |

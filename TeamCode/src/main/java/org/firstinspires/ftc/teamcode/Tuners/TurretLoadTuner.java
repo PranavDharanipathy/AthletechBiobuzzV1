@@ -71,6 +71,7 @@ public class TurretLoadTuner extends TeleOpBaseOpMode {
         intake.provideComponents(new Intake(super.intake), controller1);
         blocker.provideComponents(super.blocker, controller1);
 
+        record(null, blocker, intake, drivetrain);
         setUpLynxModule();
 
         telemetry.addLine("Gamepad 1 drives like in a match. Gamepad 2: A = compensation on/off, BACK = finish.");

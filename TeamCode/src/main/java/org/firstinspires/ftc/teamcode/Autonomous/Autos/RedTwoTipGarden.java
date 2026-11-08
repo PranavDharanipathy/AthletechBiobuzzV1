@@ -8,25 +8,22 @@ import com.pedropathing.math.Pose;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Drive;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.AthletechRobot;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeHubHook;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 
-import dev.nextftc.robot.opmode.BlazeOpMode;
 import dev.nextftc.robot.opmode.NextAutonomous;
+import dev.nextftc.robot.opmode.NextOpMode;
 
 import static com.pedropathing.ivy.commands.Commands.waitMs;
 import static org.firstinspires.ftc.teamcode.Constants.Autos.RedTwoTipGardenConstants.*;
 
 @NextAutonomous(name = "Red 2 Tip Garden + Park", group = "A_Match")
-public final class RedTwoTipGarden extends BlazeOpMode {
+public final class RedTwoTipGarden extends NextOpMode {
 
     private final AthletechRobot robot;
     private final Command routine;
 
     public RedTwoTipGarden(AthletechRobot robot) {
 
-        super(robot, new BlazeHubHook(true), new BlazeHubHook(false));
-        BlazeSession.beginNext(hardwareMap);
+        super(robot);
         this.robot = robot;
 
         Pose start = Drive.pose(START);
@@ -38,14 +35,13 @@ public final class RedTwoTipGarden extends BlazeOpMode {
         robot.init(hardwareMap, start);
         robot.configureAuto(AUTO_LIMIT_SECONDS, MAX_LOOP_SECONDS);
         robot.drive.configure(POSITION_ERROR_INCHES, HEADING_ERROR_DEGREES, PATH_TIMEOUT_SECONDS);
-        robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, SHOT_READY_DWELL_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND, MAX_SHOOTING_SPEED_INCHES_PER_SECOND, MAX_SHOOTING_YAW_DEGREES_PER_SECOND);
+        robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND);
 
         Path toGarden = Drive.curve(start, GARDEN_CONTROLS, garden);
         Path sweep = Drive.slow(Drive.line(garden, sweepEnd), SWEEP_SPEED_INCHES_PER_SECOND);
         Path toLoadingZone = Drive.curve(sweepEnd, PARK_CONTROLS, park);
 
         routine = robot.autonomous(
-                robot.fiArm.retract(),
                 robot.shooter.rampUp(),
                 robot.shoot(start),
                 robot.intake.run(),
@@ -66,6 +62,7 @@ public final class RedTwoTipGarden extends BlazeOpMode {
     @Override
     public void start() {
 
+        robot.handOffAs("Red 2 Tip Garden + Park");
         robot.start(Alliance.RED);
         Scheduler.schedule(routine);
     }

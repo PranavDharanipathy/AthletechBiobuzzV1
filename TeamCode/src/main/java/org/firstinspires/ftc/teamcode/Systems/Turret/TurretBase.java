@@ -142,6 +142,10 @@ public class TurretBase {
         controller.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
         controller.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
         controller.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
+        controller.stuckEndZone = TurretConstants.TURRET_STUCK_END_ZONE_DEGREES * tpd;
+        controller.stuckRate = TurretConstants.TURRET_STUCK_PUSH_RATE;
+        controller.stuckMax = TurretConstants.TURRET_STUCK_PUSH_MAX;
+        controller.stuckVoltsLimit = TurretConstants.TURRET_FROZEN_ENCODER_VOLTS - 0.1;
         controller.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
         controller.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
         controller.setTravel(startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd);
@@ -317,10 +321,13 @@ public class TurretBase {
         if (initialError == null) initialError = error;
     }
 
+    /// every turret command ends here: with TurretConstants.TURRET_ENABLED off the servos only ever get 0 (the controller still runs
+    /// and is still recorded, so what it would have done is in the log)
     public void setVolts(double leftVolts, double rightVolts) {
 
-        leftPower = toPower(leftVolts);
-        rightPower = toPower(rightVolts);
+        boolean on = TurretConstants.TURRET_ENABLED;
+        leftPower = on ? toPower(leftVolts) : 0;
+        rightPower = on ? toPower(rightVolts) : 0;
         power = 0.5 * (leftPower + rightPower);
         leftTurretBase.setPower(leftPower);
         rightTurretBase.setPower(rightPower);

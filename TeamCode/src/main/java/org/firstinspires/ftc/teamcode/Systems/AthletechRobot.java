@@ -6,7 +6,6 @@ import com.pedropathing.math.Velocity;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.AutoShotWindow;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Blocker;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Drive;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.FIArm;
@@ -17,7 +16,9 @@ import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
 import org.firstinspires.ftc.teamcode.Field.Goal;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
-import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotGate;
+import org.firstinspires.ftc.teamcode.Utility.AutoHandoff;
+import org.firstinspires.ftc.teamcode.Utility.Recording.Recorder;
+import org.firstinspires.ftc.teamcode.Utility.Recording.RobotRecording;
 import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
@@ -41,7 +42,7 @@ import static com.pedropathing.ivy.groups.Groups.sequential;
 /// so the shooter aims off this loop's pose), then the commands.
 /// The mechanisms have their own commands (drive.follow, intake.run, fiArm.deploy, shooter.spinUp); the ones that take
 /// several mechanisms live here (shoot, collect, stow), and autonomous() wraps an auto's steps in the time limit and the
-/// fault watchdog. Autos only put these in order with their own paths and constants
+/// fault watchdog, then sends the turret home. Once started it keeps AutoHandoff up to date for TeleOp. Autos only put these in order with their own paths and constants
 public final class AthletechRobot implements NextRobot {
 
     public Drive drive;
@@ -53,11 +54,14 @@ public final class AthletechRobot implements NextRobot {
     private final Set<Mechanism> mechanisms = new LinkedHashSet<>();
     private List<LynxModule> hubs = Collections.emptyList();
 
-    private final AutoShotWindow shot = new AutoShotWindow();
-    private ShotGate speedGate = new ShotGate(50, 50, 100, 100, 0.1, 0.05, 0);
-    private double feedSeconds = 1.5, shotTimeout = 4, readyDwell = 0.1, maxSpeed = 3, maxYaw = 10, maxLoop = 0.15;
+    private double feedSeconds = 1.5, shotTimeout = 4, flywheelBand = 50, maxLoop = 0.15;
+    private double shotStart, feedStart;
+    private boolean feeding, shotDone, shotLate, handoff;
+    private String autoName = "";
     private double startedAt, lastLoop, timeLimit = 29.5;
-    public String status = "Init", fault = "";
+    public String status = "Init", fault = "", shotWaitingOn = "";
+    //everything, every loop, for going over an auto afterwards (Utility/Recording)
+    public Recorder recorder;
     public int shotsTaken, shotTimeouts;
 
     public AthletechRobot() {}
@@ -83,6 +87,32 @@ public final class AthletechRobot implements NextRobot {
         status = "Init";
         fault = "";
         shotsTaken = shotTimeouts = 0;
+        startRecording(hardwareMap);
+    }
+
+    private void startRecording(HardwareMap hardwareMap) {
+
+        if (recorder != null) recorder.close();
+        //the auto that called init (its constructor)
+        StackTraceElement[] stack = new Throwable().getStackTrace();
+        String auto = stack.length > 2 ? stack[2].getClassName().substring(stack[2].getClassName().lastIndexOf('.') + 1) : "Auto";
+        recorder = RobotRecording.open(auto);
+        RobotRecording.context(recorder, auto, "", hardwareMap);
+        RobotRecording.loop(recorder);
+        RobotRecording.pose(recorder, drive.follower);
+        RobotRecording.turret(recorder, shooter.turret);
+        RobotRecording.flywheel(recorder, shooter.flywheel);
+        RobotRecording.shooter(recorder, shooter.shooter);
+        RobotRecording.blocker(recorder, blocker.blocker, false);
+        RobotRecording.veloMotor(recorder, "intake_motor", intake.motor);
+        RobotRecording.fiArm(recorder, fiArm.arm);
+        recorder.channel("auto", "time", "s", "since the routine started", () -> startedAt > 0 ? Clock.seconds() - startedAt : Double.NaN);
+        recorder.channel("auto", "shots", "", "count", () -> shotsTaken);
+        recorder.channel("auto", "shot_timeouts", "", "fed before the flywheel was up", () -> shotTimeouts);
+        recorder.flag("auto", "feeding", "", () -> feeding);
+        recorder.watch("auto", "status", () -> status);
+        recorder.watch("auto", "fault", () -> fault);
+        recorder.watch("auto", "shot_waiting_on", () -> shotWaitingOn);
     }
 
     @Override
@@ -95,6 +125,8 @@ public final class AthletechRobot implements NextRobot {
 
         clearCaches();
         HardwareMonitor.get().update();
+        recordHandoff();
+        if (recorder != null) recorder.sample();
     }
 
     //hubs Blaze feeds already have fresh data
@@ -105,16 +137,13 @@ public final class AthletechRobot implements NextRobot {
         }
     }
 
-    /// shot timing: feed time, give-up time, how long it has to be ready first (s); flywheel band (ticks/s); how still the
-    /// robot has to be (in/s, deg/s)
-    public void configureShots(double feedSeconds, double timeoutSeconds, double readyDwellSeconds, double flywheelBand, double maxSpeed, double maxYawDegrees) {
+    /// feed time (s), how long it waits for the flywheel before feeding anyway (s), how close to its target counts as up to
+    /// speed (ticks/s)
+    public void configureShots(double feedSeconds, double timeoutSeconds, double flywheelBand) {
 
         this.feedSeconds = feedSeconds;
         shotTimeout = timeoutSeconds;
-        readyDwell = readyDwellSeconds;
-        this.maxSpeed = maxSpeed;
-        maxYaw = maxYawDegrees;
-        speedGate = new ShotGate(flywheelBand, flywheelBand, flywheelBand * 2, flywheelBand * 2, readyDwellSeconds, 0.05, 0);
+        this.flywheelBand = flywheelBand;
     }
 
     /// shooter on for this alliance (the turret has to point straight at INIT: that's its home)
@@ -122,13 +151,26 @@ public final class AthletechRobot implements NextRobot {
         shooter.start(new AllianceState(alliance));
     }
 
+    /// every auto at START: from now on AutoHandoff keeps this auto's pose and turret position for TeleOp
+    public void handOffAs(String autoName) {
+
+        this.autoName = autoName;
+        handoff = true;
+        if (recorder != null) recorder.event("auto", "START " + autoName);
+    }
+
+    //TeleOp's turret starts from where this leaves it, not from home (AutoHandoff)
+    private void recordHandoff() {
+        if (handoff) AutoHandoff.record(autoName, drive.pose(), shooter.turret.getPosition() - shooter.turret.startPosition);
+    }
+
     /// the shooter aims at the CELL for the robot's half: a pose on the wrong half would shoot the wrong CELL
     public static void requireCell(Pose shotPose, boolean close, String name) {
         if (Goal.isClose(shotPose) != close) throw new IllegalArgumentException(name + " is on the wrong half for the " + (close ? "CLOSE" : "FAR") + " cell");
     }
 
-    /// holds at, waits for speed, aim, a still robot and a shot that scores, then opens the blocker with the intake feeding
-    /// for the feed time (gives up after the timeout)
+    /// holds at, waits for the flywheel to get up to speed (or the timeout), then feeds everything in one go for the feed time:
+    /// blocker open and intake on the whole time, no per-ball gating
     public Command shoot(final Pose at) {
 
         return Command.build()
@@ -137,26 +179,33 @@ public final class AthletechRobot implements NextRobot {
                     status = "shooting";
                     drive.follower.hold(at);
                     blocker.set(false);
-                    intake.setVelocity(IntakeConstants.INTAKE_VELOCITY);
-                    speedGate.reset();
-                    shot.start(Clock.seconds(), feedSeconds, shotTimeout, readyDwell, maxLoop);
+                    intake.setVelocity(0);
+                    shotStart = Clock.seconds();
+                    feeding = shotDone = shotLate = false;
+                    shotWaitingOn = "flywheel speed";
                 })
                 .setExecute(() -> {
                     double now = Clock.seconds();
-                    speedGate.update(now, shooter.flywheel.getTargetVelocity(), shooter.flywheel.getCurrentVelocity(), shot.firing());
-                    Velocity v = drive.follower.velocity();
-                    boolean still = Math.hypot(v.vx, v.vy) <= maxSpeed && Math.abs(Math.toDegrees(v.omega)) <= maxYaw;
-                    boolean ready = drive.isAt(at) && still && speedGate.isReady() && shooter.turret.isOnTarget() && shooter.shooter.isAimSolutionUsable() && org.firstinspires.ftc.teamcode.Systems.Shooter.shotWillScore();
-                    shot.update(now, ready);
-                    blocker.set(shot.firing());
-                    if (shot.state() == AutoShotWindow.State.FAULT) fault = "shot timing fault";
+                    if (!feeding) {
+                        boolean fast = shooter.flywheel.getCurrentVelocity() >= shooter.flywheel.getTargetVelocity() - flywheelBand;
+                        shotLate = !fast && now - shotStart >= shotTimeout;
+                        if (fast || shotLate) {
+                            feeding = true;
+                            feedStart = now;
+                            shotWaitingOn = "";
+                            blocker.set(true);
+                            intake.setVelocity(IntakeConstants.INTAKE_VELOCITY);
+                        }
+                    }
+                    else if (now - feedStart >= feedSeconds) shotDone = true;
                 })
-                .setDone(shot::finished)
+                .setDone(() -> shotDone)
                 .setEnd(condition -> {
                     blocker.set(false);
                     intake.setVelocity(0);
+                    shotWaitingOn = "";
                     shotsTaken++;
-                    if (shot.state() == AutoShotWindow.State.TIMED_OUT) shotTimeouts++;
+                    if (shotLate) shotTimeouts++;
                 });
     }
 
@@ -195,13 +244,30 @@ public final class AthletechRobot implements NextRobot {
                 .setDone(() -> !fault.isEmpty() || Clock.seconds() - startedAt >= timeLimit);
         return sequential(race(sequential(steps), watchdog), instant(() -> {
             status = !fault.isEmpty() ? "stopped: " + fault : Clock.seconds() - startedAt >= timeLimit ? "auto time limit" : "done";
-            stopAll();
+            finish();
         }));
+    }
+
+    //end of the routine: everything off, but the turret goes back home and holds there (TeleOp takes where it is at INIT as
+    //home, and stopping it dead left it wherever it was mid-swing)
+    private void finish() {
+
+        if (blocker != null) blocker.set(false);
+        if (intake != null) intake.stopNow();
+        if (drive != null) drive.stop();
+        if (shooter != null) shooter.home();
     }
 
     /// everything safe: flywheel and turret off, blocker shut, intake and drive stopped
     public void stopAll() {
 
+        recordHandoff();
+        handoff = false;
+        if (recorder != null) {
+            recorder.sample();
+            recorder.close();
+            recorder = null;
+        }
         if (blocker != null) blocker.set(false);
         if (intake != null) intake.stopNow();
         if (shooter != null) shooter.stopNow();
@@ -211,7 +277,8 @@ public final class AthletechRobot implements NextRobot {
     public void showInit(String name, boolean shoots) {
 
         Telemetry.log(name);
-        if (shoots) Telemetry.log("Turret must point straight at INIT. 4 POLLEN loaded.");
+        Telemetry.log("Turret must point straight at INIT: that's its 0.");
+        if (shoots) Telemetry.log("4 POLLEN loaded.");
         Telemetry.log("Start pose", drive.pose());
         Telemetry.log("Blaze", BlazeSession.status());
     }
@@ -222,6 +289,7 @@ public final class AthletechRobot implements NextRobot {
         Telemetry.log("Drive", drive.status);
         Telemetry.log("Fault", fault);
         Telemetry.log("Pose", drive.pose());
-        Telemetry.log("Shots", shotsTaken + " (" + shotTimeouts + " timed out), " + shot.state());
+        Telemetry.log("Shots", shotsTaken + " (" + shotTimeouts + " fed before the flywheel was up)");
+        Telemetry.log("Shot waiting on", shotWaitingOn);
     }
 }

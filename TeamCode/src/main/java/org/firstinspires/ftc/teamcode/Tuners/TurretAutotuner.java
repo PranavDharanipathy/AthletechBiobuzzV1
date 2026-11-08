@@ -70,6 +70,12 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
         intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel);
 
+        recorder.channel("autotune", "target", "deg", "what the engine asks for", () -> engine != null ? engine.getTarget() / ShooterConstants.TURRET_TICKS_PER_DEGREE : Double.NaN);
+        recorder.channel("autotune", "reference", "deg", "", () -> engine != null ? engine.getReference() / ShooterConstants.TURRET_TICKS_PER_DEGREE : Double.NaN);
+        recorder.channel("autotune", "left_volts", "V", "", () -> engine != null ? engine.getLeftVolts() : Double.NaN);
+        recorder.channel("autotune", "right_volts", "V", "", () -> engine != null ? engine.getRightVolts() : Double.NaN);
+        recorder.watch("autotune", "stage", () -> engine != null ? engine.getStage() : null);
+        record(null, blocker, intake, drivetrain);
         setUpLynxModule();
     }
 

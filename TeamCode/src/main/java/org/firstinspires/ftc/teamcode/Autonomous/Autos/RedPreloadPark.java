@@ -7,35 +7,32 @@ import com.pedropathing.math.Pose;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Drive;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.AthletechRobot;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeHubHook;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 
-import dev.nextftc.robot.opmode.BlazeOpMode;
 import dev.nextftc.robot.opmode.NextAutonomous;
+import dev.nextftc.robot.opmode.NextOpMode;
 
 import static org.firstinspires.ftc.teamcode.Constants.Autos.RedPreloadParkConstants.*;
 
 @NextAutonomous(name = "Red Preload + Park", group = "A_Match")
-public final class RedPreloadPark extends BlazeOpMode {
+public final class RedPreloadPark extends NextOpMode {
 
     private final AthletechRobot robot;
     private final Command routine;
 
     public RedPreloadPark(AthletechRobot robot) {
 
-        super(robot, new BlazeHubHook(true), new BlazeHubHook(false));
-        BlazeSession.beginNext(hardwareMap);
+        super(robot);
         this.robot = robot;
 
         Pose start = Drive.pose(START);
         Pose park = Drive.pose(PARK);
-        AthletechRobot.requireCell(start, FIRST_CELL_CLOSE, "START");
         robot.init(hardwareMap, start);
         robot.configureAuto(AUTO_LIMIT_SECONDS, MAX_LOOP_SECONDS);
         robot.drive.configure(POSITION_ERROR_INCHES, HEADING_ERROR_DEGREES, PATH_TIMEOUT_SECONDS);
-        robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, SHOT_READY_DWELL_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND, MAX_SHOOTING_SPEED_INCHES_PER_SECOND, MAX_SHOOTING_YAW_DEGREES_PER_SECOND);
+        robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND);
 
         routine = robot.autonomous(
+                robot.shooter.velocity(FLYWHEEL_VELOCITY),
                 robot.shooter.rampUp(),
                 robot.shoot(start),
                 robot.drive.follow(Drive.line(start, park))
@@ -50,6 +47,7 @@ public final class RedPreloadPark extends BlazeOpMode {
     @Override
     public void start() {
 
+        robot.handOffAs("Red Preload + Park");
         robot.start(Alliance.RED);
         Scheduler.schedule(routine);
     }

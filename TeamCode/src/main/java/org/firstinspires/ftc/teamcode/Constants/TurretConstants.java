@@ -8,6 +8,9 @@ import org.firstinspires.ftc.teamcode.Utility.Encoder;
 @Config
 public class TurretConstants {
 
+    //OFF for now: the turret servos only ever get 0, in every OpMode (TeleOps, autos, tuners). The aim still runs and is recorded
+    public static boolean TURRET_ENABLED = false;
+
     /// Index 0 is the left crservo.
     /// <p>
     /// Index 1 is the right crservo.
@@ -56,8 +59,11 @@ public class TurretConstants {
     //share of the robot's spin the turret is told to cancel (1 = all of it). SHT Stability Tuner learns it from whether the
     //turret lags the spin or runs ahead of it
     public static double TURRET_RATE_FEEDFORWARD_SCALE = 1;
-    public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.15;
-    public static double TURRET_FRICTION_RAMP_DEGREES = 0.5;
+    //within this of the target it just holds (no friction push), and the push builds up over the ramp past it. 0.15 / 0.5
+    //rocked it +-3-5 deg around a still target (DRIVING run 20280508-054432); sim with the robot's slide and loop: 0.5 / 1
+    //holds under 0.9 deg with no volts flipping, inside the 1 deg aim gate
+    public static double TURRET_HOLD_TOLERANCE_DEGREES = 0.5;
+    public static double TURRET_FRICTION_RAMP_DEGREES = 1.0;
     public static double TURRET_MOVING_DEGREES_PER_SECOND = 1;
     public static double TURRET_INTEGRAL_ZONE_DEGREES = 3;
     public static double TURRET_MAX_INTEGRAL_VOLTS = 1.5;
@@ -92,4 +98,9 @@ public class TurretConstants {
     //wiring: pushed this hard (V) with the encoder not changing at all for this long (s), the encoder (or its data) is dead and
     //the travel limit can't work, so the turret stops until the OpMode restarts. A frozen reading wrapped it round and round
     public static double TURRET_FROZEN_ENCODER_VOLTS = 3, TURRET_FROZEN_ENCODER_SECONDS = 0.5;
+
+    //near the travel ends (target within TURRET_STUCK_END_ZONE_DEGREES of one) a turret stopped short of its target pushes
+    //TURRET_STUCK_PUSH_RATE V/s harder, up to TURRET_STUCK_PUSH_MAX V (TurretController.stuckVolts): the lanyards there pull back
+    //harder than friction. 0 max = off
+    public static double TURRET_STUCK_END_ZONE_DEGREES = 60, TURRET_STUCK_PUSH_RATE = 2, TURRET_STUCK_PUSH_MAX = 1.5;
 }

@@ -3,6 +3,7 @@ package org.athletech.sim.scenarios;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelVelocityModel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotSolver;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -21,13 +22,22 @@ public class ShotSolverTest {
     private FlywheelVelocityModel model;
     private ShotSolver solver;
     private static final double EXTRAPOLATE = 12;
+    private boolean sotmBefore;
 
+    //these check the shoot-on-the-move math itself, whatever the robot's switch is set to
     @Before
     public void setUp() {
 
+        sotmBefore = ShooterConstants.SOTM_ENABLED;
+        ShooterConstants.SOTM_ENABLED = true;
         model = new FlywheelVelocityModel();
         model.velocity(D, V, 1, EXTRAPOLATE, 75);
         solver = new ShotSolver(model);
+    }
+
+    @After
+    public void restore() {
+        ShooterConstants.SOTM_ENABLED = sotmBefore;
     }
 
     //the "real" ball for a flywheel speed: launched like a still shot to the distance that speed was tuned for

@@ -19,7 +19,7 @@ public final class Shooter implements Mechanism {
     public final Flywheel flywheel;
     public final TurretBase turret;
     public final org.firstinspires.ftc.teamcode.Systems.Shooter shooter = new org.firstinspires.ftc.teamcode.Systems.Shooter();
-    private boolean rampUp, started;
+    private boolean rampUp, started, aim = true, locked;
 
     /// turret must point straight at INIT: that's its home
     public Shooter(HardwareMap hardwareMap, Drive drive) {
@@ -41,7 +41,13 @@ public final class Shooter implements Mechanism {
 
     @Override
     public void periodic() {
-        if (started) shooter.updateAutonomous(rampUp);
+
+        if (started) shooter.updateAutonomous(rampUp, aim);
+        else if (locked) {
+            turret.setPosition(turret.startPosition);
+            turret.setTargetVelocity(0);
+            turret.update();
+        }
     }
 
     public void setRampUp(boolean rampUp) {
@@ -56,6 +62,23 @@ public final class Shooter implements Mechanism {
         return instant(() -> rampUp = false);
     }
 
+    /// flywheel held at this speed (ticks/s) instead of the distance fit
+    public Command velocity(double ticksPerSecond) {
+        return instant(() -> shooter.manualFlywheelVelocity = ticksPerSecond);
+    }
+
+    /// no shooting: flywheel off, turret held at home (0 deg) the whole time
+    public void lockHome() {
+        locked = true;
+    }
+
+    /// flywheel off, turret back to home and holding there
+    public void home() {
+
+        rampUp = false;
+        aim = false;
+    }
+
     /// aimed, the aim is one it can shoot from, and the flywheel is within band of its target
     public boolean isReady(double flywheelBand) {
         return started && rampUp && turret.isOnTarget() && shooter.isAimSolutionUsable() && Math.abs(flywheel.getTargetVelocity() - flywheel.getCurrentVelocity()) <= flywheelBand;
@@ -63,7 +86,7 @@ public final class Shooter implements Mechanism {
 
     public void stopNow() {
 
-        started = rampUp = false;
+        started = rampUp = locked = false;
         flywheel.reset();
         turret.setVolts(0, 0);
     }

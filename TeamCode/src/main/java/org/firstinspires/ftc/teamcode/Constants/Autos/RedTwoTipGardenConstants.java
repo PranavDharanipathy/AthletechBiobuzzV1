@@ -32,10 +32,7 @@ public final class RedTwoTipGardenConstants {
     public static double HEADING_ERROR_DEGREES = 3;
     public static double SHOT_TIMEOUT_SECONDS = 4;
     public static double SHOT_FEED_SECONDS = 1.5;
-    public static double SHOT_READY_DWELL_SECONDS = 0.1;
     public static double FLYWHEEL_ERROR_TICKS_PER_SECOND = 50;
-    public static double MAX_SHOOTING_SPEED_INCHES_PER_SECOND = 3;
-    public static double MAX_SHOOTING_YAW_DEGREES_PER_SECOND = 10;
 
     private RedTwoTipGardenConstants() {}
 }

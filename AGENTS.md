@@ -138,8 +138,8 @@ utility OpModes and Pedro's own tuners. It's a beta Rust runtime with its own na
   - `TeleOpBaseOpMode` calls `begin` (first thing in `initializeComponents`), `engage` (in `setUpLynxModule`), `tick` (in
     `clearCacheOfLynxModule`) and `end` (in `stop`).
   - The four standalone tuners call the same four themselves.
-- **Autos:** they extend NextFTC's `BlazeOpMode` with `BlazeHubHook`s (NextFTC's `BlazeBulkReadHook`, one per hub present).
-  NextFTC starts, runs and closes Blaze.
+- **Autos:** plain `NextOpMode`, no Blaze. As `BlazeOpMode`s, NextFTC started Blaze's proxy for them even with Blaze off, and
+  the hubs retransmitted packets every auto (robot log 2028-05-08).
 - **What Blaze does:**
   - motor `setPower` goes straight to Blaze;
   - each hub's bulk data is kept fresh in the background, and `tick` never clears a hub Blaze feeds;
@@ -221,7 +221,27 @@ delete them with the **Hardware Monitor: Clear Database** OpMode, the dashboard,
 `HardwareMonitor.clearDatabase()`. Design, costs and limits
 are in [DEV_NOTES.md](./DEV_NOTES.md).
 
+**Recording** (`Utility/Recording`: `Recorder.kt` + `RobotRecording.java`): every TeleOp, every tuner on `TeleOpBaseOpMode`
+and every auto records everything every loop to `/sdcard/FIRST/data/RobotLog/<time>-<OpMode>/`, so a past match can be gone over
+and fixed without the robot:
+
+- `frames.bin` + `channels.tsv`: ~170 numbers per loop: loop and power, both gamepads (every stick, trigger, button), pose and
+  velocity, the drive's command, wheels and pose hold, the turret and its controller (target, plan, every volt term, learned
+  state, resyncs, kicks, gates), the flywheel and its controller, the shooter's aim (raw and routed), cell, goal, distance, shot
+  solution and gates, blocker, intake, FIArm, plus each tuner's own (autotune target and stage, ...).
+- `events.tsv`: swings, cell switches, relocalizations, driver toggles, auto status/fault/shot-wait changes, autotune stages.
+- `meta.tsv`: every Constants value at the start, every hardware device, the hubs, the OpMode, where it started from.
+
+Channels read cached state only (no hardware calls) and are fixed at the first loop; one low-priority thread writes. A new
+subsystem gets a method in `RobotRecording`; an OpMode adds its subsystems with `record(shooter, blocker, intake, drivetrain)`
+and its own numbers with `recorder.channel(...)` / `recorder.watch(...)` in init; anything can drop an event with
+`Recorder.note(...)`. Read runs with `python tools/robot_log.py` (pull, list, summary, events, meta, channels, csv); the build
+also pulls them into `tuning-data/robot-logs` (git-ignored). TunerTeleOp differs only in also tuning live.
+
 ## Turret control and tuning
+
+**`TurretConstants.TURRET_ENABLED` (off for now):** off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos,
+tuners). The aim and the controller still run and are recorded, so the log shows what it would have done.
 
 `Systems/Turret/TurretController` is model based (speed per volt, lag, dead time, friction, and also top speed and
 acceleration, because the servos run out of torque long before volts), not a hand-tuned PIDF. Its gains come from `TURRET_BANDWIDTH`. Tune it with the **Turret Autotuner** OpMode: run STATIONARY
@@ -237,6 +257,11 @@ the turret's stopping distance. `TurretController`'s plan never heads for an end
 When the turret ends up more than `TURRET_RESYNC_DEGREES` off its own plan (lagged, coasted on, stalled) the plan moves
 onto where it really is instead of the two fighting to 0 V; stopped well short, it kicks through the whole start delay. Past the limit plus
 `TURRET_HARD_LIMIT_MARGIN_DEGREES`, `TurretBase` will only drive back toward home, which protects the wiring.
+Near the ends the lanyards pull back harder than friction, and resync kept dragging the plan onto the stalled turret (~20 deg
+short of 180). The **stuck push** (`TURRET_STUCK_*`) builds toward the real target when the target is within 60 deg of an end and the
+turret has made no real progress for 0.2 s, and keeps the output under `TURRET_FROZEN_ENCODER_VOLTS` so the frozen-encoder cutoff
+can't trip. Only near the ends: mid-travel any extra push overshoots (the servo breaks free at ~1.16 V but slides on ~0.65 V,
+with ~70 ms of delay), see DEV_NOTES.
 Flywheel shake is handled by **vibration rejection** in `TurretController`: it measures shake from the error's
 second difference and lowers stiffness while the turret shakes, down to `TURRET_MIN_BANDWIDTH`, which DRIVING
 derives (`TURRET_SHAKE_BANDWIDTH`: the softest bandwidth that really shook less without holding or tracking worse; equal
@@ -244,6 +269,7 @@ to the bandwidth = never soften). The autotuner turns rejection off while it mea
 Holding, the friction push lets go early when the turret comes in much faster than the loop asked for (the friction
 guess is too high: it slides on less than it takes to start), and the target rate gets a deadband sized to its measured
 noise, so the Pinpoint's heading-rate jitter can't flip the push every loop.
+In the match TeleOps (`Shooter.update`), **gamepad 1 Y** toggles a turret lock: held still at home (0 deg) instead of aiming.
 **Lanyard compensation** (`LanyardMap`, `TURRET_LANYARDS_ENABLED`, off for now) learns the volts the lanyards need at
 each angle (the Manual Tuner's X sweep) and adds them as feedforward. When it's off it must add exactly 0.
 
@@ -281,8 +307,13 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 
 - **Frame:** all poses are in the turret's frame (`FieldConstants`), which is also the Pedro visualizer's BIOBUZZ field. No
   mirroring.
-- **CELL choice:** the shooter picks the CELL by the robot's half, so every shot pose is checked at INIT against the CELL it's
-  meant for. Red's first upward CELL is FAR; blue's is CLOSE.
+- **Goal:** the shooter aims at its own color's goal on the robot's half (the one in front). The Preload starts sit at its
+  y facing it, so the turret's home points straight at it. 2 Tip Garden checks its shot poses' halves at INIT.
+- **FIArm:** every auto sends it to RETRACT at INIT.
+- **Auto to TeleOp handoff** (`Utility/AutoHandoff`): from START every auto (`robot.handOffAs(name)`) keeps the robot's pose and
+  the turret's ticks from home in statics and sets `infoFromAuto`. `TeleOpBaseOpMode` takes it once at INIT (and sets the
+  flag false): the turret starts from where it really is instead of calling that home, and the follower from the auto's
+  pose. Ignored if older than `AutoHandoff.MAX_AGE_SECONDS` or past the turret's travel. Telemetry "Start" says which.
 - **Visualizer projects:** `docs/autos/*.pp`.
 - **Rules, routes and field checks:** `docs/AUTOS.md`.
 

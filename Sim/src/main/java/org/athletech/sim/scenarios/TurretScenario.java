@@ -199,6 +199,10 @@ public final class TurretScenario {
         c.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
         c.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
         c.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
+        c.stuckEndZone = TurretConstants.TURRET_STUCK_END_ZONE_DEGREES * tpd;
+        c.stuckRate = TurretConstants.TURRET_STUCK_PUSH_RATE;
+        c.stuckMax = TurretConstants.TURRET_STUCK_PUSH_MAX;
+        c.stuckVoltsLimit = TurretConstants.TURRET_FROZEN_ENCODER_VOLTS - 0.1;
         c.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
         c.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
         c.setTravel(ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd); //same as TurretBase
@@ -382,7 +386,7 @@ public final class TurretScenario {
                 double aimRate = toAim * (headingRate(t) + (t < half ? spin : -spin));
                 double position = turret.encoderPosition();
                 double velocity = filter.updateFilteredVelocity(t, turret.encoderVelocity());
-                double tt = route.update(aim, aimRate, position / s.tpd, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
+                double tt = route.update(aim, aimRate, position / s.tpd, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES, t);
                 if (route.hasSwung() && r.swings++ == 0) r.firstSwingDeg = Math.abs(position / s.tpd);
                 double volts = c.update(dt, tt * s.tpd, route.isOutside(min, max) ? 0 : aimRate * s.tpd, position, velocity, 0.95 * 12.5);
                 turret.command(t, volts, volts);

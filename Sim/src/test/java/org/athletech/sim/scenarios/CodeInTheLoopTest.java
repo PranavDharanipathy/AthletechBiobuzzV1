@@ -183,6 +183,34 @@ public class CodeInTheLoopTest {
             }
     }
 
+    //facing away from the goal it stopped ~20 deg short of 180: past ~150 the lanyards pull back harder than friction, and the
+    //plan resynced onto the stalled turret so its error said 0. Near the ends the stuck push keeps building toward the real target
+    @Test
+    public void reachesTheEndsAgainstALanyardPull() {
+
+        TurretScenario.Setup s = TurretScenario.setup(new RobotParams(db), ctx);
+        TurretAutotuneEngine.Parameters p = TurretScenario.robotNow();
+        double[][] ends = {{150, 1, 0.07, 1.2, 0.1}, {-150, -1, 0.07, 1.2, 0.1}};
+        for (double angle : new double[] {170, 185, 198, -185}) {
+            final double ticks = angle * s.tpd;
+            TurretScenario.Target hold = new TurretScenario.Target() {
+                public double position(double t) {
+                    return ticks;
+                }
+
+                public double velocity(double t) {
+                    return 0;
+                }
+            };
+            for (long seed = 1; seed <= 3; seed++) {
+                TurretScenario.Track r = TurretScenario.track(s.withLanyards(ends, null, false, ticks - Math.signum(angle) * 20 * s.tpd), p, hold, 5, false, 3, -1, true, seed);
+                double off = Math.abs(r.trace.get(r.trace.size() - 1)[3] - angle);
+                assertTrue(angle + " deg seed " + seed + " ends " + off + " off", off < 1); //used to stay 6.6-17 short
+                assertTrue(angle + " deg seed " + seed + " RMS " + r.rmsDeg, r.rmsDeg < 2.5);
+            }
+        }
+    }
+
     //the Pinpoint's heading rate jitters ~1 deg/s with the robot still: that used to flip the whole friction push every loop
     @Test
     public void noisyRateDoesNotBuzzAStillTurret() {
@@ -202,7 +230,8 @@ public class CodeInTheLoopTest {
             };
             TurretScenario.Track r = TurretScenario.track(s, TurretScenario.matched(s, 4), jittery, 10, false, 2, -1, false, seed);
             assertTrue("seed " + seed + " volts jumping " + r.chatterV, r.chatterV < 0.2);
-            assertTrue("seed " + seed + " hold RMS " + r.rmsDeg, r.rmsDeg < 0.2);
+            //it sits anywhere inside the hold band without pushing, so the band is the limit
+            assertTrue("seed " + seed + " hold RMS " + r.rmsDeg, r.rmsDeg < TurretConstants.TURRET_HOLD_TOLERANCE_DEGREES);
         }
     }
 

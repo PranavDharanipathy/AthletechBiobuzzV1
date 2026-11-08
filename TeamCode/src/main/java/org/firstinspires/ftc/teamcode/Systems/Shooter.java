@@ -17,7 +17,9 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotSolver;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretRoute;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.MathUtil;
+import org.firstinspires.ftc.teamcode.Utility.Recording.Recorder;
 import org.firstinspires.ftc.teamcode.Utility.Subsystem;
 
 import static org.firstinspires.ftc.teamcode.Constants.ShooterConstants.FLYWHEEL_DISTANCES;
@@ -79,6 +81,8 @@ public class Shooter extends Subsystem {
     private final TurretRoute turretRoute = new TurretRoute();
 
     public double tt;
+    //what the aim wanted this loop before routing (deg from home, -180..180) and how fast it moves (deg/s), for the match log
+    public double rawAimDegrees = Double.NaN, aimRateDegrees;
 
     public double turretAimVelocity;
 
@@ -95,6 +99,10 @@ public class Shooter extends Subsystem {
     public double manualFlywheelVelocity = Double.NaN;
 
     private boolean autoAim = true;
+    //gamepad 1 Y: turret held still at home (0 deg) instead of aiming
+    private boolean turretLocked;
+    private boolean closeCell, cellChosen;
+    private int swings;
 
     @Override
     public void update() {
@@ -105,9 +113,19 @@ public class Shooter extends Subsystem {
 
         currentRobotPose = follower.pose();
         goalAimUpdate();
-        if (controller1.left_bumperHasJustBeenPressed) shooterToggle = !shooterToggle;
-        if (controller2.right_bumperHasJustBeenPressed) autoAim = !autoAim;
-        updateMechanisms(shooterToggle, autoAim);
+        if (controller1.left_bumperHasJustBeenPressed) {
+            shooterToggle = !shooterToggle;
+            Recorder.note("driver", shooterToggle ? "flywheel on" : "flywheel off");
+        }
+        if (controller2.right_bumperHasJustBeenPressed) {
+            autoAim = !autoAim;
+            Recorder.note("driver", autoAim ? "auto aim on" : "auto aim off");
+        }
+        if (controller1.yHasJustBeenPressed) {
+            turretLocked = !turretLocked;
+            Recorder.note("driver", turretLocked ? "turret locked at 0" : "turret aiming");
+        }
+        updateMechanisms(shooterToggle, autoAim && !turretLocked);
     }
 
     public void provideComponents(Flywheel flywheel, TurretBase turret, Follower follower) {
@@ -116,10 +134,15 @@ public class Shooter extends Subsystem {
 
     //autonomous: no gamepads, always aims
     public void updateAutonomous(boolean rampUp) {
+        updateAutonomous(rampUp, true);
+    }
+
+    //aim off = the turret goes back to where it was at INIT (home) and holds there
+    public void updateAutonomous(boolean rampUp, boolean aim) {
 
         goal = Goal.forAlliance(alliance.getAlliance());
         currentRobotPose = follower.pose();
-        updateMechanisms(rampUp, true);
+        updateMechanisms(rampUp, aim);
     }
 
     public boolean isAimSolutionUsable() {
@@ -132,7 +155,15 @@ public class Shooter extends Subsystem {
 
         turretPose = getTurretPoseFromBotPose(currentRobotPose);
 
-        goalCoordinate = goal.getCoordinate(currentRobotPose);
+        //which CELL: the robot's half, with a band around the line so driving along it can't flip the aim 40-55 deg back and forth
+        double y = currentRobotPose.y(), line = ShooterConstants.FAR_ZONE_CLOSE_ZONE_BARRIER, band = ShooterConstants.CELL_SWITCH_BAND_INCHES;
+        boolean wasClose = closeCell;
+        if (y > line + band) closeCell = true;
+        else if (y < line - band) closeCell = false;
+        else if (!cellChosen) closeCell = y > line;
+        if (cellChosen && wasClose != closeCell) Recorder.note("shooter", closeCell ? "cell CLOSE" : "cell FAR", y);
+        cellChosen = true;
+        goalCoordinate = closeCell ? goal.getCloseCoordinate() : goal.getFarCoordinate();
         boolean goalSet = Goal.isSet(goalCoordinate);
 
         //shoot on the move (ShotSolver): the turret point's field velocity, robot's plus its spin swinging the turret round
@@ -159,7 +190,11 @@ public class Shooter extends Subsystem {
         //spinning up (or past the fit): aim with the target speed's flight time meanwhile
         if (shotMissInches != shotMissInches) shot.equivalentDistance(gx, gy, vx, vy);
         shotTime = shot.time;
-        publishMiss(shotMissInches);
+        //the miss only means something where the speed table covers this shot: a flat/placeholder table (or no fit) can't say
+        //how far a speed throws, and its miss would hold every shot forever
+        double extrapolate = ShooterConstants.FLYWHEEL_FIT_EXTRAPOLATE_INCHES;
+        boolean covered = FLYWHEEL_MODEL.isValid() && Math.abs(FLYWHEEL_MODEL.evaluate(FLYWHEEL_MODEL.maxDistance()) - FLYWHEEL_MODEL.evaluate(FLYWHEEL_MODEL.minDistance())) > 1 && shotDistance >= FLYWHEEL_MODEL.minDistance() - extrapolate && shotDistance <= FLYWHEEL_MODEL.maxDistance() + extrapolate;
+        publishMiss(shotMissInches, covered);
         virtualGoal = goalSet ? new Pose(goalCoordinate.x() - vx * shotTime, goalCoordinate.y() - vy * shotTime) : goalCoordinate;
         distanceToGoal = goalSet ? turretPose.distance(virtualGoal) : Double.NaN;
 
@@ -178,7 +213,13 @@ public class Shooter extends Subsystem {
             double turretNow = ShooterConstants.TURRET_AIM_DIRECTION * (turret.getPosition() - turretStartPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE;
             double aimRate = getTurretAimRate(aimBotPose, robotVelocity, virtualGoal);
             double min = ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, max = ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES;
-            tt = turretRoute.update(rawtt, aimRate, turretNow, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES);
+            tt = turretRoute.update(rawtt, aimRate, turretNow, min, max, ShooterConstants.TURRET_SWING_MARGIN_DEGREES, Clock.seconds());
+            rawAimDegrees = rawtt;
+            aimRateDegrees = aimRate;
+            if (turretRoute.hasSwung()) {
+                swings++;
+                Recorder.note("turret", "swing a full turn to", tt);
+            }
 
             turretAimPosition = ShooterConstants.TURRET_AIM_DIRECTION * tt * ShooterConstants.TURRET_TICKS_PER_DEGREE + turretStartPosition;
 
@@ -188,6 +229,8 @@ public class Shooter extends Subsystem {
         else {
             turretRoute.reset();
             tt = 0;
+            rawAimDegrees = Double.NaN;
+            aimRateDegrees = 0;
             turretAimPosition = turretStartPosition;
             turretAimVelocity = 0;
         }
@@ -210,16 +253,20 @@ public class Shooter extends Subsystem {
     private static double lastMiss = Double.NaN;
     private static long lastMissNs = Long.MIN_VALUE / 2;
 
-    private static void publishMiss(double miss) {
+    private static boolean lastMissCovered;
+
+    private static void publishMiss(double miss, boolean covered) {
 
         lastMiss = miss;
+        lastMissCovered = covered;
         lastMissNs = System.nanoTime();
     }
 
-    /// true when a ball fired now scores by ShotSolver (or the gate is off, or no Shooter has run in the last 0.2 s)
+    /// true when a ball fired now scores by ShotSolver (or the gate is off, the speed table doesn't cover this shot, or no
+    /// Shooter has run in the last 0.2 s)
     public static boolean shotWillScore() {
 
-        if (!ShooterConstants.SHOT_MISS_GATE || System.nanoTime() - lastMissNs > 200_000_000L) return true;
+        if (!ShooterConstants.SHOT_MISS_GATE || !lastMissCovered || System.nanoTime() - lastMissNs > 200_000_000L) return true;
         return Math.abs(lastMiss) <= ShooterConstants.SHOT_MISS_TOLERANCE_INCHES;
     }
 
@@ -268,10 +315,10 @@ public class Shooter extends Subsystem {
 
     private void goalAimUpdate() {
 
-        if (controller2.xHasJustBeenPressed) {
+        if (controller2.bHasJustBeenPressed) {
             turretStartPosition-=ShooterConstants.TURRET_HOME_POSITION_INCREMENT;
         }
-        else if (controller2.bHasJustBeenPressed) {
+        else if (controller2.xHasJustBeenPressed) {
             turretStartPosition+=ShooterConstants.TURRET_HOME_POSITION_INCREMENT;
         }
 
@@ -287,10 +334,23 @@ public class Shooter extends Subsystem {
 
         follower.setPose(reZeroPose);
         relocalizations++;
+        Recorder.note("driver", "relocalized", relocalizations);
         controller1.rumble(GeneralConstants.NORMAL_CONTROLLER_RUMBLE_TIME);
     }
 
     /// how many times gamepad 1's main button relocalized: if it doesn't go up on a press, the press isn't reaching the robot
+    public boolean isCloseCell() {
+        return closeCell;
+    }
+
+    public int getSwings() {
+        return swings;
+    }
+
+    public boolean isTurretLocked() {
+        return turretLocked;
+    }
+
     public int getRelocalizations() {
         return relocalizations;
     }

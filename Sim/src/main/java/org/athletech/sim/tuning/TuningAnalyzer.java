@@ -170,6 +170,8 @@ public final class TuningAnalyzer {
         Arrays.sort(folders);
         for (int k = folders.length - 1; k >= 0; k--) {
             File result = new File(folders[k], "result.csv");
+            //an IGNORED file in the run's folder (with why) keeps a bad run out, e.g. one made while the loop was broken
+            if (new File(folders[k], "IGNORED").isFile()) continue;
             if (result.isFile() && "done".equals(readKeyValues(result).get("status"))) return folders[k];
         }
         return null;
