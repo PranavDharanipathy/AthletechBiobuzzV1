@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.Constants;
 
-//written by :Sim:analyzeTuning from TunerTeleOp + Turret / Drivetrain Autotuner data on every build, don't edit by hand
+//generated every build, don't edit
 public class TunedConstants {
 
     public static String SESSIONS = "20280507-230429";
