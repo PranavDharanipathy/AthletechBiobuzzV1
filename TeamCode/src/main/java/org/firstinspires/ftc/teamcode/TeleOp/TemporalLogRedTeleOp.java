@@ -17,10 +17,6 @@ import org.firstinspires.ftc.teamcode.Utility.TemporalLog.TemporalLog;
 
 import java.io.File;
 
-/// the RED TeleOp, exactly, with everything logged against time: every hardware read and write (value, duration,
-/// cached/redundant), every variable of the TeleOp and everything it holds (drive, shooter, flywheel, turret and its route,
-/// intake, blocker, FIArm, gamepads, follower and its pose) plus all the Constants whenever one changes, Blaze's background
-/// reads, loop boundaries and phases. tools/temporal_log.py turns it into CSV and a timeline of decisions
 @TeleOp(name = "Temporal Log Red", group = "A_Match")
 public class TemporalLogRedTeleOp extends RedTeleOp {
 
@@ -29,7 +25,7 @@ public class TemporalLogRedTeleOp extends RedTeleOp {
     @Override
     public void init() {
 
-        //open before the hardware is built, so INIT's writes are in too
+        //open before hardware so INIT's writes are in
         dir = TemporalLog.open("Temporal Log Red");
         TemporalLog.mark("phase.init", 0);
         super.init();

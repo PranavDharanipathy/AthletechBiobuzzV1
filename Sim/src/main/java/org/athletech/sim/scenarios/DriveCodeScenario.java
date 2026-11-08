@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-//code in the loop: the robot's own DriveController against the sim mecanum drive, sticks and shoves scripted
 final class DriveCodeScenario {
 
     private DriveCodeScenario() {}
@@ -19,19 +18,16 @@ final class DriveCodeScenario {
 
     interface Sticks {
 
-        /// forward, left, ccw, -1..1
         void command(double t, double[] out);
     }
 
     interface Shove {
 
-        /// field N (x, y) and N*m ccw
         void force(double t, double[] out);
     }
 
     static final class Trace {
 
-        //t, x, y, heading (in, rad), vx, vy, omega (in/s, rad/s), forward speed, left speed (robot frame, in/s)
         final List<double[]> rows = new ArrayList<>();
 
         double[] at(double t) {
@@ -45,7 +41,6 @@ final class DriveCodeScenario {
 
         double positionIn = 0.02, headingRad = Math.toRadians(0.1), velocityIn = 0.5, omegaRad = Math.toRadians(0.5);
         double commandDelay = 0.01;
-        //from jumpAt the pose reads jumpX further along x (a relocalization)
         double jumpAt = Double.NaN, jumpX;
 
         Noise scaled(double scale, double delay) {
@@ -80,7 +75,6 @@ final class DriveCodeScenario {
         return n > 0 ? sum / n : Double.NaN;
     }
 
-    /// controller null = the old open loop (sticks straight to power, brake at zero)
     static Trace run(MecanumDrive.Params p, Battery battery, DriveController controller, Sticks sticks, Shove shove, double seconds, double loopSeconds, Noise noise, long seed) {
 
         MecanumDrive d = new MecanumDrive(p);
@@ -130,7 +124,6 @@ final class DriveCodeScenario {
         double seconds, maxTravel;
     }
 
-    /// the robot's Drivetrain Autotuner, run against the sim drive
     static Tune autotune(MecanumDrive.Params p, Battery battery, double loopSeconds, Noise noise, long seed, double maxSeconds) {
 
         MecanumDrive d = new MecanumDrive(p);
@@ -163,7 +156,6 @@ final class DriveCodeScenario {
         return r;
     }
 
-    /// a controller whose model is what the sim robot really is (what a perfect autotune would give)
     static DriveController matched(MecanumDrive.Params p, Battery battery, double loopSeconds) {
 
         DriveController c = new DriveController();
@@ -184,7 +176,6 @@ final class DriveCodeScenario {
         return a == 0 ? (c * d.vx() + s * d.vy()) * IN : a == 1 ? (-s * d.vx() + c * d.vy()) * IN : d.omega();
     }
 
-    /// measures the sim robot the way the autotuner would: steps of power, steady speed and time constant per axis
     static final class DriveModel {
 
         final double[] kS = new double[3], kV = new double[3], kA = new double[3], maxAccel = new double[3], maxDecel = new double[3];
@@ -224,7 +215,6 @@ final class DriveCodeScenario {
                 m.kV[a] = (powers[1] - powers[0]) / (speeds[1] - speeds[0]);
                 m.kS[a] = Math.max(0, powers[0] - m.kV[a] * speeds[0]);
                 m.kA[a] = 0.5 * (taus[0] + taus[1]) * m.kV[a];
-                //full power from rest, then full reverse from 70% speed: what traction allows
                 MecanumDrive d = new MecanumDrive(p);
                 d.reset(0, 0, 0);
                 double[] wheels = new double[4], u = new double[3];

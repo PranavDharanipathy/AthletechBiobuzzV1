@@ -20,12 +20,6 @@ import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-/// time -> event log of everything: every hardware read and write (value, how long it took, cached/redundant), every variable
-/// of the OpMode's object graph and the Constants whenever it changes (VariableWatcher), Blaze's background bulk and Pinpoint
-/// reads with their own times, loop boundaries and phases.
-/// Files in /sdcard/FIRST/data/TemporalLog/<time>/: events.bin (24-byte records, little endian: long ns since start, int key,
-/// int aux, double value), keys.tsv (key -> kind, name, labels), meta.txt. tools/temporal_log.py turns them into CSV/timelines.
-/// The loop thread only fills reused buffers; one low-priority thread writes them. Single loop thread: don't log from others
 public final class TemporalLog {
 
     public static volatile boolean active;
@@ -55,7 +49,6 @@ public final class TemporalLog {
 
     private TemporalLog() {}
 
-    /// before the OpMode builds its hardware, so INIT's writes are in too
     public static synchronized File open(String opMode) {
 
         close();
@@ -120,7 +113,6 @@ public final class TemporalLog {
         return dir;
     }
 
-    /// after the OpMode is built: every variable reachable from root, plus the static fields of the given classes
     public static synchronized void watch(Object root, String rootName, Class<?>... statics) {
 
         if (!active) return;
@@ -130,12 +122,10 @@ public final class TemporalLog {
         watcher.sample(System.nanoTime());
     }
 
-    /// a named moment (phase change, button) with a value
     public static void mark(String name, double value) {
         if (active) record(System.nanoTime(), key("phase", name, ""), 0, value);
     }
 
-    /// top of a loop: loop marker, then Blaze's background reads since the last loop (each at its own time)
     public static void beginLoop() {
 
         if (!active) return;
@@ -148,7 +138,6 @@ public final class TemporalLog {
         BlazeSession.PINPOINT.drain(pinSink);
     }
 
-    /// bottom of a loop: every changed variable
     public static void endLoop() {
 
         if (!active) return;
@@ -162,7 +151,6 @@ public final class TemporalLog {
         if (t1 - lastHandoff > 200_000_000L) handoff();
     }
 
-    /// DeviceTracker: one hardware read/write. NaN value on a cache hit = the last value read
     public static void io(DeviceTracker tracker, HwOp op, long t0, long t1, boolean flag, double value, Class<?> enumClass) {
 
         int[] k = tracker.temporalKeys;
@@ -182,7 +170,6 @@ public final class TemporalLog {
         record(t1, id, (int) us | (flag ? FLAG : 0), value);
     }
 
-    /// keys cached outside this class are only good for the session they were made in
     public static boolean stale(int keySession) {
         return keySession != session;
     }
@@ -195,7 +182,6 @@ public final class TemporalLog {
         return key(kind, name, labels);
     }
 
-    /// a read made outside the Monitored wrappers (HardwareMonitor's hub samples): started at t0, done at t1
     public static void value(long t1, int key, long t0, double v) {
         if (active) record(t1, key, (int) Math.max(0, Math.min(FLAG - 1, (t1 - t0) / 1000)), v);
     }
@@ -212,7 +198,6 @@ public final class TemporalLog {
         return sb.toString();
     }
 
-    /// new key: allocates (name strings), so only at set-up or the first time something is seen
     static int key(String kind, String name, String labels) {
 
         if (keyCount >= MAX_KEYS) return MAX_KEYS - 1;
@@ -260,7 +245,6 @@ public final class TemporalLog {
         lastHandoff = System.nanoTime();
     }
 
-    //writer thread: blocks on full buffers, never touches hardware
     private static void write() {
 
         while (writing || !full.isEmpty()) {

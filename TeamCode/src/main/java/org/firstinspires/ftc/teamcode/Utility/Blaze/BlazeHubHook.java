@@ -10,8 +10,6 @@ import dev.nextftc.robot.opmode.BlazeBulkReadHook;
 import dev.nextftc.robot.opmode.NextOpMode;
 import dev.nextftc.robot.opmode.OpModeHook;
 
-/// NextFTC's BlazeBulkReadHook for one hub, only if that hub is there and BlazeConstants turns it on (Blaze throws on a missing
-/// hub). Tells BlazeSession the hub is fed, so the robot stops clearing its bulk cache
 public final class BlazeHubHook implements OpModeHook {
 
     private final boolean control;

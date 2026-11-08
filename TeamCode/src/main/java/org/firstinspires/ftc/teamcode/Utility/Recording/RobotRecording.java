@@ -27,14 +27,10 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Date;
 
-/// what Recorder records: each piece of the robot adds its channels here (cached state only, no hardware calls), and context()
-/// writes everything that explains a run (every constant, the hardware, the start). TeleOpBaseOpMode, AthletechRobot (autos) and
-/// the tuners call these; a new subsystem gets a method here
 public final class RobotRecording {
 
     private RobotRecording() {}
 
-    //every Constants class: their values at the start of a run go into meta.tsv
     static final String[] CONSTANTS = {
             "BlazeConstants", "BlockerConstants", "DeviceConstants", "DrivetrainConstants", "FieldConstants", "FlywheelConstants",
             "GeneralConstants", "IntakeConstants", "ShooterConstants", "TunedConstants", "TurretConstants", "VisionConstants",
@@ -50,7 +46,6 @@ public final class RobotRecording {
         return ShooterConstants.TURRET_TICKS_PER_DEGREE;
     }
 
-    /// loop timing, battery, power, memory (HardwareMonitor's cached samples)
     public static void loop(Recorder r) {
 
         final Runtime runtime = Runtime.getRuntime();
@@ -62,7 +57,6 @@ public final class RobotRecording {
         r.channel("loop", "heap_mb", "MB", "Java heap in use", () -> (runtime.totalMemory() - runtime.freeMemory()) / 1048576.0);
     }
 
-    /// every stick, trigger and button
     public static void gamepad(Recorder r, String name, final BetterGamepad g) {
 
         if (g == null) return;
@@ -94,7 +88,6 @@ public final class RobotRecording {
         double x = Double.NaN, y = Double.NaN, heading = Double.NaN, vx = Double.NaN, vy = Double.NaN, omega = Double.NaN;
     }
 
-    /// pose and velocity (Pinpoint through Pedro), read once per sample
     public static void pose(Recorder r, final Follower follower) {
 
         if (follower == null) return;
@@ -118,7 +111,6 @@ public final class RobotRecording {
         r.channel("pose", "omega", "deg/s", "turn rate (+ = counterclockwise)", () -> Math.toDegrees(m.omega));
     }
 
-    /// TeleOp drive: sticks after shaping, the pose hold, the wheels
     public static void drivetrain(Recorder r, final Drivetrain d) {
 
         if (d == null) return;
@@ -143,7 +135,6 @@ public final class RobotRecording {
         r.channel("drive", "power_turn", "", "", () -> c.power[2]);
     }
 
-    /// the turret and everything its controller is thinking. Angles in deg from home
     public static void turret(Recorder r, final TurretBase t) {
 
         if (t == null) return;
@@ -187,7 +178,6 @@ public final class RobotRecording {
         r.channel("turret", "filter_hz", "Hz", "velocity filter", t::getFilterBandwidth);
     }
 
-    /// the flywheel and its controller
     public static void flywheel(Recorder r, final Flywheel f) {
 
         if (f == null) return;
@@ -210,7 +200,6 @@ public final class RobotRecording {
         r.channel("flywheel", "filter_hz", "Hz", "", () -> f.getEncoder().getFilterBandwidth());
     }
 
-    /// the match aim: goal, cell, route, shot solution
     public static void shooter(Recorder r, final Shooter s) {
 
         if (s == null) return;
@@ -274,7 +263,6 @@ public final class RobotRecording {
         r.channel("fiarm", "right", "", "servo (its state's)", () -> a.getState().getRightPosition());
     }
 
-    /// what explains a run: the OpMode, every constant, the hardware, where it started from
     public static void context(Recorder r, String opMode, String alliance, HardwareMap hardwareMap) {
 
         r.meta("opmode", opMode);

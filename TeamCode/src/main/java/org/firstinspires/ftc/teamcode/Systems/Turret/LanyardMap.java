@@ -11,9 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-//the volts the lanyards take at each turret angle, learned from what the feedback had to add.
-//Lanyards that overlap just add up in the same bins, so it doesn't care how many there are or where they start.
-//One table per direction: a lanyard drags differently going out than coming back
 public class LanyardMap {
 
     public final double minDegrees, maxDegrees, binDegrees;
@@ -58,7 +55,6 @@ public class LanyardMap {
         return true;
     }
 
-    /// direction > 0 turning up, < 0 turning down, 0 holding (both tables averaged)
     public double volts(double degrees, double direction) {
 
         if (!locate(degrees)) return 0;
@@ -71,7 +67,6 @@ public class LanyardMap {
         return 0.5 * (up + down);
     }
 
-    /// moves amount volts into the two bins around degrees (split the same way volts() reads them back), direction 0 = both tables
     public void learn(double degrees, double direction, double amount, double maxVolts) {
 
         if (!(amount == amount) || degrees < minDegrees || degrees > maxDegrees || !locate(degrees)) return;
@@ -107,7 +102,6 @@ public class LanyardMap {
         return b.toString();
     }
 
-    /// reads a map saved with any bin size, resampled onto these bins; false (and left alone) if it's junk
     public boolean fromCsv(String text) {
 
         List<double[]> rows = new ArrayList<>();
@@ -119,7 +113,6 @@ public class LanyardMap {
                 if (r[0] == r[0] && r[1] == r[1] && r[2] == r[2] && !Double.isInfinite(r[1]) && !Double.isInfinite(r[2])) rows.add(r);
             }
             catch (NumberFormatException e) {
-                //header
             }
         }
         if (rows.isEmpty()) return false;
@@ -172,7 +165,7 @@ public class LanyardMap {
         }
     }
 
-    /// writes a temp file then renames it, so a pulled battery can't leave half a map
+    //temp file then rename, so a pulled battery can't leave half a map
     public boolean save(File file) {
 
         if (file == null) return false;
@@ -202,7 +195,6 @@ public class LanyardMap {
             c.close();
         }
         catch (IOException e) {
-            //nothing to do
         }
     }
 

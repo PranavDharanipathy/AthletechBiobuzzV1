@@ -24,7 +24,7 @@ public final class MotorElectricalModel {
         if (!(windingOhms > 0) || Double.isNaN(power) || Double.isNaN(batteryVolts) || Double.isNaN(currentAmps)) {
             return Double.NaN;
         }
-        if (Math.abs(power) < 0.02) return Double.NaN; //coasting/braking: sign of current unknown
+        if (Math.abs(power) < 0.02) return Double.NaN;
         double applied = power * batteryVolts;
         return applied - Math.signum(power) * currentAmps * windingOhms;
     }

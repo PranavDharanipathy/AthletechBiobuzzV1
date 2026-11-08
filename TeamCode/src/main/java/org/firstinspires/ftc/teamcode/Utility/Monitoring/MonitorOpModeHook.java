@@ -68,7 +68,6 @@ public final class MonitorOpModeHook implements OpModeManagerNotifier.Notificati
         } catch (Throwable t) {
             RobotLog.ee(HardwareMonitor.TAG, t, "HardwareMonitor: onOpModePostStop failed");
         }
-        //after every OpMode, crashed or not: Blaze closed and the SDK motors back, the temporal log flushed
         try {
             BlazeSession.end();
         } catch (Throwable t) {

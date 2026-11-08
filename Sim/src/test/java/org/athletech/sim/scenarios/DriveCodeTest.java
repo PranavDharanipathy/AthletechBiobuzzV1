@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-//the robot's DriveController and Drivetrain Autotuner against the sim mecanum drive, shoved around
 public class DriveCodeTest {
 
     static ProfileDb db;
@@ -85,7 +84,6 @@ public class DriveCodeTest {
         assertTrue("travel " + tune.maxTravel, tune.maxTravel < 40);
     }
 
-    //a 60 N defender for a second: the old drive got shoved 17-18 in and stayed there
     @Test
     public void holdPushesBackAgainstShovesInEveryAxis() {
 
@@ -103,7 +101,6 @@ public class DriveCodeTest {
         assertTrue("twist " + Math.toDegrees(twist) + " vs open " + Math.toDegrees(openTwist), twist < 0.4 * openTwist);
     }
 
-    //driving slowly, a robot behind pushes: it keeps the stick's speed instead of being run faster (old drive: 18 -> 40 in/s)
     @Test
     public void slowDriveKeepsItsSpeedWhenPushedFromBehind() {
 
@@ -118,7 +115,6 @@ public class DriveCodeTest {
         assertEquals("pushed " + during + " vs " + before, before, during, 0.15 * before);
     }
 
-    //letting go at full speed: stops at least as well as the old drive and doesn't get pulled back afterwards
     @Test
     public void stopsLikeTheOldDriveAndNeverRollsBack() {
 
@@ -136,7 +132,6 @@ public class DriveCodeTest {
         assertTrue("rolled back " + (farthest(held) - held.at(3.5)[1]), farthest(held) - held.at(3.5)[1] < 0.5);
     }
 
-    //the Shooter relocalizes (setPose): the pose jumps 20 in, the robot must not lunge after where it used to be
     @Test
     public void relocalizingDoesNotMakeItLunge() {
 
@@ -147,7 +142,6 @@ public class DriveCodeTest {
         assertTrue("moved " + DriveCodeScenario.maxDisplacement(tr, 0.5, 4), DriveCodeScenario.maxDisplacement(tr, 0.5, 4) < 0.5);
     }
 
-    //driving into something it can't move, then it gets let go: the leash keeps it from lunging to catch up
     @Test
     public void pinnedThenReleasedDoesNotLunge() {
 
@@ -163,7 +157,6 @@ public class DriveCodeTest {
         assertTrue("after the pin " + peak + " vs cruise " + cruise, peak < 1.3 * cruise);
     }
 
-    //worse Pinpoint and loop timing: the autotuner picks a softer hold that still beats the old drive, with no twitching
     @Test
     public void noisySensingGetsASofterHoldThatStillWorks() {
 

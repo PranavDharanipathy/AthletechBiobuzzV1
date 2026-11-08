@@ -12,8 +12,6 @@ import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 
 import dev.nextftc.robot.Mechanism;
 
-/// the whole shooter: flywheel + turret run by Shooter's own logic (goal aim, SOTM, routing), localized off the drive's
-/// follower. Periodic aims and holds the flywheel every loop; the drive's periodic has to run first (AthletechRobot's order)
 public final class Shooter implements Mechanism {
 
     public final Flywheel flywheel;
@@ -21,7 +19,6 @@ public final class Shooter implements Mechanism {
     public final org.firstinspires.ftc.teamcode.Systems.Shooter shooter = new org.firstinspires.ftc.teamcode.Systems.Shooter();
     private boolean rampUp, started, aim = true, locked;
 
-    /// turret must point straight at INIT: that's its home
     public Shooter(HardwareMap hardwareMap, Drive drive) {
 
         flywheel = new Flywheel(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.flywheelMotorDeviceName, false));
@@ -62,24 +59,20 @@ public final class Shooter implements Mechanism {
         return instant(() -> rampUp = false);
     }
 
-    /// flywheel held at this speed (ticks/s) instead of the distance fit
     public Command velocity(double ticksPerSecond) {
         return instant(() -> shooter.manualFlywheelVelocity = ticksPerSecond);
     }
 
-    /// no shooting: flywheel off, turret held at home (0 deg) the whole time
     public void lockHome() {
         locked = true;
     }
 
-    /// flywheel off, turret back to home and holding there
     public void home() {
 
         rampUp = false;
         aim = false;
     }
 
-    /// aimed, the aim is one it can shoot from, and the flywheel is within band of its target
     public boolean isReady(double flywheelBand) {
         return started && rampUp && turret.isOnTarget() && shooter.isAimSolutionUsable() && Math.abs(flywheel.getTargetVelocity() - flywheel.getCurrentVelocity()) <= flywheelBand;
     }

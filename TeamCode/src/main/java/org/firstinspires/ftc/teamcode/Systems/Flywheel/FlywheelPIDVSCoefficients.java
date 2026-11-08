@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.Systems.Flywheel;
 
 import org.firstinspires.ftc.teamcode.Utility.DynamicTrapezoidalSum;
 
-/// Easier usage of the coefficients for the flywheel
 public class FlywheelPIDVSCoefficients {
 
     public double kpFar, kpClose;

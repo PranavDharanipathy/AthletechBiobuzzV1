@@ -81,7 +81,7 @@ public final class Flywheel {
         this.motors = new DcMotor[p.motorCount()];
         for (int i = 0; i < motors.length; i++) {
             motors[i] = new DcMotor(p.motor());
-            motors[i].setBrake(false); //flywheels coast
+            motors[i].setBrake(false);
         }
     }
 

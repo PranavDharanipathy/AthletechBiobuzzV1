@@ -81,7 +81,6 @@ public final class Flywheel {
 
     public double load = 0;
 
-    //shot power (FlywheelConstants FEED_BOOST / SHOT_KICK): what it adds while feeding and right after a ball hits
     public double feedBoostVolts = FlywheelConstants.FLYWHEEL_FEED_BOOST_VOLTS, shotKickVolts = FlywheelConstants.FLYWHEEL_SHOT_KICK_VOLTS;
     public double shotKickTime = FlywheelConstants.FLYWHEEL_SHOT_KICK_TIME, shotDetectDrop = FlywheelConstants.FLYWHEEL_SHOT_DETECT_DROP;
     public double boost = 0;
@@ -89,7 +88,6 @@ public final class Flywheel {
     private boolean feeding = false;
     private double kickUntil = -1;
 
-    /// the blocker is letting balls through
     public void setFeeding(boolean feeding) {
         this.feeding = feeding;
     }
@@ -133,7 +131,6 @@ public final class Flywheel {
         maxD = coefficients.maxD;
     }
 
-    /// Setting variables that do in fact change
     private void chooseCoefficientsInternal() {
 
         kp = coefficients.kp(targetVelocity, currentVelocity);
@@ -147,12 +144,11 @@ public final class Flywheel {
 
     private double prevTime = 0, prevError = 0, error;
 
-    /// @param velocity in ticks per second
     public void setVelocity(double velocity, boolean allowIntegralReset) {
 
         if (allowIntegralReset && targetVelocity != velocity) {
 
-            resetIntegral(); //resetting integral when target velocity changes to prevent integral windup
+            resetIntegral();
         }
 
         targetVelocity = velocity;
@@ -174,7 +170,6 @@ public final class Flywheel {
 
         boolean wasFirstTick = firstTick;
 
-        //setting start time
         if (firstTick) {
 
             startTime = getSeconds();
@@ -201,26 +196,20 @@ public final class Flywheel {
 
         error = targetVelocity - currentVelocity;
 
-        //velocity feedforward
         v = kv * targetVelocity;
 
-        //static friction
         s = targetVelocity != 0 ? ks * MathUtil.smoothSign(currentVelocity, ksSignWidth) : 0;
 
-        //proportional. Well over the target it may cancel the feedforward so it coasts down: clamped at minP it kept
-        //driving ~4.6 V and took 2 s to drop 170 ticks/s when the target fell (TeleOp moving closer, relocalizing)
         p = kp * error;
         p = MathUtil.clamp(p, Math.min(minP, -(v + s + Math.max(i, 0))), maxP);
 
         if (ki != 0 && MathUtil.isFinite(error * dt) && targetVelocity != 0) errorSum.updateSum(dt, error);
-        else errorSum.setSum(0); //integral is reset if it's NaN or if targetVelocity is equal to 0
+        else errorSum.setSum(0);
 
-        //i smashing
         if (Math.signum(error) != Math.signum(prevError)) {
             errorSum.setSum(errorSum.getSum() * kISmash);
         }
 
-        //i is prevented from getting too high or too low
         if (ki == 0) {
             errorSum.setSum(0);
             i = 0;
@@ -232,13 +221,11 @@ public final class Flywheel {
             i = ki * errorSum.getSum();
         }
 
-        //derivative
         d = dt > 0 ? kd * (error - prevError) / dt : 0;
         double batteryVolts = voltageCompensator.volts();
         if (!MathUtil.valueWithinRangeIncludingPoles(d, -batteryVolts, batteryVolts)) d = 0;
         d = MathUtil.clamp(d, minD, maxD);
 
-        //hidden load: what it sent minus what holding this speed (and speeding up this fast) takes. Near the target only, not maxed out
         double observerTime = FlywheelConstants.FLYWHEEL_LOAD_OBSERVER_TIME;
         if (targetVelocity == 0 || !(observerTime > 0)) load = 0;
         else if (!wasFirstTick && dt > 0 && Math.abs(error) <= FlywheelConstants.FLYWHEEL_VELOCITY_MARGIN_OF_ERROR && Math.abs(power) < 0.98) {
@@ -294,10 +281,8 @@ public final class Flywheel {
         flywheelMotor.setPower(this.power);
     }
 
-    //default mode is enabled
     private boolean isPIDEnabled = true;
 
-    /// @return if motor is enabled
     public boolean getPIDEnabled() {
         return isPIDEnabled;
     }
@@ -332,8 +317,6 @@ public final class Flywheel {
         return targetVelocity;
     }
 
-    /// @param velocityMarginOfError Acceptable variation in velocity.
-    /// @param stabilityMarginOfError Acceptable variation in stability.
     public boolean isAtVelocityAndStable(double velocityMarginOfError, double stabilityMarginOfError) {
 
         if (firstTick || !isPIDEnabled || targetVelocity == 0 || !MathUtil.isFinite(targetVelocity) || !MathUtil.isFinite(currentVelocity) || !MathUtil.isFinite(lastCurrentVelocity) || !MathUtil.isFinite(velocityMarginOfError) || velocityMarginOfError < 0 || !MathUtil.isFinite(stabilityMarginOfError) || stabilityMarginOfError < 0) return false;
@@ -366,8 +349,8 @@ public final class Flywheel {
 
         lastCurrentVelocity = 0;
 
-        setVelocity(0, false); //allowIntegralReset is false to speed up computation because of how '||' works - probably negligible
-        resetIntegral(); //integral reset
+        setVelocity(0, false);
+        resetIntegral();
     }
 
     private void resetIntegral() {
@@ -384,7 +367,6 @@ public final class Flywheel {
         return flywheelMotor.getPower();
     }
 
-    /// @return the dt used in the loop that ran most recently
     public double getLoopDt() {
         return dt;
     }

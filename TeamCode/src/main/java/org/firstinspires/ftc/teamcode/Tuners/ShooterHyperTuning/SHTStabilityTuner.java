@@ -34,12 +34,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/// Shooter HyperTuning #1: the full RED TeleOp, played like a match, while the flywheel and turret gains keep getting tuned and
-/// everything goes to /sdcard/FIRST/data/ShooterHyperTuning/<time>/ (loop.csv every loop, events.csv every trial, gains.csv each
-/// time a change is kept, findings.md at stop with principle candidates for an agent, see SYSTEM_EVOLUTION.md).
-/// Flywheel: steady at speed with as little shake as possible, and as much push as it takes to not drop when balls go through.
-/// Turret: as fast as it can to where it's going without jerks on the way or shake at the end, and cancelling the robot's spin
-/// exactly. It starts from the last session's kept gains. Turret constants it changed go back when it stops
 @TeleOp(name = "SHT Stability Tuner", group = "tuning")
 public class SHTStabilityTuner extends TeleOpBaseOpMode {
 
@@ -78,7 +72,6 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         applyComponentTraits();
         drivetrain = createDrivetrain();
 
-        //its own copy, so the tuning never touches FlywheelConstants' object
         FlywheelPIDVSCoefficients c = org.firstinspires.ftc.teamcode.Constants.FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
         coefficients = new FlywheelPIDVSCoefficients(c.kpFar, c.kpClose, c.kiFar, c.kiClose, c.kd, c.kv, c.ks, c.ksSignWidth, c.iSwitch, c.pSwitch, c.kISmash, c.minP, c.maxP, c.minI, c.maxI, c.minD, c.maxD);
         flywheel.setVelocityPIDVSCoefficients(coefficients);
@@ -119,7 +112,6 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         for (int k = 0; k < allKnobs.length; k++) columns[LOOP_COLUMNS.length + k] = allKnobs[k].name;
         loopRow = new double[columns.length];
         loopLog = new CsvLogger(new File(folder, "loop.csv"), columns);
-        //events: which tuner (0 flywheel stability, 1 flywheel shots, 2 turret moves), knob index, from, to, cost, baseline, kept
         eventLog = new CsvLogger(new File(folder, "events.csv"), "t", "tuner", "knob", "from", "to", "cost", "baseline_kept");
         String[] gainColumns = new String[allKnobs.length + 2];
         gainColumns[0] = "t";
@@ -190,7 +182,6 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
                 telemetry.log().add("couldn't write " + file);
             }
         }
-        //the match TeleOps get the turret back as it was
         TurretConstants.TURRET_BANDWIDTH = savedTurret[0];
         TurretConstants.TURRET_BRAKE_DEGREES = savedTurret[1];
         TurretConstants.TURRET_MAX_SPEED_FRACTION = savedTurret[2];
@@ -265,7 +256,6 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         return String.format(Locale.US, "cost %.4g (base %.4g), %s, %d/%d kept", lastCost, o.baseline, trying.isEmpty() ? "measuring" : "trying " + trying, o.keeps, o.trials);
     }
 
-    //the last kept gains of the newest session that has any, so tuning carries on where it left off
     private void resume() {
 
         File[] sessions = new File(AppUtil.ROBOT_DATA_DIR, FOLDER).listFiles();
@@ -274,7 +264,7 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         for (int s = sessions.length - 1; s >= 0; s--) {
             File gains = new File(sessions[s], "gains.csv");
             if (!gains.isFile()) continue;
-            //java.io: the Control Hub's Android has no java.nio.file
+            //no java.nio.file on the hub
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(gains), Charset.forName("UTF-8")))) {
                 String header = reader.readLine(), line, lastLine = null;
                 while ((line = reader.readLine()) != null) if (!line.trim().isEmpty()) lastLine = line;

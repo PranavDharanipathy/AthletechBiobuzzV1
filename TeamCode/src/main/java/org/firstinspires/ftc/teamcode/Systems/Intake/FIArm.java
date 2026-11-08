@@ -10,7 +10,7 @@ public class FIArm extends Subsystem {
 
     private boolean isSubsystem;
 
-    private Object lFIArm, rFIArm; //given FIArm (non-subsystem) or Servo data
+    private Object lFIArm, rFIArm;
 
     private BetterGamepad controller1;
 
@@ -29,7 +29,6 @@ public class FIArm extends Subsystem {
         return this;
     }
 
-    //COMPONENT
     public enum FIArmState {
         DEPLOY(IntakeConstants.FIARM_DEPLOY), RETRACT(IntakeConstants.FIARM_RETRACT);
 
@@ -82,7 +81,7 @@ public class FIArm extends Subsystem {
     @Override
     public void update() {
 
-        if (controller1.dpad_downHasJustBeenPressed) deployed = !deployed; //same button as Intake's
+        if (controller1.dpad_downHasJustBeenPressed) deployed = !deployed;
 
         setState(deployed ? FIArmState.DEPLOY : FIArmState.RETRACT);
     }

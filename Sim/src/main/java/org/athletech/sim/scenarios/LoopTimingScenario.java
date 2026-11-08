@@ -50,7 +50,7 @@ public final class LoopTimingScenario {
         } catch (java.sql.SQLException e) {
             throw new IllegalStateException(e);
         }
-        for (String k : core) rp.req(k); //records them as missing
+        for (String k : core) rp.req(k);
         return null;
     }
 
@@ -73,7 +73,7 @@ public final class LoopTimingScenario {
         double voc = ctx.db.value("battery.open_circuit_v");
         double rInt = ctx.db.value("battery.internal_resistance_ohm");
         double drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
-        Supplier<Battery> bat = () -> new Battery(voc, rInt, drop); //no DB access: safe in parallel
+        Supplier<Battery> bat = () -> new Battery(voc, rInt, drop);
 
         RobotParams lprobe = new RobotParams(ctx.db);
         Launcher.Params lprobeP = lprobe.launcher();

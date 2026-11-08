@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-/// Only for tuning OpModes, never matches.
 public final class LimelightBridge {
 
     private static final int BUFFER_BYTES = 64 * 1024;
@@ -257,7 +256,6 @@ public final class LimelightBridge {
 
         final Link link;
         final SocketChannel channel;
-        //read from this channel, waiting to be written to the peer
         final ByteBuffer in = ByteBuffer.allocate(BUFFER_BYTES);
         End peer;
         SelectionKey key;
@@ -288,7 +286,6 @@ public final class LimelightBridge {
             pending.compact();
         }
 
-        //everything this side sent has reached the peer, so pass the half-close on
         void shutPeerIfDone() throws IOException {
 
             if (!eof || in.position() > 0 || peer.outputShut) return;

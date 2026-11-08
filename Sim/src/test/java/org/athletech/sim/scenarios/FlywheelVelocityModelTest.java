@@ -11,14 +11,12 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-//the match flywheel speed model: a least-squares fit through the tuned points, not a lookup
 public class FlywheelVelocityModelTest {
 
-    //the 2026-11 tuned table, fixed here so the test doesn't move when ShooterConstants is retuned
     static final java.util.List<Double> D = java.util.Arrays.asList(51.71503320693509, 56.29514009214838, 60.899456934836486, 68.99167060900542, 74.57368259902958, 80.60268703640344, 91.2495467341891, 100.4429764662134);
     static final java.util.List<Double> V = java.util.Arrays.asList(1300.0, 1330.0, 1380.0, 1440.0, 1455.0, 1485.0, 1590.0, 1665.0);
 
-    //numpy.polyfit on the 2026-11 table: line 7.256031 d + 925.236135 (rms 12.6), quadratic 0.020858 d^2 + 4.099799 d + 1039.175660
+    //numpy.polyfit reference values
     @Test
     public void fitsTheTunedPointsLikeNumpy() {
 
@@ -32,7 +30,6 @@ public class FlywheelVelocityModelTest {
         for (double x : new double[] {55, 75, 95}) assertEquals(0.020858 * x * x + 4.099799 * x + 1039.175660, quad.evaluate(x), 0.05);
     }
 
-    //past the tuned distances it follows the fit for the extrapolation margin, then holds
     @Test
     public void holdsPastTheExtrapolationMargin() {
 
@@ -45,7 +42,6 @@ public class FlywheelVelocityModelTest {
         assertTrue(bottom < v.get(0) && top > v.get(v.size() - 1));
     }
 
-    //refits only when the points or the degree change; edits (Dashboard) take effect next call
     @Test
     public void refitsOnlyWhenThePointsChange() {
 
@@ -59,7 +55,6 @@ public class FlywheelVelocityModelTest {
         assertEquals(2, m.fits);
     }
 
-    //too few points for the degree drops the degree; none gives NaN (the Shooter then uses FLYWHEEL_SHOOT_VELOCITY); NaN points are skipped
     @Test
     public void degradesSafely() {
 

@@ -34,20 +34,17 @@ public class Encoder {
         return direction;
     }
 
-    /// Allows you to set the direction of the counts and velocity without modifying the motor's direction state
-    /// @param direction either reverse or forward depending on if encoder counts should be negated
     public void setDirection(Direction direction) {
         this.direction = direction;
     }
 
     private int offset = 0;
 
-    /// zeroes the count on the hub, it keeps the old count between OpModes and that's wrong once the turret moved
+    //hub keeps the old count between OpModes
     public void reset() {
         reset(0);
     }
 
-    /// zeroes the count on the hub, then the spot it's at now reads as position
     public void reset(int position) {
 
         if (motor != null) {
@@ -70,7 +67,6 @@ public class Encoder {
         int multiplier = direction.getMultiplier();
         return motor.getVelocity() * multiplier;
     }
-    //velocity filter: bunch of kalman filters at different speeds, whichever fits the hub data best wins
     private static final int FILTERS = 7;
     private static final int NOISE_SAMPLES = 64;
 
@@ -190,7 +186,6 @@ public class Encoder {
             filterBandwidth += weight[k] * filterBandwidths[k];
         }
 
-        //filters that fell way behind (like after a ball) snap to the best one
         for (int k = 0; k < FILTERS; k++) {
             double gap = filterVelocity[k] - filterVelocity[bestIndex];
             if (gap * gap > 9 * (p00[k] + p00[bestIndex] + noiseVariance)) {
@@ -248,22 +243,18 @@ public class Encoder {
         noiseVariance = Math.max(floor, sigma * sigma / 6);
     }
 
-    /// ticks per second
     public double getFilteredVelocity() {
         return filteredVelocity;
     }
 
-    /// ticks per second squared
     public double getFilteredAcceleration() {
         return filteredAcceleration;
     }
 
-    /// Hz
     public double getFilterBandwidth() {
         return filterBandwidth;
     }
 
-    /// ticks per second
     public double getVelocityNoise() {
         return Math.sqrt(noiseVariance);
     }

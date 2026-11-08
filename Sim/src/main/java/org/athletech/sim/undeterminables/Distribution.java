@@ -110,7 +110,7 @@ public final class Distribution {
             case EMPIRICAL:
                 v = samples.length == 0 ? m : samples[rng.nextInt(samples.length)];
                 break;
-            default: //NONE
+            default:
                 v = 0;
         }
         if (kind != Kind.UNIFORM && kind != Kind.TRIANGULAR) {

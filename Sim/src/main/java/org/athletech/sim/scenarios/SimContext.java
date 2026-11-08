@@ -20,7 +20,6 @@ public final class SimContext {
     public final PrintStream log;
     public final String command;
 
-    /// command-line options for scenarios that take their own (sim turret, sim flywheel)
     public org.athletech.sim.utility.Args args;
 
     public SimContext(ProfileDb db, Path outDir, boolean save, boolean force, long seed, int trials, PrintStream log, String command) {

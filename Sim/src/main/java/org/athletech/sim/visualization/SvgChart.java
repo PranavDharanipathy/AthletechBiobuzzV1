@@ -115,7 +115,7 @@ public final class SvgChart {
         if (zeroBased) ymin = Math.min(0, ymin);
         if (yMinFixed != null) ymin = yMinFixed;
         if (yMaxFixed != null) ymax = yMaxFixed;
-        if (ymax - ymin <= 1e-4 * Math.max(Math.abs(ymax), Math.abs(ymin))) { //flat data: show it as a flat line, not noise
+        if (ymax - ymin <= 1e-4 * Math.max(Math.abs(ymax), Math.abs(ymin))) {
             double d = Math.abs(ymax) > 1e-12 ? Math.abs(ymax) * 0.1 : 1;
             ymax += d;
             ymin -= d;

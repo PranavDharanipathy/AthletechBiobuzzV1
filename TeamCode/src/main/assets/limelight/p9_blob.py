@@ -1,10 +1,3 @@
-# Limelight SnapScript: best colour blob, tunable live from the laptop.
-# Uploads to pipeline 9 (the p9_ prefix). Pipeline 9 must be a Python pipeline.
-#
-# llrobot (robot or `python tools/limelight.py inputs ...`):
-#   [h_lo, s_lo, v_lo, h_hi, s_hi, v_hi, use_inputs, debug]
-#   use_inputs = 1 uses those HSV bounds instead of the defaults below, debug = 1 draws the mask outline
-# llpython: [valid, frame, cx_px, cy_px, area_px, blobs, ms]
 import time
 
 import cv2

@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.Tuners;
 
-//the lanyard learning sweep: low end, glide up, stop at the top, glide down, stop at the bottom, again. Starts at 0 going up.
-//Degrees and seconds, no hardware, so the sim runs the exact same sweep
 public final class TurretLanyardSweep {
 
     private TurretLanyardSweep() {}

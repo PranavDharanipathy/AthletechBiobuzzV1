@@ -10,12 +10,8 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-//shoot on the move with the flywheel in it, checked against real ball flight: a launcher whose exit speed matches the tuned
-//table when standing still (that's how it was tuned), the robot's velocity added to the ball, no drag. Where does the ball
-//cross the CELL's height on the way down, against where the goal is?
 public class ShotSolverTest {
 
-    //the 2026-11 tuned table, fixed here so the test doesn't move when ShooterConstants is retuned
     static final java.util.List<Double> D = java.util.Arrays.asList(51.71503320693509, 56.29514009214838, 60.899456934836486, 68.99167060900542, 74.57368259902958, 80.60268703640344, 91.2495467341891, 100.4429764662134);
     static final java.util.List<Double> V = java.util.Arrays.asList(1300.0, 1330.0, 1380.0, 1440.0, 1455.0, 1485.0, 1590.0, 1665.0);
 
@@ -24,7 +20,6 @@ public class ShotSolverTest {
     private static final double EXTRAPOLATE = 12;
     private boolean sotmBefore;
 
-    //these check the shoot-on-the-move math itself, whatever the robot's switch is set to
     @Before
     public void setUp() {
 
@@ -40,7 +35,6 @@ public class ShotSolverTest {
         ShooterConstants.SOTM_ENABLED = sotmBefore;
     }
 
-    //the "real" ball for a flywheel speed: launched like a still shot to the distance that speed was tuned for
     private double[] fly(double flywheel, double aimX, double aimY, double vx, double vy) {
 
         double d = model.distanceFor(flywheel, EXTRAPOLATE);
@@ -52,7 +46,6 @@ public class ShotSolverTest {
         return new double[] {(horizontal * aimX / n + vx) * t, (horizontal * aimY / n + vy) * t};
     }
 
-    //what the Shooter does: flywheel for the equivalent still distance, turret along goal - v T
     private double landingError(double gx, double gy, double vx, double vy, double flywheel) {
 
         double miss = solver.missInches(gx, gy, vx, vy, flywheel, EXTRAPOLATE);
@@ -62,7 +55,6 @@ public class ShotSolverTest {
         return Math.hypot(at[0] - gx, at[1] - gy);
     }
 
-    //every direction and speed up to 60 in/s across the tuned range: the speed it picks plus its aim put the ball in the goal
     @Test
     public void movingShotsLandOnTheGoal() {
 
@@ -81,7 +73,6 @@ public class ShotSolverTest {
         assertTrue("worst landing error " + worst + " in", worst < 0.05);
     }
 
-    //the flywheel has to change with the motion: at the goal slower than standing still, away and across faster
     @Test
     public void flywheelSpeedFollowsTheMotion() {
 
@@ -93,7 +84,6 @@ public class ShotSolverTest {
         assertTrue(across + " " + still, across > still + 5);
     }
 
-    //a lagging or dipping flywheel: missInches says how far long/short the ball really lands, so the blocker can hold it
     @Test
     public void missMatchesWhereTheBallReallyLands() {
 
@@ -113,7 +103,6 @@ public class ShotSolverTest {
         assertTrue(Math.abs(solver.missInches(gx, gy, vx, vy, right + 40, EXTRAPOLATE)) > ShooterConstants.SHOT_MISS_TOLERANCE_INCHES);
     }
 
-    //standing still it's just the speed fit
     @Test
     public void stillShotIsThePlainFit() {
 

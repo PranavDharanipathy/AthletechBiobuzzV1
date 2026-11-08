@@ -64,7 +64,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         tracker.v(power);
         tracker.write(HwOp.SET_POWER, t0, power == lastPower, powerSlot);
         lastPower = power;
-        lastPulseWidth = Double.NaN; //the pulse width now follows the power
+        lastPulseWidth = Double.NaN;
     }
 
     @Override
@@ -149,7 +149,7 @@ public class MonitoredCRServo extends MonitoredDevice<CRServo> implements CRServ
         tracker.v(usWidth);
         tracker.write(HwOp.SET_PULSE_WIDTH, t0, usWidth == lastPulseWidth, powerSlot);
         lastPulseWidth = usWidth;
-        lastPower = Double.NaN; //moved without setPower: the next setPower is real
+        lastPower = Double.NaN;
     }
 
     @Override

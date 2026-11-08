@@ -87,7 +87,7 @@ public class UndeterminablesTest {
         double e = r.equalizeInternal(0);
         assertEquals(0.5 * ceq * dv * dv, e, 1e-12 * Math.abs(e) + 1e-15);
         assertEquals(0, r.vElec(0) - r.vFrame(0), 1e-6);
-        assertEquals(500e-9, r.qFrame() + r.qElec(), 1e-18); //charge is conserved
+        assertEquals(500e-9, r.qFrame() + r.qElec(), 1e-18);
         assertEquals(0.5 * 1e-12 * 2e-12 / 3e-12 * 100 * 100, Electrostatics.contactEnergy(1e-12, 2e-12, 100), 1e-20);
     }
 
@@ -98,15 +98,15 @@ public class UndeterminablesTest {
         strap.addFrame(500e-9);
         none.addFrame(500e-9);
         for (int i = 0; i < 10; i++) {
-            strap.step(0.001, 0, 0, 1.0 / 470);   //REV strap: 470 ohm
-            none.step(0.001, 0, 0, 1e-12);   //insulation only
+            strap.step(0.001, 0, 0, 1.0 / 470);
+            none.step(0.001, 0, 0, 1e-12);
         }
         assertTrue(Math.abs(strap.vElec(0) - strap.vFrame(0)) < 1);
         assertTrue(Math.abs(none.vElec(0) - none.vFrame(0)) > 100);
         RobotCharge leak = new RobotCharge(100e-12, 30e-12, 300e-12);
         leak.addFrame(1e-6);
         double v0 = leak.vFrame(0);
-        double g = 1e-10; //10 GOhm
+        double g = 1e-10;
         double cTotal = 1 / leak.frameElastance();
         double tau = cTotal / g;
         int steps = 1000;
@@ -150,8 +150,8 @@ public class UndeterminablesTest {
 
         float[] v = new float[100];
         Arrays.fill(v, 12f);
-        for (int i = 10; i < 13; i++) v[i] = 6.5f;   //3 ms dip
-        v[50] = 6.5f;                                 //1 ms blip
+        for (int i = 10; i < 13; i++) v[i] = 6.5f;
+        v[50] = 6.5f;
         List<Double> b = Disconnects.brownouts(v, 0.001, 7, 0.002);
         assertEquals(1, b.size());
         assertEquals(0.011, b.get(0), 1e-9);
@@ -180,7 +180,7 @@ public class UndeterminablesTest {
         d.step(0.001, new Battery(12, 0, 0), 0);
         assertTrue(d.anySlipping());
         double cap = mu * 13 * 9.80665 / 4 / Math.sqrt(2), radius = 0.052;
-        double omega = d.wheelSlip(MecanumDrive.FL) / radius; //the chassis was at rest
+        double omega = d.wheelSlip(MecanumDrive.FL) / radius;
         DcMotor m = new DcMotor(PhysicsTest.YJ312);
         m.setDuty(1);
         assertEquals(cap * radius, m.torque(m.current(12, omega), omega), 1e-6);
@@ -212,7 +212,7 @@ public class UndeterminablesTest {
         p.transitionS = b.transitionS;
         p.teleopS = b.teleopS;
         p.cMetal = 100e-12;
-        p.tileRhoS40 = 1e12; //sideways creep on
+        p.tileRhoS40 = 1e12;
         p.wallHitsPerMatch = b.wallHitsPerMatch;
         p.robotContactsPerMatch = b.robotContactsPerMatch;
         p.metalContactsPerMatch = b.metalContactsPerMatch;
@@ -232,12 +232,12 @@ public class UndeterminablesTest {
 
         TileChargeGrid g = new TileChargeGrid(3.6576, 24);
         g.deposit(0.1, 0.1, 1e-6);
-        g.deposit(5, 5, -2e-7); //outside the walls: lands in the corner cell, not lost
+        g.deposit(5, 5, -2e-7);
         assertEquals(8e-7, g.total(), 1e-18);
         g.diffuse(1e-3, 60, 100000);
         assertEquals(8e-7, g.total(), 1e-18);
         assertTrue("spread out", g.maxAbsCell() < 0.5e-6);
-        g.diffuse(10, 1e4, 100); //very conductive: evens out
+        g.diffuse(10, 1e4, 100);
         assertEquals(8e-7 / (24 * 24), g.maxAbsCell(), 1e-15);
     }
 
@@ -260,11 +260,11 @@ public class UndeterminablesTest {
         for (int k = 0; k < n; k++) {
             double s = r2.uniform(0, reads[reads.length - 1] - 100);
             int i = Arrays.binarySearch(reads, s);
-            int next = i >= 0 ? i : -i - 1; //first read at or after the pulse start
+            int next = i >= 0 ? i : -i - 1;
             if (reads[next] > s + w) missed++;
         }
         assertEquals(LoopTimingScenario.missedEventProb(periods, w), (double) missed / n, 0.006);
-        assertTrue(LoopTimingScenario.timerOvershootMs(periods) > 6); //longer than T/2: long loops are hit more often
+        assertTrue(LoopTimingScenario.timerOvershootMs(periods) > 6);
         double pulse = LoopTimingScenario.minReliablePulseMs(periods, 0.01);
         assertEquals(0.01, LoopTimingScenario.missedEventProb(periods, pulse), 1e-4);
     }

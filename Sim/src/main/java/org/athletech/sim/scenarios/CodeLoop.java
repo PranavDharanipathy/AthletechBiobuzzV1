@@ -5,7 +5,6 @@ import org.athletech.sim.utility.Args;
 
 import java.util.Random;
 
-//how long each robot-code loop takes in a code-in-the-loop sim
 final class CodeLoop {
 
     final double meanSeconds, jitter;
@@ -22,7 +21,6 @@ final class CodeLoop {
         return meanSeconds * (1 + jitter * (2 * rnd.nextDouble() - 1));
     }
 
-    /// --loop-ms beats the profile's measured loop time, which beats 20 ms
     static CodeLoop from(Args args, RobotParams rp, long seed) {
 
         double ms = args != null && args.has("loop-ms") ? args.num("loop-ms", 20) : rp.opt("control.loop_time_ms", 20);

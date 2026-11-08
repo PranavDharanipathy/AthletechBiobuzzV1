@@ -37,12 +37,6 @@ import static com.pedropathing.ivy.groups.Groups.parallel;
 import static com.pedropathing.ivy.groups.Groups.race;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 
-/// NextFTC builds this once at app start, so the constructor can't touch hardware: each NextOpMode calls init.
-/// Every loop: the OpMode's periodic, then this periodic (fresh bulk reads), then the mechanisms in order (drive first,
-/// so the shooter aims off this loop's pose), then the commands.
-/// The mechanisms have their own commands (drive.follow, intake.run, fiArm.deploy, shooter.spinUp); the ones that take
-/// several mechanisms live here (shoot, collect, stow), and autonomous() wraps an auto's steps in the time limit and the
-/// fault watchdog, then sends the turret home. Once started it keeps AutoHandoff up to date for TeleOp. Autos only put these in order with their own paths and constants
 public final class AthletechRobot implements NextRobot {
 
     public Drive drive;
@@ -60,7 +54,6 @@ public final class AthletechRobot implements NextRobot {
     private String autoName = "";
     private double startedAt, lastLoop, timeLimit = 29.5;
     public String status = "Init", fault = "", shotWaitingOn = "";
-    //everything, every loop, for going over an auto afterwards (Utility/Recording)
     public Recorder recorder;
     public int shotsTaken, shotTimeouts;
 
@@ -72,7 +65,6 @@ public final class AthletechRobot implements NextRobot {
         for (LynxModule hub : hubs) hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         clearCaches();
         drive = new Drive(hardwareMap, start);
-        //Blaze's background Pinpoint reads (after the start pose is set)
         BlazeSession.attachPinpoint(drive.follower);
         intake = new Intake(hardwareMap);
         fiArm = new FIArm(hardwareMap);
@@ -93,7 +85,6 @@ public final class AthletechRobot implements NextRobot {
     private void startRecording(HardwareMap hardwareMap) {
 
         if (recorder != null) recorder.close();
-        //the auto that called init (its constructor)
         StackTraceElement[] stack = new Throwable().getStackTrace();
         String auto = stack.length > 2 ? stack[2].getClassName().substring(stack[2].getClassName().lastIndexOf('.') + 1) : "Auto";
         recorder = RobotRecording.open(auto);
@@ -129,7 +120,6 @@ public final class AthletechRobot implements NextRobot {
         if (recorder != null) recorder.sample();
     }
 
-    //hubs Blaze feeds already have fresh data
     private void clearCaches() {
 
         for (LynxModule hub : hubs) {
@@ -137,8 +127,6 @@ public final class AthletechRobot implements NextRobot {
         }
     }
 
-    /// feed time (s), how long it waits for the flywheel before feeding anyway (s), how close to its target counts as up to
-    /// speed (ticks/s)
     public void configureShots(double feedSeconds, double timeoutSeconds, double flywheelBand) {
 
         this.feedSeconds = feedSeconds;
@@ -146,12 +134,10 @@ public final class AthletechRobot implements NextRobot {
         this.flywheelBand = flywheelBand;
     }
 
-    /// shooter on for this alliance (the turret has to point straight at INIT: that's its home)
     public void start(Alliance alliance) {
         shooter.start(new AllianceState(alliance));
     }
 
-    /// every auto at START: from now on AutoHandoff keeps this auto's pose and turret position for TeleOp
     public void handOffAs(String autoName) {
 
         this.autoName = autoName;
@@ -159,18 +145,14 @@ public final class AthletechRobot implements NextRobot {
         if (recorder != null) recorder.event("auto", "START " + autoName);
     }
 
-    //TeleOp's turret starts from where this leaves it, not from home (AutoHandoff)
     private void recordHandoff() {
         if (handoff) AutoHandoff.record(autoName, drive.pose(), shooter.turret.getPosition() - shooter.turret.startPosition);
     }
 
-    /// the shooter aims at the CELL for the robot's half: a pose on the wrong half would shoot the wrong CELL
     public static void requireCell(Pose shotPose, boolean close, String name) {
         if (Goal.isClose(shotPose) != close) throw new IllegalArgumentException(name + " is on the wrong half for the " + (close ? "CLOSE" : "FAR") + " cell");
     }
 
-    /// holds at, waits for the flywheel to get up to speed (or the timeout), then feeds everything in one go for the feed time:
-    /// blocker open and intake on the whole time, no per-ball gating
     public Command shoot(final Pose at) {
 
         return Command.build()
@@ -209,25 +191,20 @@ public final class AthletechRobot implements NextRobot {
                 });
     }
 
-    /// arm down, intake on
     public Command collect() {
         return parallel(fiArm.deploy(), intake.run(), instant(() -> status = "collecting"));
     }
 
-    /// arm up, intake off
     public Command stow() {
         return parallel(fiArm.retract(), intake.stop());
     }
 
-    /// the auto's time limit and the slowest loop it accepts (s)
     public void configureAuto(double timeLimitSeconds, double maxLoopSeconds) {
 
         timeLimit = timeLimitSeconds;
         maxLoop = maxLoopSeconds;
     }
 
-    /// an auto's steps in order, stopped by the time limit or a fault (loop too slow, localization broken, a path timed out),
-    /// and everything made safe at the end either way
     public Command autonomous(Command... steps) {
 
         Command watchdog = Command.build()
@@ -248,8 +225,6 @@ public final class AthletechRobot implements NextRobot {
         }));
     }
 
-    //end of the routine: everything off, but the turret goes back home and holds there (TeleOp takes where it is at INIT as
-    //home, and stopping it dead left it wherever it was mid-swing)
     private void finish() {
 
         if (blocker != null) blocker.set(false);
@@ -258,7 +233,6 @@ public final class AthletechRobot implements NextRobot {
         if (shooter != null) shooter.home();
     }
 
-    /// everything safe: flywheel and turret off, blocker shut, intake and drive stopped
     public void stopAll() {
 
         recordHandoff();

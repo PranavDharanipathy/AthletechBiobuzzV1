@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import org.athletech.sim.physics.Battery;
 import org.athletech.sim.robot.Flywheel;
 
-//what the robot's Flywheel class sees as its DcMotorEx: sim physics underneath, hub-style encoder readings on top
 public final class SimFlywheelMotor implements DcMotorEx {
 
     private final Flywheel physics;
@@ -22,7 +21,6 @@ public final class SimFlywheelMotor implements DcMotorEx {
     private int ringNewest = -1, ringCount = 0;
     private double now;
 
-    /// velocityWindow = how far back the hub's velocity reading averages, seconds
     public SimFlywheelMotor(Flywheel physics, double ticksPerMotorRev, double velocityWindow) {
 
         this.physics = physics;

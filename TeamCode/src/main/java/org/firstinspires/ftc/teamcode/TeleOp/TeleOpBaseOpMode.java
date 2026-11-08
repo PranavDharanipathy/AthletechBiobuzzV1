@@ -61,13 +61,10 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
     private List<LynxModule> robotHubs;
 
-    //INIT took the auto's pose and turret position (AutoHandoff)
     public boolean fromAuto;
 
-    //every TeleOp and tuner records everything every loop (Utility/Recording): the base's hardware here, the subsystems through record()
     protected Recorder recorder;
 
-    //keeps what the turret learned about the lanyards for next time
     @Override
     public void stop() {
 
@@ -79,8 +76,6 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         BlazeSession.end();
     }
 
-    /// pose and the relocalize button on the Driver Station. The lines are made once and only filled in when telemetry
-    /// is sent (4 times a second), so nothing is built per loop
     public void addDriverTelemetry(final Shooter shooter) {
 
         telemetry.setAutoClear(false);
@@ -96,7 +91,6 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         telemetry.addData("Relocalize (gamepad 1 PS/guide)", () -> (controller1.curr_main_button ? "button DOWN" : "button up") + ", done " + shooter.getRelocalizations() + "x, to the " + Garden.forAlliance(alliance.getAlliance()) + " GARDEN corner");
     }
 
-    //lynx module setup
     public void setUpLynxModule() {
 
         robotHubs = hardwareMap.getAll(LynxModule.class);
@@ -105,26 +99,22 @@ public abstract class TeleOpBaseOpMode extends OpMode {
             hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         }
 
-        //Blaze: background bulk reads on each hub and the Pinpoint feed (after the follower's start pose)
         BlazeSession.engage(hardwareMap, follower);
     }
 
-    //clears lynx cache, except on hubs Blaze keeps fresh (starts Blaze on the first loop)
     public void clearCacheOfLynxModule() {
 
         BlazeSession.tick();
 
         HardwareMonitor.get().update();
-        //what the last loop did (the first call fixes the channels and starts the file)
         if (recorder != null) recorder.sample();
     }
 
-    //creates devices
     public void initializeComponents(Alliance alliance) {
 
         this.alliance = new AllianceState(alliance);
 
-        //Blaze first: it swaps the hardwareMap's motors for its own before anything gets them
+        //Blaze first: it swaps the hardwareMap's motors
         BlazeSession.begin(hardwareMap);
 
         left_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.leftFrontMotorDeviceName, false);
@@ -163,7 +153,6 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         RobotRecording.fiArm(recorder, fiArm);
     }
 
-    /// adds this OpMode's subsystems to the recording (any can be null): call in init, before the first loop
     protected void record(Shooter shooter, Blocker blocker, Intake intake, Drivetrain drivetrain) {
 
         RobotRecording.shooter(recorder, shooter);
@@ -172,12 +161,10 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         RobotRecording.drivetrain(recorder, drivetrain);
     }
 
-    /// pose-holding TeleOp drive on the base's motors (call after applyComponentTraits: directions and BRAKE)
     public Drivetrain createDrivetrain() {
         return new Drivetrain(left_front, right_front, left_back, right_back, follower, controller1, flywheel.getVoltageSensor());
     }
 
-    //sets device traits
     public void applyComponentTraits() {
 
         left_front.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);

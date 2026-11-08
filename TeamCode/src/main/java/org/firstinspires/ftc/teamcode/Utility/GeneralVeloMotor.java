@@ -84,13 +84,10 @@ public class GeneralVeloMotor {
         prevError = error;
         error = targetVelocity - currentVelocity;
 
-        //proportional
         p = kp * error;
 
-        //derivative
         d = dt > 0 ? kd * (error - prevError) / dt : 0;
 
-        //full feedforward
         ff = kff * targetVelocity;
 
         double power = p + d + ff;

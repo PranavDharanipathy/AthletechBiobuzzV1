@@ -30,13 +30,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-//one OpMode, two modes: STATIONARY tunes from scratch, DRIVING retunes while you play
 @Config
 @TeleOp(name = "Turret Autotuner", group = "tuning")
 public class TurretAutotuner extends TeleOpBaseOpMode {
 
     public static TurretAutotuneEngine.Mode MODE = TurretAutotuneEngine.Mode.STATIONARY;
-    public static long PAD_LOOP_TO_MS = 0; //stationary loops are short, set this to TunedConstants.LOOP_TIME_MS to tune at match speed
+    public static long PAD_LOOP_TO_MS = 0;
 
     private static final String[] COLUMNS = {
             "t", "stage", "target", "target_vel", "reference", "position", "velocity", "left_volts", "right_volts",
@@ -121,7 +120,6 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
         controller1.getInformation();
         controller2.getInformation();
 
-        //decided before this loop's A press so starting doesn't also fire whatever A normally does
         boolean drivingAllowed = engine.isDrivingAllowed();
         if (engine.isWaitingForStart() && controller1.aHasJustBeenPressed) engine.requestStart();
 

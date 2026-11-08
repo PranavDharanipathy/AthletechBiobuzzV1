@@ -16,11 +16,6 @@ import java.util.Locale
 import java.util.function.BooleanSupplier
 import java.util.function.DoubleSupplier
 
-/// everything an OpMode does, into one folder (/sdcard/FIRST/data/RobotLog/<time>-<OpMode>/), so a past match can be gone over
-/// without the robot: frames.bin = one row of float64 (little-endian) per sample, the columns in channels.tsv (group, name, unit,
-/// what it is); events.tsv = rare things with a time (swings, relocalizations, toggles, status changes); meta.tsv = context (every
-/// constant, the hardware, the OpMode, the start). Channels are fixed at the first sample. The loop thread only copies numbers into
-/// a reused buffer; one low-priority daemon thread writes. Read it with tools/robot_log.py
 class Recorder(val folder: File) {
 
     private class Channel(val group: String, val name: String, val unit: String, val help: String, val source: DoubleSupplier) {
@@ -57,10 +52,8 @@ class Recorder(val folder: File) {
     var started = false
         private set
 
-    /// seconds since this recorder was made: the "t" every row and event carries
     fun time(): Double = (System.nanoTime() - startNs) * 1e-9
 
-    /// one column. Read it from cached state only (no hardware calls): it runs every loop
     fun channel(group: String, name: String, unit: String, help: String, source: DoubleSupplier): Recorder {
 
         if (started) {
@@ -73,15 +66,13 @@ class Recorder(val folder: File) {
 
     fun flag(group: String, name: String, help: String, source: BooleanSupplier): Recorder = channel(group, name, "0/1", help, DoubleSupplier { if (source.asBoolean) 1.0 else 0.0 })
 
-    /// runs once per sample before the channels (cache something several channels read, like the pose)
     fun prepare(step: Runnable): Recorder {
 
         if (!started) prepares.add(step)
         return this
     }
 
-    /// a text state (a stage, a status): an event whenever it changes. The supplier should hand back the same String while
-    /// nothing changes (a field, an enum name), or it allocates every loop
+    //supplier should hand back the same String or it allocates every loop
     fun watch(source: String, name: String, value: () -> String?): Recorder {
 
         if (!started) watches.add(Watch(source, name, value))
@@ -99,7 +90,6 @@ class Recorder(val folder: File) {
         synchronized(lock) { events.append(String.format(Locale.US, "%.4f", t)).append('\t').append(clean(source)).append('\t').append(clean(what)).append('\t').append(value).append('\n') }
     }
 
-    /// once per loop. The first call fixes the channels and starts writing
     fun sample() {
 
         if (!started) start()
@@ -199,7 +189,6 @@ class Recorder(val folder: File) {
         } catch (e: Exception) {
             RobotLog.ee(TAG, "can't open $folder: $e")
         }
-        //~1.5 s of rows per buffer at 40 Hz is plenty for a 250 ms writer; never less than 1 MB
         val bytes = Math.max(1 shl 20, 8 * channels.size * 64)
         active = ByteBuffer.allocate(bytes).order(ByteOrder.LITTLE_ENDIAN)
         spare = ByteBuffer.allocate(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -256,7 +245,6 @@ class Recorder(val folder: File) {
 
         const val TAG = "Recorder"
 
-        /// the recorder of the OpMode running now (null between OpModes): code anywhere can drop an event in
         @JvmStatic
         @Volatile
         var current: Recorder? = null

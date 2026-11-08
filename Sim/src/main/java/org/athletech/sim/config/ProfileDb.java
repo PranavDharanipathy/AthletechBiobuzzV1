@@ -43,7 +43,7 @@ public final class ProfileDb implements AutoCloseable {
         Connection c = DriverManager.getConnection("jdbc:sqlite:" + path.toAbsolutePath());
         ProfileDb db = new ProfileDb(c, path);
         db.exec("PRAGMA foreign_keys = ON");
-        db.exec("PRAGMA busy_timeout = 5000"); //a game sim may have the file open
+        db.exec("PRAGMA busy_timeout = 5000");
         db.migrate();
         if (!Catalog.fingerprint().equals(db.meta("catalog_fingerprint"))) {
             db.syncCatalog();
@@ -73,7 +73,7 @@ public final class ProfileDb implements AutoCloseable {
     public <T> T transaction(SqlBody<T> body) throws SQLException {
 
         boolean auto = c.getAutoCommit();
-        if (!auto) return body.run(); //already inside a transaction: join it
+        if (!auto) return body.run();
         c.setAutoCommit(false);
         try {
             T r = body.run();
@@ -101,10 +101,9 @@ public final class ProfileDb implements AutoCloseable {
         if (version > ProfileSchema.VERSION) {
             throw new SQLException(path + " was written by a newer version of the sim (schema " + version + ", this code understands " + ProfileSchema.VERSION + "). Update the Sim module.");
         }
-        if (version == ProfileSchema.VERSION) return; //up to date: nothing to write
+        if (version == ProfileSchema.VERSION) return;
         transaction(() -> {
             for (String ddl : ProfileSchema.DDL) exec(ddl);
-            // future migrations: if (version < 2) { ALTER TABLE ... }
             exec("PRAGMA user_version = " + ProfileSchema.VERSION);
             putMetaIfAbsent("format", ProfileSchema.FORMAT);
             putMetaIfAbsent("created_utc", now());

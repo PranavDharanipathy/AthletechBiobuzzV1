@@ -10,12 +10,10 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
 
-//Turret Autotuner result.csv (the robot measured its own turret) -> turret.* as measured
 public final class AutotuneImport {
 
     private AutotuneImport() {}
 
-    /// path = one run's folder, its result.csv, or a folder of runs (takes the newest finished one)
     public static int run(ProfileDb db, Path path, PrintStream out, boolean force) throws Exception {
 
         File f = path.toFile();

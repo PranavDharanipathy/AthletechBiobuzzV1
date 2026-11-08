@@ -13,10 +13,8 @@ import java.util.Random;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-//the SHT hypertuning logic on its own: does it find better gains through noise, stay in bounds, and learn the spin share
 public class HyperTuningTest {
 
-    //a noisy bowl with its bottom at (3, -1): from (0, 0) it should end up near the bottom
     @Test
     public void onlineTunerFindsTheBottomThroughNoise() {
 
@@ -33,7 +31,6 @@ public class HyperTuningTest {
         assertTrue(t.baseline < 0.5 * t.firstBaseline);
     }
 
-    //a flat cost (noise only) mustn't drag the knobs off: nothing beats the margin often enough to wander
     @Test
     public void onlineTunerDoesNotChaseNoise() {
 
@@ -43,7 +40,6 @@ public class HyperTuningTest {
         assertEquals(1, t.value("a"), 0.25);
     }
 
-    //a turret that lags the spin by (1 - scale) x rate x 0.1 s: the learned scale goes to 1 whichever side it starts on
     @Test
     public void spinShareConvergesToMeetingTheSpin() {
 
@@ -61,7 +57,6 @@ public class HyperTuningTest {
         }
     }
 
-    //a synthetic flywheel at 1450 with bursts of balls: it scores steady windows and bursts, and the score sees bigger dips
     @Test
     public void flywheelTunerScoresBurstsAndSteadyWindows() {
 
@@ -91,7 +86,6 @@ public class HyperTuningTest {
         return h.lastShotCost;
     }
 
-    //a knob that keeps winning at its bound turns into a principle candidate in findings.md
     @Test
     public void findingsCallOutAPinnedKnob() {
 

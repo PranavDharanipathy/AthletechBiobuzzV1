@@ -5,24 +5,17 @@ import com.pedropathing.math.Pose;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 
-/// what the last auto left for TeleOp: where the robot is and how far the turret is from home. TeleOp's turret otherwise
-/// takes wherever it is at INIT as home. Statics, so it lives as long as the robot app (a restart or Sloth reload clears it).
-/// The autos write it every loop once started, and once more when they stop. TeleOpBaseOpMode takes it once at INIT
 public final class AutoHandoff {
 
-    //true = an auto wrote this and no TeleOp has used it yet. TeleOp sets it false whether it used it or not
     public static boolean infoFromAuto;
-    //robot pose (in, in, rad) and turret ticks from home, when they were saved (Clock s) and by which auto
     public static double x, y, heading, turretTicks, savedAt = Double.NaN;
     public static String auto = "";
-    //older than this it's ignored: someone could have turned the turret by hand since
     public static double MAX_AGE_SECONDS = 180;
 
     public static String lastResult = "nothing from an auto";
 
     private AutoHandoff() {}
 
-    /// autos: no allocation, called every loop
     public static void record(String autoName, Pose pose, double turretTicksFromHome) {
 
         if (pose == null || !MathUtil.isFinite(pose.x()) || !MathUtil.isFinite(pose.y()) || !MathUtil.isFinite(pose.heading()) || !MathUtil.isFinite(turretTicksFromHome)) return;
@@ -35,8 +28,6 @@ public final class AutoHandoff {
         infoFromAuto = true;
     }
 
-    /// TeleOp INIT: true if there's a fresh, sane handoff to use (then read x, y, heading, turretTicks). Clears the flag either
-    /// way so the next OpMode can't use it again
     public static boolean take() {
 
         boolean fresh = infoFromAuto;

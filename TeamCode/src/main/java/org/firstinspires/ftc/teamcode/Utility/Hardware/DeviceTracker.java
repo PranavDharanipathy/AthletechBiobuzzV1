@@ -17,7 +17,6 @@ public final class DeviceTracker {
     private final ArrayList<CacheSlot> slots = new ArrayList<>(4);
     private volatile boolean cacheReads;
     private volatile int monitorId = -1;
-    //temporal log: the value of the read/write that's about to be recorded (wrappers set it with v()), and the log's key per op
     private double pending = Double.NaN;
     private Class<?> pendingEnum;
     public int[] temporalKeys;
@@ -109,7 +108,6 @@ public final class DeviceTracker {
         pending = Double.NaN;
     }
 
-    /// HardwareMonitor's own sampling reads (current, velocity), which don't go through read()
     public void monitorRead(HwOp op, long t0, long t1, double value) {
         if (TemporalLog.active) TemporalLog.io(this, op, t0, t1, false, value, null);
     }

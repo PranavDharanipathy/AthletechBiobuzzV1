@@ -13,14 +13,10 @@ import org.firstinspires.ftc.teamcode.Utility.Clock;
 
 import dev.nextftc.robot.Mechanism;
 
-/// drivetrain + localization: periodic updates the follower, so every mechanism after it sees this loop's pose.
-/// follow(path) is Ivy's PedroCommands.follow, finished only once the robot is really at the end (tolerances), with a
-/// timeout that faults the auto
 public final class Drive implements Mechanism {
 
     public final Follower follower;
     private double positionTolerance = 1, headingTolerance = 3, timeout = 8;
-    /// set when a path times out; the auto's watchdog stops everything on it
     public String fault = "";
     public String status = "";
 
@@ -36,7 +32,6 @@ public final class Drive implements Mechanism {
         follower.update();
     }
 
-    /// how close the end of a path has to be (in, deg) and how long a path may take (s)
     public void configure(double positionInches, double headingDegrees, double timeoutSeconds) {
 
         positionTolerance = positionInches;
@@ -85,7 +80,6 @@ public final class Drive implements Mechanism {
         follower.stop();
     }
 
-    /// {x, y, heading deg} from a constants class -> Pose, checked
     public static Pose pose(double[] p) {
 
         if (p == null || p.length != 3) throw new IllegalArgumentException("Pose needs {x, y, heading deg}");
@@ -96,19 +90,16 @@ public final class Drive implements Mechanism {
         return new Pose(p[0], p[1], Math.toRadians(p[2]));
     }
 
-    /// straight, heading turning evenly from one pose to the other
     public static Path line(Pose from, Pose to) {
         return Paths.line(from, to).linear(from, to);
     }
 
-    /// cubic through two controls {x1, y1, x2, y2}, heading turning evenly
     public static Path curve(Pose from, double[] controls, Pose to) {
 
         if (controls == null || controls.length != 4) throw new IllegalArgumentException("Controls need {x1, y1, x2, y2}");
         return Paths.curve(from, new Pose(controls[0], controls[1]), new Pose(controls[2], controls[3]), to).linear(from, to);
     }
 
-    /// the same path capped at this speed (in/s)
     public static Path slow(Path path, double inchesPerSecond) {
         return path.with(DrivetrainConstants.foresightConfig.maxPathSpeed.at(inchesPerSecond));
     }

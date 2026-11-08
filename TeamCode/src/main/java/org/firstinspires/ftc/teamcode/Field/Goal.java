@@ -37,8 +37,6 @@ public enum Goal {
         return MathUtil.isFinite(coordinate.x()) && MathUtil.isFinite(coordinate.y());
     }
 
-    /// moves the aim point for the robot's half, up = away from this alliance's drivers, right = their right.
-    /// Red drives from behind the x = 0 wall looking +x, blue from behind the x = 144 wall looking -x (manual 9.5, Figure 9-2)
     public void nudgeFromDriver(Pose robotPose, double up, double right) {
 
         double toward = this == RED ? 1 : -1;

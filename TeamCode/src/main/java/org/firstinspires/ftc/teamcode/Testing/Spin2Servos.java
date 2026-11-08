@@ -15,7 +15,6 @@ public class Spin2Servos extends OpMode {
     public static double SERVO1_POSITION = 0;
     public static double SERVO2_POSITION = 0;
 
-    //servo2 = 1 - servo1
     public static boolean MIRROR = true;
 
     private Servo servo1, servo2;

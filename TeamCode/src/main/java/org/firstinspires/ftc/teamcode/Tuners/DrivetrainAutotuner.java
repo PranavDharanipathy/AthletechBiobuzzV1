@@ -23,9 +23,6 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 
-/// Measures the drivetrain and tunes the pose hold (DriveAutotuneEngine). The robot drives itself: forward and back, strafes,
-/// spins, then shoves itself while holding. Needs about 3 ft clear every way. Any stick or B stops it. The result goes to
-/// /sdcard/FIRST/data/DriveAutotune/ and the next build puts it in TunedConstants
 @TeleOp(name = "Drivetrain Autotuner", group = "tuning")
 public class DrivetrainAutotuner extends TeleOpBaseOpMode {
 

@@ -10,7 +10,6 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 
-//one low priority writer thread, the loop thread only appends to a reused buffer (no allocation per row)
 public class CsvLogger {
 
     private static final int MAX_PENDING_CHARS = 4 << 20;

@@ -976,7 +976,7 @@ public final class HardwareMonitor {
         boolean systemTasksBuilt;
 
         final RunningStats loopMs = new RunningStats();
-        final Histogram loopHist = new Histogram(0.25, 1200); //0..300 ms
+        final Histogram loopHist = new Histogram(0.25, 1200);
         final RunningStats hwMsPerLoop = new RunningStats();
         final RunningStats readsPerLoop = new RunningStats();
         final RunningStats writesPerLoop = new RunningStats();

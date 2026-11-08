@@ -175,7 +175,7 @@ public final class DriveScenario {
             Run r = fullPower(p, rp.battery(v), other, Axis.FORWARD, 2.5);
             topVsV.add(new double[]{v, r.topSpeed()});
             accelVsV.add(new double[]{v, r.peakAccel()});
-            if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9) { //every 0.5 V for the surface
+            if (Math.abs(v * 2 - Math.round(v * 2)) < 1e-9) {
                 for (double dist : SURFACE_DISTANCES) {
                     surface.add(new double[]{dist, v, DriveTimePredictor.timeTo(p, () -> rp.battery(vv), other, Axis.FORWARD, dist).timeS()});
                 }

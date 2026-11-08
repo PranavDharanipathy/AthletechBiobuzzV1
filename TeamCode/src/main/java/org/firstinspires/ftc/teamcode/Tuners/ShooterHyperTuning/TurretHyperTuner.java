@@ -2,13 +2,6 @@ package org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning;
 
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 
-/// Turret hypertuning while it plays.
-/// Moves (the aim jumps 15+ deg with the robot about still): how long to within 1 deg, overshoot, volt flips mid-rotation (the
-/// "jerks", flipping to reverse at the end is fine) and shake once there. Knobs: stiffness, brake band, top speed and
-/// acceleration share, resync band and the landing brake on/off (an A/B: it only stays on if it scores better).
-/// Rotation negation (the robot spinning): the rate feedforward scale is learned straight from the sign of the error, lagging
-/// = under-negating, leading = overdoing, so it settles where it meets the spin exactly.
-/// Degrees, s. No hardware calls, the sims run it
 public class TurretHyperTuner {
 
     public final OnlineTuner moves;
@@ -26,7 +19,6 @@ public class TurretHyperTuner {
         moves = new OnlineTuner("turret moves", 3, new OnlineTuner.Knob("bandwidth", TurretConstants.TURRET_BANDWIDTH, 1.5, 10, 0.6, 0.1), new OnlineTuner.Knob("brake_degrees", TurretConstants.TURRET_BRAKE_DEGREES, 0, 12, 1.5, 0.25), new OnlineTuner.Knob("max_speed_fraction", TurretConstants.TURRET_MAX_SPEED_FRACTION, 0.6, 0.95, 0.05, 0.01), new OnlineTuner.Knob("acceleration_fraction", TurretConstants.TURRET_ACCELERATION_FRACTION, 0.5, 0.95, 0.05, 0.01), new OnlineTuner.Knob("resync_degrees", TurretConstants.TURRET_RESYNC_DEGREES, 3, 20, 2, 0.5), new OnlineTuner.Knob("landing", TurretConstants.TURRET_LANDING_ENABLED ? 1 : 0, 0, 1, 1, 1));
     }
 
-    /// knob values into TurretConstants (TurretBase reads them every loop)
     public void apply() {
 
         TurretConstants.TURRET_BANDWIDTH = moves.value("bandwidth");
@@ -38,15 +30,12 @@ public class TurretHyperTuner {
         TurretConstants.TURRET_RATE_FEEDFORWARD_SCALE = rateScale;
     }
 
-    /// every loop. target/position deg, velocity deg/s, volts sent, targetRate: the spin-cancelling rate it was given (deg/s),
-    /// robotOmega deg/s, aimUsable: the shooter has a real aim. True when a move trial finished (moves.last)
     public boolean update(double now, double target, double position, double velocity, double volts, double targetRate, double robotOmega, boolean aimUsable) {
 
         boolean finished = false;
         boolean jumped = !Double.isNaN(lastTarget) && Math.abs(target - lastTarget) > jumpDegrees;
         lastTarget = target;
         if (jumped) {
-            //a new jump cuts an unfinished move: not scored
             moving = Math.abs(robotOmega) < stillRobot;
             moveFrom = position;
             moveTo = target;
@@ -76,7 +65,6 @@ public class TurretHyperTuner {
         }
         lastVolts = volts;
 
-        //rotation negation: lagging the spin (error the same way as the rate) means it under-cancels, leading means it overdoes
         if (aimUsable && Math.abs(targetRate) > spinRate && !jumped) {
             if (Double.isNaN(trackStart)) trackStart = now;
             double error = target - position;

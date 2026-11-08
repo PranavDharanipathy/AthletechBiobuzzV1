@@ -31,11 +31,11 @@ public final class MatchDriver {
 
     public static final class Trace {
         public final double voc;
-        public final double[] x, y, h, vf, vl, w;   //every REC_DT
+        public final double[] x, y, h, vf, vl, w;
         public final double[] slip;
-        public final float[] busV, current;         //every PHYSICS_DT
-        public final List<double[]> wallHits;       // {t, dv m/s, g}
-        public final List<double[]> robotContacts;  // {t, closing speed m/s, g}
+        public final float[] busV, current;
+        public final List<double[]> wallHits;
+        public final List<double[]> robotContacts;
         public final List<Double> intakes, metalContacts;
         public final double distanceM, slipM;
 
@@ -126,7 +126,7 @@ public final class MatchDriver {
         double tx = rng.uniform(-half + margin, half - margin), ty = rng.uniform(-half + margin, half - margin), th = rng.uniform(-Math.PI, Math.PI);
         double modeUntil = Double.POSITIVE_INFINITY, gotoStart = 0;
         double ramVx = 0, ramVy = 0;
-        double[] plane = null; // virtual wall while pushing a robot: {px, py, nx, ny}
+        double[] plane = null;
         int ramIdx = 0, contactIdx = 0;
         double dist = 0;
         double t = 0;

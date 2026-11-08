@@ -2,8 +2,6 @@ package org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning;
 
 import java.util.Locale;
 
-/// findings.md for a hypertuning session: what each tuner got to, and principle candidates for an agent (see SYSTEM_EVOLUTION.md).
-/// A knob pinned at a bound or a tuner that can't move its cost says the structure is the limit, not the numbers. No hardware calls
 public final class Findings {
 
     private Findings() {}

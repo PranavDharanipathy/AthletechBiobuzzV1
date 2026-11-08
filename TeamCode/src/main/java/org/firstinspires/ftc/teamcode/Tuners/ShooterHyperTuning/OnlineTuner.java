@@ -1,9 +1,5 @@
 package org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning;
 
-/// Tunes knobs while the robot plays, one at a time: measure the cost as things are (baseline), nudge one knob up, keep it only
-/// if the cost beats the baseline by margin, else try it down, else put it back and nudge smaller next time. A kept nudge grows
-/// the next one. Each trial averages samplesPerTrial costs (the robot is noisy), and the baseline is measured again every round
-/// so one lucky window can't lock in. Knobs never leave their bounds. No hardware calls, the sims run it
 public class OnlineTuner {
 
     public static final class Knob {
@@ -24,7 +20,6 @@ public class OnlineTuner {
         }
     }
 
-    /// what the last finished trial did, for the logs
     public static final class Trial {
 
         public String knob = "";
@@ -60,12 +55,10 @@ public class OnlineTuner {
         return knob(name).value;
     }
 
-    /// the knob being tried right now ("" while measuring the baseline)
     public String trying() {
         return phase == 0 ? "" : knobs[index].name;
     }
 
-    /// one cost sample (lower is better) under the knobs as they are now. True when a trial finished (see last)
     public boolean submit(double cost) {
 
         if (Double.isNaN(cost) || Double.isInfinite(cost) || knobs.length == 0) return false;
@@ -127,7 +120,6 @@ public class OnlineTuner {
     private void nextKnob() {
 
         index = (index + 1) % knobs.length;
-        //a full round: measure where things stand again before the next trials
         if (index == 0) phase = 0;
         else startTrial(knobs[index], 1);
     }

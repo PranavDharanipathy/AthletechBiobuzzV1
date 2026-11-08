@@ -232,9 +232,9 @@ public final class LoopControlSim {
 
         final double v = 1.0;
         double phase = rng.uniform() * 2 * Math.PI;
-        double x = 0, y = 0, h = 0;          //truth
-        double xr = 0, yr = 0;               //truth at the last read
-        double ex = 0, ey = 0, eh = 0;       //estimate
+        double x = 0, y = 0, h = 0;
+        double xr = 0, yr = 0;
+        double ex = 0, ey = 0, eh = 0;
         double t = 0, sAt = 0, hAt = 0, s = 0;
         double fine = 0.0001;
         while (t < seconds) {

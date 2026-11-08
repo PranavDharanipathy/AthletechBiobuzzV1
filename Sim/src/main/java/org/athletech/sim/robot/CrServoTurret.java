@@ -2,23 +2,18 @@ package org.athletech.sim.robot;
 
 import java.util.Random;
 
-//CR-servo turret: speed per volt, lag, dead time, stick-slip friction; robotAccel = the robot spinning under it
 public final class CrServoTurret {
 
     public static final class Params {
 
         public final double gain, timeConstant, deadTime, kineticFriction, breakawayFriction, velocityNoise, maxSpeed, maxAcceleration;
-        public double startDelay; //from rest the command has to stay past breakaway this long before it moves (0 = right away)
-        //the servos don't brake when the command drops but stays the same way: it coasts at coastDecel. Near 0 V they brake at
-        //neutralDecel, reversed they brake hard. Infinite = the old model that brakes to whatever the command says
+        public double startDelay;
         public double coastDecel = Double.POSITIVE_INFINITY, neutralDecel = Double.POSITIVE_INFINITY;
 
-        /// gain in ticks/s per volt, velocityNoise in ticks/s
         public Params(double gain, double timeConstant, double deadTime, double kineticFriction, double breakawayFriction, double velocityNoise) {
             this(gain, timeConstant, deadTime, kineticFriction, breakawayFriction, velocityNoise, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
         }
 
-        /// the servos run out of torque: speeding up is capped at maxAcceleration (ticks/s^2), and they top out at maxSpeed (ticks/s)
         public Params(double gain, double timeConstant, double deadTime, double kineticFriction, double breakawayFriction, double velocityNoise, double maxSpeed, double maxAcceleration) {
 
             if (!(gain > 0) || !(timeConstant > 0) || deadTime < 0 || kineticFriction < 0 || breakawayFriction < 0) throw new IllegalArgumentException("turret gain and lag must be positive, dead time and friction not negative");
@@ -47,24 +42,19 @@ public final class CrServoTurret {
 
     private final Random noise;
 
-    //shake from the flywheel: one part at its rotation rate, one part in the frame's resonance band
     private double syncAmplitude, syncHz, bandRms, now;
     private final double[] bandHz = {8, 11, 14}, bandPhase = new double[3];
 
-    //lanyards: slack until the turret passes tautTicks going the side way, then they pull it back, harder the further it goes
     private final java.util.List<double[]> lanyards = new java.util.ArrayList<>();
 
-    /// side +1 = goes taut past tautTicks going up, voltsPerTick pull per tick past that, capped at maxVolts; drag = extra volts against motion while taut
     public void addLanyard(double tautTicks, double side, double voltsPerTick, double maxVolts, double dragVolts) {
         lanyards.add(new double[] {tautTicks, Math.signum(side), voltsPerTick, maxVolts, dragVolts});
     }
 
-    /// volts the lanyards push with right now (all of them added up)
     public double lanyardVolts() {
         return lanyardVolts(x, Math.abs(w) >= 1 ? Math.signum(w) : 0);
     }
 
-    /// what they'd push with at position going direction (0 = still)
     public double lanyardVolts(double position, double direction) {
 
         double total = 0;
@@ -77,7 +67,6 @@ public final class CrServoTurret {
         return total;
     }
 
-    /// puts the turret somewhere without moving it there
     public void place(double ticks) {
 
         x = ticks;
@@ -107,7 +96,6 @@ public final class CrServoTurret {
         robotAccel = ticksPerSecondSquared;
     }
 
-    /// RMS ticks of each part, syncHz = flywheel rev/s
     public void setVibration(double syncRmsTicks, double syncHz, double bandRmsTicks) {
 
         syncAmplitude = syncRmsTicks * Math.sqrt(2);
@@ -163,7 +151,7 @@ public final class CrServoTurret {
         if (Double.isInfinite(p.coastDecel)) {
             double wanted = Math.max(-p.maxSpeed, Math.min(p.maxSpeed, p.gain * (u - p.kineticFriction * Math.signum(w))));
             double rate = (wanted - w) / p.timeConstant - robotAccel;
-            double cap = rate * w >= 0 ? p.maxAcceleration : 3 * p.maxAcceleration; //the 11-06 robot data brakes ~3x harder than it speeds up
+            double cap = rate * w >= 0 ? p.maxAcceleration : 3 * p.maxAcceleration;
             next = w + h * Math.max(-cap, Math.min(cap, rate));
         }
         else {
@@ -188,7 +176,6 @@ public final class CrServoTurret {
         return encoderSign * Math.round(w + shakeRate() + p.velocityNoise * noise.nextGaussian());
     }
 
-    /// where the turret actually points, shake included (that's what the shot sees)
     public double aim() {
         return x + shake();
     }

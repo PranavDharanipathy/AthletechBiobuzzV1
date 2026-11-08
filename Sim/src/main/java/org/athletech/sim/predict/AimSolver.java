@@ -265,7 +265,7 @@ public final class AimSolver {
             }
             int start = i;
             while (i < distances.length && anyCandidate(all[i])) i++;
-            int end = i; //exclusive
+            int end = i;
             double[][] best = new double[end - start][h];
             int[][] from = new int[end - start][h];
             for (int k = 0; k < h; k++) best[0][k] = all[start][k] == null ? Double.NEGATIVE_INFINITY : Math.log(all[start][k].score());

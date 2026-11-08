@@ -13,9 +13,6 @@ import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.QuadraticCurve;
 import org.firstinspires.ftc.teamcode.Utility.VoltageCompensator;
 
-/// TeleOp drive with pose hold (DriveController): robot-centric sticks through the QuadraticCurve and ratios, and the robot held
-/// to where the sticks say in all three axes, so a defender can't shove it, turn it or speed it up. Call follower.update()
-/// first each loop: the hold runs on its pose. Gamepad 1 back turns the hold off (sticks straight to power) and on again
 public class Drivetrain {
 
     private final DcMotor leftFront, rightFront, leftBack, rightBack;
@@ -31,7 +28,6 @@ public class Drivetrain {
     private boolean holdEnabled = DrivetrainConstants.DRIVE_HOLD_ENABLED, holding;
     private double lastTime = Double.NaN;
 
-    /// motors with directions and BRAKE already set (TeleOpBaseOpMode.applyComponentTraits)
     public Drivetrain(DcMotor leftFront, DcMotor rightFront, DcMotor leftBack, DcMotor rightBack, Follower follower, BetterGamepad controller1, VoltageSensor voltageSensor) {
 
         this.leftFront = leftFront;
@@ -54,7 +50,6 @@ public class Drivetrain {
         holdEnabled = enabled;
     }
 
-    /// the hold is on and has a pose it trusts
     public boolean isHolding() {
         return holding;
     }
@@ -63,7 +58,6 @@ public class Drivetrain {
         return controller;
     }
 
-    /// powers sent to lf, rf, lb, rb last update
     public double[] getWheels() {
         return wheels;
     }
@@ -72,7 +66,6 @@ public class Drivetrain {
         return command;
     }
 
-    /// dashboard edits to DrivetrainConstants land on the next update
     public void applyConstants() {
 
         for (int a = 0; a < 3; a++) {
@@ -94,14 +87,12 @@ public class Drivetrain {
     public void update() {
 
         if (controller1.backHasJustBeenPressed) holdEnabled = !holdEnabled;
-        //robot frame: forward, left, ccw (the right stick turns clockwise)
         command[DriveController.FORWARD] = forwardRatio * shape(-controller1.left_stick_y());
         command[DriveController.LEFT] = -strafeRatio * shape(controller1.left_stick_x());
         command[DriveController.TURN] = -turnRatio * shape(controller1.right_stick_x());
         drive(command);
     }
 
-    /// command: forward, left, ccw, -1..1, already shaped
     public void drive(double[] robotCommand) {
 
         double now = Clock.seconds();

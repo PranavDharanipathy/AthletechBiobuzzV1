@@ -328,7 +328,7 @@ public final class MonitorStore {
         StringBuilder sb = line;
         for (int i = 0; i < full.size; i++) {
             sb.setLength(0);
-            appendFixed(sb, full.timeNs[i] / 1000, 6);            //seconds, microsecond resolution
+            appendFixed(sb, full.timeNs[i] / 1000, 6);
             int id = full.deviceId[i];
             int op = full.op[i];
             sb.append(',').append(id).append(',')
@@ -337,7 +337,7 @@ public final class MonitorStore {
                     .append(',')
                     .append(HwOp.fromOrdinal(op).isRead() ? 'R' : 'W')
                     .append(',').append(full.flag[i] ? '1' : '0').append(',');
-            appendFixed(sb, full.latencyNs[i] / 100, 1);          //microseconds, 0.1 us resolution
+            appendFixed(sb, full.latencyNs[i] / 100, 1);
             sb.append('\n');
             eventsOut.append(sb);
             eventBytes += sb.length();

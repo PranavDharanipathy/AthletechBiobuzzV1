@@ -146,7 +146,6 @@ public strictfp class MathUtil {
         return value >= minRange && value <= maxRange;
     }
 
-    /// @param array must be sorted
     public static double[] findBoundingValues(double[] array, double value) {
 
         for (int index = 0; index < array.length - 1; index++) {
@@ -187,7 +186,6 @@ public strictfp class MathUtil {
         return Math.toDegrees(FastMath.atan2(Math.sin(Math.toRadians(angleDeg)), Math.cos(Math.toRadians(angleDeg))));
     }
 
-    /// @param theta - how much the coordinates are being rotated in radians
     public static double[] rotateCartesian(double x, double y, double theta) {
 
         double xNew = x * Math.cos(theta) - y * Math.sin(theta);
@@ -244,8 +242,6 @@ public strictfp class MathUtil {
         return target;
     }
 
-    /// Smooth sign: tanh(x / width). Avoids the discontinuity of sgn() at zero, which otherwise
-    /// makes friction feedforward chatter when the velocity estimate hovers around 0.
     public static double smoothSign(double x, double width) {
 
         if (width <= 0) return Math.signum(x);

@@ -27,14 +27,13 @@ import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 public class FlywheelTuner extends LinearOpMode {
 
     public static boolean SHOOT = false;
-    //run the turret like TeleOp does (holding home), so the flywheel is tuned with its load and control running
     public static boolean RUN_TURRET = true;
 
     public static int LOOP_TIME = (int) Math.round(TunedConstants.LOOP_TIME_MS);
 
     public enum TUNING_STAGES {
 
-        PIDVS /*1st*/, STABILITY
+        PIDVS, STABILITY
     }
 
     public static TUNING_STAGES TUNING_STAGE = TUNING_STAGES.PIDVS;

@@ -54,7 +54,6 @@ def solve(distance,angle):
 
 POLYGON=[(-10,0),(10,0),(10,7.61),(0,14),(-10,7.61)]
 def local_margin(distance,q,lateral):
-    # Local tangent sweep past all FIVE 3-D rim edges. Curvature/frame thickness unmodeled.
     x,z,vx,vz=q
     u=(vx/math.hypot(vx,vz),0,vz/math.hypot(vx,vz))
     p=(x,lateral,z)
@@ -63,7 +62,6 @@ def local_margin(distance,q,lateral):
     for a,b in zip(vertices,vertices[1:]+vertices[:1]):
         av=[a[i]-p[i] for i in range(3)]
         ab=[b[i]-a[i] for i in range(3)]
-        # Project edge perpendicular to velocity; shortest projected distance is line-to-edge distance.
         dot_av=sum(av[i]*u[i] for i in range(3));dot_ab=sum(ab[i]*u[i] for i in range(3))
         av=[av[i]-dot_av*u[i] for i in range(3)]; ab=[ab[i]-dot_ab*u[i] for i in range(3)]
         fraction=max(0,min(1,-sum(av[i]*ab[i] for i in range(3))/sum(v*v for v in ab)))
@@ -73,7 +71,6 @@ def local_margin(distance,q,lateral):
     return (minimum if inside else -minimum)-(RADIUS+.002+.005)
 
 def main():
-    # First physics check: numerical trajectory vs independent vacuum endpoint.
     for distance,angle in [(1.8288,54),(2.4384,50)]:
         a=math.radians(angle)
         speed=math.sqrt(9.80665*distance**2/(2*math.cos(a)**2*(distance*math.tan(a)-(TARGET_Z-release(angle)))))
@@ -83,7 +80,6 @@ def main():
     for feet,angle in itertools.product((6,8),(50,54)):
         distance=feet*.3048; speed=solve(distance,angle)
         margins=[]
-        # Hypothetical BOUNDS, not measured distributions; no probabilistic interpretation.
         for da,dv,dd,dh,dy,cd,cl in itertools.product((-2,2),(-.05,.05),(-.05,.05),(-.0127,.0127),(-.025,.025),(.3,.6),(0,.2)):
             q=cross(distance+dd,angle+da,speed*(1+dv),cd,cl,dh)
             margins.append(-1 if q is None else local_margin(distance+dd,q,dy))

@@ -2,10 +2,6 @@ package org.firstinspires.ftc.teamcode.Systems.Flywheel;
 
 import java.util.List;
 
-/// flywheel speed from the distance to the goal: a least-squares polynomial through the tuned (distance, speed) points, not a
-/// table lookup, so it's smooth between them and evens out noisy points instead of bending at each one. It refits by itself
-/// when the points or the degree change (Dashboard); otherwise no allocation. Past the tuned distances it follows the fit for
-/// at most `extrapolate` inches, then holds. Pure Java, the Sim runs it
 public class FlywheelVelocityModel {
 
     public static final int MAX_DEGREE = 3;
@@ -17,7 +13,6 @@ public class FlywheelVelocityModel {
     private boolean valid;
     public int fits;
 
-    /// ticks/s for this distance (in), NaN if there are no usable points
     public double velocity(List<Double> distances, List<Double> velocities, int degree, double extrapolate, double distance) {
 
         if (changed(distances, velocities, degree)) fit(distances, velocities, degree);
@@ -25,7 +20,6 @@ public class FlywheelVelocityModel {
         return evaluate(Math.max(minX - extrapolate, Math.min(maxX + extrapolate, distance)));
     }
 
-    /// the fit at x, no clamping
     public double evaluate(double x) {
 
         double u = (x - mean) / scale, y = 0;
@@ -38,13 +32,12 @@ public class FlywheelVelocityModel {
         int n = Math.min(distances.size(), velocities.size());
         if (degree != requested || n != xs.length) return true;
         for (int i = 0; i < n; i++) {
-            //bit compare, so a NaN point doesn't look changed every loop
+            //bit compare so NaN doesn't look changed
             if (Double.doubleToLongBits(distances.get(i)) != Double.doubleToLongBits(xs[i]) || Double.doubleToLongBits(velocities.get(i)) != Double.doubleToLongBits(ys[i])) return true;
         }
         return false;
     }
 
-    /// least squares on x scaled to about -1..1 (keeps the normal equations well conditioned), NaN points skipped
     public void fit(List<Double> distances, List<Double> velocities, int degree) {
 
         int n = Math.min(distances.size(), velocities.size());
@@ -95,7 +88,6 @@ public class FlywheelVelocityModel {
         valid = true;
     }
 
-    //Gauss-Jordan with partial pivoting, the answer ends up in column m
     private static boolean solve(double[][] a, int m) {
 
         for (int col = 0; col < m; col++) {
@@ -121,8 +113,6 @@ public class FlywheelVelocityModel {
         return !Double.isNaN(v) && !Double.isInfinite(v);
     }
 
-    /// the other way round: the distance (in) this flywheel speed shoots to, on the current fit (call velocity() first, it
-    /// refits). NaN outside the speeds the fit covers within `extrapolate` of the tuned distances: no guessing past them
     public double distanceFor(double velocity, double extrapolate) {
 
         if (!valid || velocity != velocity) return Double.NaN;
@@ -146,7 +136,6 @@ public class FlywheelVelocityModel {
         return degree;
     }
 
-    /// RMS ticks/s between the fit and the points it was fitted to
     public double rms() {
         return rms;
     }
@@ -159,7 +148,6 @@ public class FlywheelVelocityModel {
         return maxX;
     }
 
-    /// e.g. "1415 + 177.1 u, u = (d - 76.1) / 24.4", for telemetry
     public String describe() {
 
         if (!valid) return "no fit (need distance/velocity points)";

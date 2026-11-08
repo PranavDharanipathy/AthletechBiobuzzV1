@@ -54,12 +54,11 @@ public final class LauncherScenario {
         Flywheel f = new Flywheel(lp.flywheel());
         f.setTargetRpm(rpm);
         f.setRpm(rpm);
-        for (int i = 0; i < 500; i++) f.step(DT, b, other); //settle at target under the controller
+        for (int i = 0; i < 500; i++) f.step(DT, b, other);
         double before = f.rpm();
         Launcher.BallFit fit = lp.ball(ball);
         f.fire(fit.ball().massKg(), fit.exitSpeedRatio(), fit.energyLossFactor());
         double drop = before - f.rpm();
-        // recovered = 90% of the lost speed back (measured against the pre-shot speed, which can sit a
         double t = 0, done = Math.max(1, 0.1 * drop);
         while (t < 8 && before - f.rpm() > done) {
             f.step(DT, b, other);
@@ -92,7 +91,7 @@ public final class LauncherScenario {
             f.step(DT, b, other);
             t += DT;
         }
-        out[count] = lastShot + out[count]; //time from first to last ball
+        out[count] = lastShot + out[count];
         return out;
     }
 
@@ -103,7 +102,7 @@ public final class LauncherScenario {
         Aperture cell = rp.cell();
         rp.battery(Double.NaN);
         double rInt = rp.req("battery.internal_resistance_ohm"), drop = rp.opt("battery.voltage_drop_per_ah", 0.6);
-        java.util.function.DoubleFunction<Battery> bat = v -> new Battery(v, rInt, drop); //no DB access: safe in parallel
+        java.util.function.DoubleFunction<Battery> bat = v -> new Battery(v, rInt, drop);
         double other = rp.electronicsCurrent();
         List<String> ballTypes = rp.launcherBallTypes();
         int[] held = new int[ballTypes.size()];

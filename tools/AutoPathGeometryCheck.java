@@ -10,7 +10,6 @@ public final class AutoPathGeometryCheck {
 
     private static final double FRONT = 359 / 25.4;
     private static final double SIDE = FieldConstants.ROBOT_CENTER_TO_SIDE;
-    //inferred from the user's unchanged heading-90 start touching y=0; not a measured rear dimension
     private static final double REAR = AutoPathRoutes.START.y();
     private static final double[] FORWARD = {FRONT, -REAR};
     private static final double[] LATERAL = {-SIDE, SIDE};
@@ -39,7 +38,6 @@ public final class AutoPathGeometryCheck {
                 minimum = Math.min(minimum, margin);
                 require(margin >= -1e-7, "Nominal footprint leaves field on path " + (leg + 1));
                 require(maxX(p, p.heading()) <= FieldConstants.FIELD_SIZE / 2, "Footprint crosses alliance split");
-                //the wall-contact start cannot have an inflated clearance margin
                 if (leg == 0 && p.y() - REAR < 3) continue;
                 for (double error : errors) {
                     double heading = p.heading() + error;

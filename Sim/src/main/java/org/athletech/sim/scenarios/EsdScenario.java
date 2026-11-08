@@ -283,7 +283,7 @@ public final class EsdScenario {
         boolean[] straps = {cp.strap, true, false};
         IntStream.range(0, 3 * RH.length).parallel().forEach(k -> {
             int v = k / RH.length, j = k % RH.length;
-            if (v > 0 && straps[v] == cp.strap) return; //same as "as built": copied below
+            if (v > 0 && straps[v] == cp.strap) return;
             ChargeSim.Params q = cp.withRh(RH[j]).withStrap(straps[v]);
             double prob = 0, dis = 0;
             double[] pk = new double[n * REPS];

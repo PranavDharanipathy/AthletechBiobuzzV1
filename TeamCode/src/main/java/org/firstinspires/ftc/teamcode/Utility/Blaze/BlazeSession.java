@@ -20,22 +20,14 @@ import dev.anygeneric.blazeftc.Hub;
 import dev.anygeneric.blazeftc.InterfaceAccessor;
 import kotlin.Unit;
 
-/// BlazeFTC for one OpMode. Call order:
-///   begin(hardwareMap)  first thing in INIT, before any hardwareMap.get (swaps the motors for Blaze's)
-///   engage(hardwareMap, follower)  after the hardware and the start pose: background bulk reads + Pinpoint
-///   tick()  top of every loop: starts Blaze on the first one, clears only the hubs Blaze doesn't feed
-///   end()  at stop (MonitorOpModeHook also calls it after every OpMode, crash or not)
-/// NextFTC autos (BlazeOpMode) use beginNext: NextFTC runs and closes Blaze, BlazeHubHook engages the hubs.
-/// Blaze's callbacks run on its own threads and only copy data in: everything that acts on it stays on the loop thread
 public final class BlazeSession {
 
     public static final int CONTROL_HUB = 0, EXPANSION_HUB = 1;
     public static final BlazeRing[] BULK = {new BlazeRing(), new BlazeRing()};
     public static final BlazeRing PINPOINT = new BlazeRing();
     private static final LynxModule[] FED = new LynxModule[2];
-    //when each hub's last Blaze bulk read landed (Blaze's thread writes, the loop reads)
     private static final AtomicLongArray LAST_BULK_NS = new AtomicLongArray(2);
-    //a fed hub with no Blaze data for this long is read the normal way again: frozen data drove the turret round and round
+    //frozen data drove the turret round
     private static final long BULK_STALE_NS = 50_000_000L;
     private static List<LynxModule> hubs = Collections.emptyList();
     private static HardwareMap map;
@@ -72,7 +64,6 @@ public final class BlazeSession {
         }
     }
 
-    /// background bulk reads on each hub that's there, and Blaze's Pinpoint feed for the follower (null = none)
     public static synchronized void engage(HardwareMap hardwareMap, Follower follower) {
 
         if (!open) return;
@@ -108,12 +99,10 @@ public final class BlazeSession {
         }
     }
 
-    /// NextFTC's BlazeBulkReadHook engaged this hub (BlazeHubHook)
     static synchronized void markFed(int index, LynxModule module) {
         FED[index] = module;
     }
 
-    /// the Control Hub (true) or the Expansion Hub, as Blaze sees them; null if there isn't one
     public static LynxModule find(boolean control) {
 
         for (LynxModule m : hubs) {
@@ -129,7 +118,6 @@ public final class BlazeSession {
         return null;
     }
 
-    /// top of every loop
     public static void tick() {
 
         if (open && !running) {
@@ -145,7 +133,6 @@ public final class BlazeSession {
         clearUnfed();
     }
 
-    /// a hub Blaze feeds already has fresh data; clearing it would just force a blocking SDK read
     public static void clearUnfed() {
 
         for (int k = 0; k < hubs.size(); k++) {
@@ -154,8 +141,6 @@ public final class BlazeSession {
         }
     }
 
-    /// true only while Blaze's bulk reads for this hub are really arriving: if they stop (or never start), the hub's cache
-    /// would never refresh and every encoder on it would freeze, so it gets cleared and read normally instead
     public static boolean feeds(LynxModule module) {
 
         if (module == null || !running) return false;
@@ -174,7 +159,6 @@ public final class BlazeSession {
                 RobotLog.ee("Blaze", t, "close failed");
             }
         }
-        //Blaze set every hub to MANUAL; the next OpMode (maybe a stock tester) expects the SDK default
         if (open) {
             for (LynxModule m : hubs) {
                 try {
@@ -195,8 +179,7 @@ public final class BlazeSession {
         PINPOINT.clear();
     }
 
-    //engageMotorAccel swapped the hardwareMap's motors for Blaze's, and the map outlives the OpMode: a stock OpMode after
-    //this one would be sending power to a closed Blaze
+    //the map outlives the OpMode, give the SDK motors back
     private static void restoreMotors() {
 
         if (map == null) return;
@@ -224,7 +207,6 @@ public final class BlazeSession {
         return pinpoint;
     }
 
-    /// one line for telemetry
     public static String status() {
 
         if (!BlazeConstants.ENABLED) return "off (BlazeConstants.ENABLED)";

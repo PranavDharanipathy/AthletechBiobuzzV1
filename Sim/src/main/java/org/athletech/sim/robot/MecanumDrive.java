@@ -117,7 +117,6 @@ public final class MecanumDrive {
         vx = vy = omega = 0;
     }
 
-    //something pushing the robot (another robot, a wall): field frame N, and N*m ccw
     private double pushX, pushY, pushTorque;
 
     public void push(double fieldX, double fieldY, double torqueCcw) {

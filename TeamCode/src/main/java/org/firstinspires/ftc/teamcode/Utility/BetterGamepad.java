@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.Utility;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
 
-/// @see Gamepad
 @SuppressWarnings("all")
 public class BetterGamepad {
 
@@ -12,7 +11,6 @@ public class BetterGamepad {
         this.gamepad = gamepad;
     }
 
-    //BOOLEANS
     public boolean a() { return gamepad.a; }
     public boolean b() { return gamepad.b; }
     public boolean x() { return gamepad.x; }
@@ -49,7 +47,6 @@ public class BetterGamepad {
 
     public boolean atRest() { return gamepad.atRest(); }
 
-    //FLOATS
     public float left_stick_y() { return gamepad.left_stick_y; }
     public float left_stick_x() { return gamepad.left_stick_x; }
     public float right_stick_y() { return gamepad.right_stick_y; }
@@ -58,12 +55,10 @@ public class BetterGamepad {
     public float left_trigger() { return gamepad.left_trigger; }
     public float right_trigger() { return gamepad.right_trigger; }
 
-    //COMMANDS
     public void stopRumble() { gamepad.stopRumble(); }
     public void rumble(int durationMs) { gamepad.rumble(durationMs); }
     public void runRumbleEffect(Gamepad.RumbleEffect effect) { gamepad.runRumbleEffect(effect); }
 
-    //to detect if a key has just been pressed
     public boolean curr_a = false;
     public boolean prev_a = false;
     public boolean aHasJustBeenPressed = false;

@@ -61,7 +61,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         tracker.v(position);
         tracker.write(HwOp.SET_POSITION, t0, position == lastPosition);
         lastPosition = position;
-        lastPulseWidth = Double.NaN; //the pulse width now follows the position
+        lastPulseWidth = Double.NaN;
     }
 
     @Override
@@ -81,7 +81,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         device.scaleRange(min, max);
         tracker.v(min);
         tracker.write(HwOp.SCALE_RANGE, t0, false);
-        lastPosition = Double.NaN; //same number now means a different pulse width
+        lastPosition = Double.NaN;
     }
 
     public boolean supportsPwmControl() {
@@ -154,7 +154,7 @@ public class MonitoredServo extends MonitoredDevice<Servo> implements Servo, Pwm
         tracker.v(usWidth);
         tracker.write(HwOp.SET_PULSE_WIDTH, t0, usWidth == lastPulseWidth);
         lastPulseWidth = usWidth;
-        lastPosition = Double.NaN; //moved without setPosition: the next setPosition is real
+        lastPosition = Double.NaN;
     }
 
     @Override

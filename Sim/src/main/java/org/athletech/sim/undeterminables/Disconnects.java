@@ -37,9 +37,9 @@ public final class Disconnects {
 
     public static final class Stress {
         public final double matchS, activeS;
-        public final List<double[]> esd;       // {t, energy into the electronics (J)}
-        public final List<double[]> impacts;   // {t, g}
-        public final float[] busV, current;    //every dt
+        public final List<double[]> esd;
+        public final List<double[]> impacts;
+        public final float[] busV, current;
         public final double dt, holdS, didtWindowS;
 
         public Stress(double matchS, double activeS, List<double[]> esd, List<double[]> impacts, float[] busV, float[] current, double dt, double holdS, double didtWindowS) {
@@ -58,11 +58,11 @@ public final class Disconnects {
 
     public static final class Result {
         public final double[] expected, atLeastOne;
-        public final double[][] byCause;          //[mode][cause] expected events
+        public final double[][] byCause;
         public final double anyProb;
-        public final List<double[]> timeline;     // sampled {t, mode, outage s, cause}
+        public final List<double[]> timeline;
         public final double downtimeS, partialDowntimeS;
-        public final double[] hazardPerBin;       //expected events per 10 s bin (all modes)
+        public final double[] hazardPerBin;
 
         Result(double[] expected, double[] atLeastOne, double[][] byCause, double anyProb, List<double[]> timeline, double downtimeS, double partialDowntimeS, double[] hazardPerBin) {
 
@@ -140,7 +140,7 @@ public final class Disconnects {
         double[][] byCause = new double[nm][CAUSES.length];
         int bins = (int) Math.ceil(s.matchS / BIN_S);
         double[] hazard = new double[bins];
-        List<double[]> candidates = new ArrayList<>(); // {t, mode, cause}
+        List<double[]> candidates = new ArrayList<>();
 
         double minSurge = Double.POSITIVE_INFINITY, minDrop = Double.POSITIVE_INFINITY;
         for (Mode m : modes) {

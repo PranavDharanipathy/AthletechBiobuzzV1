@@ -57,7 +57,7 @@ public final class Aperture {
         double cy = Math.cos(facingYawRad), sy = Math.sin(facingYawRad);
         double st = Math.sin(tiltFromUpRad), ct = Math.cos(tiltFromUpRad);
         Vec3 n = new Vec3(cy * st, sy * st, ct).normalized();
-        Vec3 u = new Vec3(-sy, cy, 0); //horizontal, along the opening's width
+        Vec3 u = new Vec3(-sy, cy, 0);
         Vec3 h = n.cross(u).normalized();
         return new Aperture(name, center, n, u, h, width, circular ? width : height, circular);
     }

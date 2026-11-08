@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.Utility.Blaze;
 
-/// one Blaze callback thread writes, the loop thread reads. Fixed arrays, no allocation, drops (and counts) when full
 public final class BlazeRing {
 
     private static final int SIZE = 4096, MASK = SIZE - 1;

@@ -69,22 +69,16 @@ public class DrivetrainConstants {
             }
     );
 
-    //pose hold (Systems/Drivetrain): the sticks move a reference and the robot is held to it in all three axes, so shoves get
-    //pushed back against. The model and stiffness come from the Drivetrain Autotuner (TunedConstants). Gamepad 1 back turns it
-    //off and on mid-match. OFF by default for now: sticks go straight to power
     public static boolean DRIVE_HOLD_ENABLED = false;
-    //per axis: forward, strafe, turn. power = kS sign(v) + kV v + kA a (in, rad, s)
     public static double[] DRIVE_KS = {TunedConstants.DRIVE_FORWARD_KS, TunedConstants.DRIVE_STRAFE_KS, TunedConstants.DRIVE_TURN_KS};
     public static double[] DRIVE_KV = {TunedConstants.DRIVE_FORWARD_KV, TunedConstants.DRIVE_STRAFE_KV, TunedConstants.DRIVE_TURN_KV};
     public static double[] DRIVE_KA = {TunedConstants.DRIVE_FORWARD_KA, TunedConstants.DRIVE_STRAFE_KA, TunedConstants.DRIVE_TURN_KA};
-    //traction: what the reference may ask for, in/s^2 and rad/s^2
     public static double[] DRIVE_MAX_ACCEL = {TunedConstants.DRIVE_FORWARD_MAX_ACCEL, TunedConstants.DRIVE_STRAFE_MAX_ACCEL, TunedConstants.DRIVE_TURN_MAX_ACCEL};
     public static double[] DRIVE_MAX_DECEL = {TunedConstants.DRIVE_FORWARD_MAX_DECEL, TunedConstants.DRIVE_STRAFE_MAX_DECEL, TunedConstants.DRIVE_TURN_MAX_DECEL};
-    //rad/s the hold closes at, higher = stiffer (the autotuner stops before it overshoots or chatters)
     public static double[] DRIVE_BANDWIDTH = {TunedConstants.DRIVE_FORWARD_BANDWIDTH, TunedConstants.DRIVE_STRAFE_BANDWIDTH, TunedConstants.DRIVE_TURN_BANDWIDTH};
     public static double DRIVE_DAMPING = 1, DRIVE_INTEGRAL_RATIO = 0.25;
-    public static double DRIVE_MAX_INTEGRAL_POWER = 0.3; //what a robot leaning on us can get added
-    public static double DRIVE_LEASH_INCHES = 4, DRIVE_LEASH_DEGREES = 20; //blocked, the reference waits this far ahead
+    public static double DRIVE_MAX_INTEGRAL_POWER = 0.3;
+    public static double DRIVE_LEASH_INCHES = 4, DRIVE_LEASH_DEGREES = 20;
     public static double DRIVE_ACCEL_FRACTION = 0.9;
     public static double DRIVE_VOLTAGE_SAMPLE_PERIOD = 0.05, DRIVE_VOLTAGE_FILTER_TAU = 0.1;
 

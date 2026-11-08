@@ -16,7 +16,7 @@ public class Blocker extends Subsystem {
 
     private boolean isSubsystem;
 
-    private Object blocker; //given Blocker (non-subsystem) or Servo data
+    private Object blocker;
 
     private BetterGamepad controller1;
 
@@ -35,7 +35,6 @@ public class Blocker extends Subsystem {
         return this;
     }
 
-    //COMPONENT
     public enum BlockerState {
         CLEAR(BlockerConstants.BLOCKER_CLEAR_POSITION), BLOCK(BlockerConstants.BLOCKER_BLOCK_POSITION);
 
@@ -71,7 +70,6 @@ public class Blocker extends Subsystem {
         return state;
     }
 
-    //SUBSYSTEM
     public void provideComponents(Blocker blocker, BetterGamepad controller1) {
 
         this.blocker = blocker;
@@ -124,8 +122,6 @@ public class Blocker extends Subsystem {
             flywheel.setFeeding(state == BlockerState.CLEAR);
         }
 
-        //Shooter.shotWillScore: a ball fired at the flywheel's actual speed, with the robot moving as it is, lands in the CELL
-        //if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && isFlywheelReady() && isAimReady() && Shooter.shotWillScore()) {
         if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD)) {
             setState(BlockerState.CLEAR);
         }

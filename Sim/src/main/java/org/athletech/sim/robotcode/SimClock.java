@@ -2,7 +2,6 @@ package org.athletech.sim.robotcode;
 
 import org.firstinspires.ftc.teamcode.Utility.Clock;
 
-//robot code reads Clock.seconds(), this makes that sim time while a sim runs
 public final class SimClock implements AutoCloseable {
 
     private double seconds;

@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-//code in the loop: the robot's real Flywheel + ShotGate with TeamCode's FlywheelConstants, sim flywheel + battery
 public final class FlywheelCodeScenario {
 
     private FlywheelCodeScenario() {}
@@ -158,12 +157,11 @@ public final class FlywheelCodeScenario {
         double durationS, dropPerShot, recoveryS = Double.NaN;
     }
 
-    /// trigger held: blocker open while the ShotGate says ready (always without it), a ball every feed interval while open
     static Burst burst(Setup s, double target, double volts, boolean gate, List<double[]> trace, long seed) {
 
         Burst b = new Burst();
         ShotGate shotGate = new ShotGate(FlywheelConstants.SHOT_GATE_ENTER_BAND_BELOW, FlywheelConstants.SHOT_GATE_ENTER_BAND_ABOVE, FlywheelConstants.SHOT_GATE_HOLD_BAND_BELOW, FlywheelConstants.SHOT_GATE_HOLD_BAND_ABOVE, FlywheelConstants.SHOT_GATE_DWELL, FlywheelConstants.SHOT_GATE_MIN_OPEN, FlywheelConstants.SHOT_GATE_PULSE);
-        double travel = 0.08; //blocker to the wheel
+        double travel = 0.08;
         double[] contacts = new double[s.balls];
         try (Rig rig = new Rig(s, volts, seed)) {
             rig.code.setVelocity(target, true);

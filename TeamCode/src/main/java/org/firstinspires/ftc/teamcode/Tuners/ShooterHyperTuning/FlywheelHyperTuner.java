@@ -3,11 +3,6 @@ package org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients;
 
-/// Flywheel hypertuning while it plays. Two jobs scored apart:
-/// stability (kp_close, kd): at speed and not feeding, RMS error + loop to loop jitter over a window;
-/// shots (feed boost, shot kick, kp_far, max_p): each burst, how far off the speed is when each ball hits (offset and spread,
-/// that's what changes the shot), how deep it dips and how long it takes to come back.
-/// Ticks/s, s. No hardware calls, the sims run it
 public class FlywheelHyperTuner {
 
     public final OnlineTuner stability, shots;
@@ -28,7 +23,6 @@ public class FlywheelHyperTuner {
         shots = new OnlineTuner("flywheel shots", 2, new OnlineTuner.Knob("feed_boost_volts", feedBoostVolts, 0, 3, 0.4, 0.05), new OnlineTuner.Knob("shot_kick_volts", shotKickVolts, 0, 6, 0.8, 0.1), new OnlineTuner.Knob("shot_kick_time", shotKickTime, 0.02, 0.3, 0.04, 0.01), new OnlineTuner.Knob("kp_far", start.kpFar, 0.3 * start.kpFar, 3 * start.kpFar, 0.2 * start.kpFar, 0.02 * start.kpFar), new OnlineTuner.Knob("max_p", start.maxP, 2, 12, 1, 0.25));
     }
 
-    /// knob values into the flywheel (its own coefficients copy)
     public void apply(Flywheel flywheel, FlywheelPIDVSCoefficients coefficients) {
 
         coefficients.kpClose = stability.value("kp_close");
@@ -40,17 +34,14 @@ public class FlywheelHyperTuner {
         flywheel.shotKickTime = shots.value("shot_kick_time");
     }
 
-    /// every loop. shotsSeen: the flywheel's ball counter. True when a trial finished (stability.last / shots.last)
     public boolean update(double now, double target, double velocity, boolean feeding, int shotsSeen) {
 
         boolean finished = false;
         double error = target - velocity;
-        //the target follows the distance now, so only a real change of speed restarts the steady window
         if (Math.abs(target - lastTarget) > targetStep) resetSteady();
         lastTarget = target;
         if (feeding) lastFeedEnd = now;
 
-        //stability: at speed, nothing being fed for a while
         if (target > 0 && !feeding && now - lastFeedEnd > quietAfterFeed && Math.abs(error) < steadyBand && !Double.isNaN(lastVelocity)) {
             if (Double.isNaN(steadyStart)) steadyStart = now;
             double jitter = velocity - lastVelocity;
@@ -65,7 +56,6 @@ public class FlywheelHyperTuner {
         }
         else resetSteady();
 
-        //shots: a burst runs from the first feed until it's back at speed
         if (target > 0 && feeding && !inBurst) {
             inBurst = true;
             contactSum = contactSq = contacts = dipSum = 0;

@@ -27,9 +27,6 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/// Live Limelight tuning on the robot. Moves nothing. While it runs (INIT included) the hub forwards ports 5800-5809
-/// to the Limelight, so a laptop on the robot's Wi-Fi opens http://192.168.43.1:5801 (web UI) and tools/limelight.py
-/// talks to :5807. Hold A+B to upload every p<index>_<name>.py / .json from assets/limelight to its pipeline.
 @TeleOp(name = "Limelight Lab", group = "Diagnostics")
 public class LimelightLab extends LinearOpMode {
 
@@ -146,7 +143,6 @@ public class LimelightLab extends LinearOpMode {
         return String.format(Locale.US, "%s: pipeline %d %s, %.0f fps, %.0f C, cpu %.0f%%", status.getName(), status.getPipelineIndex(), status.getPipelineType(), status.getFps(), status.getTemp(), status.getCpu());
     }
 
-    //pipeline json first (it can change the pipeline type), then python
     private static String upload(Limelight3A limelight, AssetManager assets, List<String> files, int pipeline) {
 
         if (files.isEmpty()) return "Nothing in assets/" + VisionConstants.LIMELIGHT_ASSET_DIRECTORY;
@@ -201,7 +197,7 @@ public class LimelightLab extends LinearOpMode {
         }
     }
 
-    //the SDK knows the Limelight's address but doesn't expose it
+    //the SDK doesn't expose the Limelight's address
     private static String address(Limelight3A limelight) {
 
         if (limelight != null) {

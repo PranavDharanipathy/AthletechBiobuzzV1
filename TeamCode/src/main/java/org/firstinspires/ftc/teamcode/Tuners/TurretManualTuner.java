@@ -22,7 +22,6 @@ import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
-//edit TurretConstants on the dashboard, it applies live
 @Config
 @TeleOp(name = "Turret Manual Tuner", group = "tuning")
 public class TurretManualTuner extends OpMode {
@@ -31,9 +30,9 @@ public class TurretManualTuner extends OpMode {
     public static double STEP_DEGREES = 15;
     public static boolean SINE = false;
     public static double SINE_AMPLITUDE_DEGREES = 25, SINE_HZ = 0.5;
-    public static long LOOP_TIME = 0; //extra ms per loop, set to TunedConstants.LOOP_TIME_MS to act like a match
+    public static long LOOP_TIME = 0;
     public static boolean VOLTAGE_COMPENSATION = TurretConstants.TURRET_VOLTAGE_COMPENSATION;
-    public static double FLYWHEEL_VELOCITY = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY; //B spins it, that's what shakes the turret
+    public static double FLYWHEEL_VELOCITY = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
 
     private TurretBase turret;
     private Flywheel flywheel;

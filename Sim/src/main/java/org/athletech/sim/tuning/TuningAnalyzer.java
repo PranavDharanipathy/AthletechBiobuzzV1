@@ -149,7 +149,6 @@ public final class TuningAnalyzer {
         turretVibration(sessions);
     }
 
-    //everything starts as what's in TunedConstants now, so anything not measured stays put
     void keepCurrent() {
 
         for (java.lang.reflect.Field field : TunedConstants.class.getFields()) {
@@ -170,7 +169,6 @@ public final class TuningAnalyzer {
         Arrays.sort(folders);
         for (int k = folders.length - 1; k >= 0; k--) {
             File result = new File(folders[k], "result.csv");
-            //an IGNORED file in the run's folder (with why) keeps a bad run out, e.g. one made while the loop was broken
             if (new File(folders[k], "IGNORED").isFile()) continue;
             if (result.isFile() && "done".equals(readKeyValues(result).get("status"))) return folders[k];
         }
@@ -219,7 +217,6 @@ public final class TuningAnalyzer {
         put("TURRET_MAX_ACCELERATION", fmt(positiveOrZero(r.get("max_acceleration"))));
         put("TURRET_START_DELAY", fmt(positiveOrZero(r.get("start_delay"))));
         put("TURRET_MAX_DECELERATION", fmt(positiveOrZero(r.get("max_deceleration"))));
-        //what DRIVING showed rejection may soften to; a STATIONARY run hasn't tested that, so no softening till DRIVING runs
         double shake = positiveOrZero(r.get("shake_bandwidth"));
         put("TURRET_SHAKE_BANDWIDTH", fmt("driving".equals(r.get("mode")) && shake > 0 ? Math.min(shake, parsed.get("TURRET_BANDWIDTH")) : parsed.get("TURRET_BANDWIDTH")));
         put("TURRET_AUTOTUNE", "\"" + folder.getName() + "\"");
@@ -230,8 +227,6 @@ public final class TuningAnalyzer {
         }
     }
 
-    /// older runs didn't measure it: 0 = unknown
-    //Drivetrain Autotuner: feedforward, traction and hold stiffness per axis
     void driveModel(File folder) throws IOException {
 
         if (folder == null) {

@@ -12,21 +12,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-//no hardware in here so it can run against a simulated turret, the OpMode feeds it sensors and sends out its volts
 public class TurretAutotuneEngine {
 
     public enum Mode { STATIONARY, DRIVING }
 
-    public static final double LOW_STEP_DEGREES = 60, HARD_STEP_DEGREES = 70; //travel of a speed step
-    public static final double TRAVEL_INSET_DEGREES = 10; //the driving target stays this far inside the travel (what's left must still be a whole turn)
-    public static final double SWING_MARGIN_DEGREES = 5; //spare room past the turret's stopping distance before it swings around
+    public static final double LOW_STEP_DEGREES = 60, HARD_STEP_DEGREES = 70;
+    public static final double TRAVEL_INSET_DEGREES = 10;
+    public static final double SWING_MARGIN_DEGREES = 5;
 
     public static final class Parameters {
         public double gain, timeConstant, kineticFriction, breakawayFriction, deadTime, bandwidth, damping, integralRatio, frictionScale;
-        public double maxSpeed, maxAcceleration; //ticks/s, ticks/s^2, 0 = not measured
-        public double startDelay; //s from rest, 0 = same as the dead time
-        public double maxDeceleration; //ticks/s^2 coasting (the servos don't brake unless reversed), 0 = not measured
-        public double shakeBandwidth; //rad/s vibration rejection may soften to while it shakes (DRIVING finds it), 0 = never soften
+        public double maxSpeed, maxAcceleration;
+        public double startDelay;
+        public double maxDeceleration;
+        public double shakeBandwidth;
 
         public Parameters(double gain, double timeConstant, double kineticFriction, double breakawayFriction, double deadTime, double bandwidth, double damping, double integralRatio, double frictionScale) {
 
@@ -117,11 +116,10 @@ public class TurretAutotuneEngine {
         this.tpd = ticksPerDegree;
         this.aimDirection = aimDirection;
         this.params = start.copy();
-        controller.vibrationRejection = false; //tune the raw loop, rejection only helps on top of it
-        if (mode == Mode.STATIONARY) controller.minHoldScale = 1; //and the hold push it learns
+        controller.vibrationRejection = false;
+        if (mode == Mode.STATIONARY) controller.minHoldScale = 1;
 
         if (mode == Mode.STATIONARY) {
-            //nothing closed loop until the speed steps have measured the turret: a wrong guess runs it away
             stages.add(rest(0.6));
             stages.add(kick());
             stages.add(still());
@@ -340,7 +338,6 @@ public class TurretAutotuneEngine {
         };
     }
 
-    /// volts off until the turret has stopped, so the next check doesn't see the last one's coasting
     private Stage still() {
 
         return new Stage() {
@@ -402,7 +399,7 @@ public class TurretAutotuneEngine {
     }
 
     private boolean identified = false;
-    private double stretch = 1; //slow turrets get longer tests
+    private double stretch = 1;
 
     private Stage singleServo(final boolean left) {
 
@@ -425,7 +422,7 @@ public class TurretAutotuneEngine {
                 double moved = position - startPosition;
                 if (Math.abs(moved) > tpd) {
                     out(0);
-                    if (moved < 0 && directionSign < 0) fail("servos fight, the " + (left ? "right" : "left") + " one wins: flip the " + (left ? "right" : "left") + " entry in TURRET_BASE_DIRECTIONS only (or flip the " + side + " one and TURRET_ENCODER_DIRECTION)"); //the encoder warning came from the fight, not a real flip
+                    if (moved < 0 && directionSign < 0) fail("servos fight, the " + (left ? "right" : "left") + " one wins: flip the " + (left ? "right" : "left") + " entry in TURRET_BASE_DIRECTIONS only (or flip the " + side + " one and TURRET_ENCODER_DIRECTION)");
                     else if (moved < 0) fail(side + " servo pushes the wrong way: flip its entry in TURRET_BASE_DIRECTIONS");
                     return true;
                 }
@@ -494,8 +491,6 @@ public class TurretAutotuneEngine {
                     breakaway = median(breakaways);
                     double minimum = Math.min(Collections.min(breakaways), Collections.max(breakaways));
                     if (Collections.max(breakaways) > 1.4 * Math.max(minimum, 0.05)) warnings.add("friction differs a lot between directions or spots (" + breakaways + " V)");
-                    //small steps (open loop, back and forth so it stays near the middle) give speed per volt, they settle at a steady speed.
-                    //Then full power steps give how fast it can speed up and its top speed: the servos run out of torque long before volts
                     double[] extra = {0.3, 0.6, 1.0, 1.6};
                     List<Stage> plan = new ArrayList<>();
                     for (double e : extra) {
@@ -552,7 +547,6 @@ public class TurretAutotuneEngine {
                 }
                 braking.add(new double[] {t - brakeStart, direction * (position - startPosition)});
                 if (!hard) {
-                    //small steps coast to a stop with the command still forward under friction: that's how it slows in a match
                     double since = t - brakeStart;
                     if (!coasted && since < 0.35 && direction * velocity > 0.3 * Math.abs(samples.isEmpty() ? 0 : endSpeed(samples))) {
                         out(direction * 0.85 * breakaway);
@@ -608,12 +602,11 @@ public class TurretAutotuneEngine {
         }
         if (bestA <= 0) return;
         stepDeadTimes.add(bestTd);
-        if (hard) return; //its lag is the torque limit, not the servo's
+        if (hard) return;
         stepPoints.add(new double[] {volts, bestA, samples.get(samples.size() - 1)[1] > 0 ? 1 : 0});
         lagPoints.add(new double[] {volts, bestTau});
     }
 
-    /// steady speed at the end (if it got there) and how fast it sped up, from the positions
     private void speeds(List<double[]> samples, double volts, boolean hard) {
 
         int n = samples.size();
@@ -642,7 +635,7 @@ public class TurretAutotuneEngine {
             if (plateau) topSpeedReached = true;
             if (accelerationNow > 0) {
                 hardAccelerations.add(accelerationNow);
-                hardDeadTimes.add(Math.max(0, vt[a] - v[a] / accelerationNow)); //the ramp is a straight line, where it starts is the dead time
+                hardDeadTimes.add(Math.max(0, vt[a] - v[a] / accelerationNow));
             }
             return;
         }
@@ -658,7 +651,6 @@ public class TurretAutotuneEngine {
         return (b[1] - a[1]) / Math.max(1e-4, b[0] - a[0]);
     }
 
-    /// how fast it coasts down: the time from 85% to 40% of the speed it had (the delay before it starts slowing doesn't count)
     private void coastDeceleration(List<double[]> driving, List<double[]> coasting) {
 
         double from = endSpeed(driving);
@@ -681,7 +673,6 @@ public class TurretAutotuneEngine {
         if (!Double.isNaN(high) && !Double.isNaN(low) && low > high) coastDecelerations.add(0.45 * from / (low - high));
     }
 
-    /// how long a command takes to act once it's moving: the brake command until the speed drops (from rest it takes longer)
     private void brakeDelay(List<double[]> driving, List<double[]> braking) {
 
         if (driving.size() < 2 || braking.size() < 2) return;
@@ -762,7 +753,6 @@ public class TurretAutotuneEngine {
                     fail("speed didn't go up with voltage");
                     return false;
                 }
-                //lag from the slowest steps only, the faster ones look laggy because they run out of torque
                 Collections.sort(lagPoints, new java.util.Comparator<double[]>() {
                     public int compare(double[] x, double[] y) {
                         return Double.compare(x[0], y[0]);
@@ -771,12 +761,12 @@ public class TurretAutotuneEngine {
                 List<Double> lags = new ArrayList<>();
                 for (int k = 0; k < Math.min(4, lagPoints.size()); k++) lags.add(lagPoints.get(k)[1]);
                 double timeConstant = lags.isEmpty() ? 0.05 : median(lags), deadTime = median(stepDeadTimes);
-                breakaway = Math.max(0, breakaway - 2 * safe(deadTime, 0)); //the friction ramp (2 V/s) kept climbing for a dead time before it saw motion
+                breakaway = Math.max(0, breakaway - 2 * safe(deadTime, 0));
                 double kinetic = clamp(-intercept / slope, 0, breakaway);
                 if (fitR2 < 0.9) warnings.add("speed vs voltage isn't very linear (R^2 " + round(fitR2, 3) + "), friction or binding changes with position?");
 
                 params = new Parameters(slope, timeConstant, kinetic, breakaway, deadTime, clamp(0.3 / Math.max(deadTime, 0.01), 2, 25), 0.9, 0.3, 1);
-                params.capability(lowTopSpeed, lowAcceleration); //for lining up the full power steps, they measure the real limits
+                params.capability(lowTopSpeed, lowAcceleration);
                 identified = true;
                 stretch = clamp((timeConstant + deadTime + 2 * safe(loopAverage, 0.01)) / 0.1, 1, 3);
                 status = "model: " + round(slope / tpd, 1) + " deg/s per V, lag " + round(timeConstant * 1000, 0) + " ms, dead time " + round(deadTime * 1000, 0) + " ms";
@@ -803,9 +793,9 @@ public class TurretAutotuneEngine {
                 history.add("delay " + round(1000 * moving, 0) + " ms while moving (braking), " + round(1000 * fromRest, 0) + " ms from rest");
                 params.deadTime = moving;
                 params.startDelay = fromRest;
-                params.bandwidth = clamp(0.3 / Math.max(moving + safe(loopAverage, 0.02), 0.01), 2, 25); //the moving delay is what limits how stiff it can be
+                params.bandwidth = clamp(0.3 / Math.max(moving + safe(loopAverage, 0.02), 0.01), 2, 25);
                 if (!coastDecelerations.isEmpty()) {
-                    params.maxDeceleration = clamp(median(coastDecelerations), 0.2 * params.maxAcceleration, params.maxAcceleration); //a bad read can't leave it unable to stop
+                    params.maxDeceleration = clamp(median(coastDecelerations), 0.2 * params.maxAcceleration, params.maxAcceleration);
                     history.add("coasts down at " + round(deg(params.maxDeceleration), 0) + " deg/s^2 (it only brakes when reversed)");
                 }
                 stretch = clamp((params.timeConstant + params.startDelay + 2 * safe(loopAverage, 0.01)) / 0.1, 1, 3);
@@ -830,7 +820,6 @@ public class TurretAutotuneEngine {
             return overshoot <= 0.08 && holdRms <= 4 && smallOscillation <= 3;
         }
 
-        //hopping on friction while it holds is bad but it isn't the loop going unstable
         boolean unstable() {
             return overshoot > 0.3 || smallOscillation > 8;
         }
@@ -925,7 +914,6 @@ public class TurretAutotuneEngine {
                         if (sign != 0) lastSign = sign;
                     }
                 }
-                //vibration = moving after it has settled
                 boolean close = !Double.isNaN(seg[0]) && Math.abs(error) < 0.5 * tpd && Math.abs(controller.getReference() - desired) < 1;
                 if (!close) closeSince = Double.NaN;
                 else if (Double.isNaN(closeSince)) closeSince = elapsed;
@@ -963,11 +951,11 @@ public class TurretAutotuneEngine {
                     r.smallOscillation = Math.max(r.smallOscillation, oscillations);
                 }
                 if (velocityCount > 0) r.holdRms = Math.max(r.holdRms, deg(Math.sqrt(velocitySquares / velocityCount)));
-                else if (!Double.isNaN(seg[0])) r.holdRms = Math.max(r.holdRms, 11); //never settled
+                else if (!Double.isNaN(seg[0])) r.holdRms = Math.max(r.holdRms, 11);
                 if (sineCount > 0) {
                     r.sineRms = deg(Math.sqrt(sineSquares / sineCount));
                     r.feedforwardCorrection = vv > 0 ? fbv / vv : 0;
-                    r.late = dd > 0 ? -ed / dd : 0; //seconds behind the target, error = -late * velocity
+                    r.late = dd > 0 ? -ed / dd : 0;
                     r.saturatedSine = saturatedCount > 0.1 * sineCount;
                 }
             }
@@ -994,8 +982,6 @@ public class TurretAutotuneEngine {
                     best = params.copy();
                 }
 
-                //overshoot or swinging back and forth = too stiff. Not settling, or hopping on friction while it holds, without
-                //either = too soft, and lower would only be worse
                 boolean aggressive = r.overshoot > 0.08 || r.smallOscillation > 3;
                 if (r.ok()) good = Double.isNaN(good) ? w : Math.max(good, w);
                 else if (aggressive || (!Double.isNaN(good) && w > good)) bad = Double.isNaN(bad) ? w : Math.min(bad, w);
@@ -1006,8 +992,6 @@ public class TurretAutotuneEngine {
                     closestResult = r;
                 }
 
-                //friction only gets nudged on passing tests: near the edge of stability small errors are the loop, not friction.
-                //Above 1 the sliding friction alone beats breakaway and it creeps past the target
                 if (r.ok()) {
                     if (r.smallError > 0.4 && r.smallOscillation <= 1) {
                         params.frictionScale = Math.min(1, params.frictionScale + 0.1);
@@ -1090,8 +1074,6 @@ public class TurretAutotuneEngine {
             final TurretRoute route = new TurretRoute();
             double calmestShake = Double.NaN, lastShake, lastFlips, lastError, lastTrack = Double.NaN, stillSince = Double.NaN, holdTotal;
             boolean caughtUp;
-            //shaky holds start a trial at a softer bandwidth. Softer that really shakes less, and holds and tracks no worse, becomes the
-            //floor vibration rejection may soften to while it shakes (it softens while moving too); the bandwidth stays what STATIONARY found
             double baseBandwidth = Double.NaN, shakeBandwidth, beforeShake, beforeFlips, beforeError, beforeTrack, trialShake, trialFlips, trialError, trialTrack;
             double floorShake = Double.NaN, floorFlips, floorError, floorTrack;
             int trialJudged = -1, trialUnsettled, trialTracked;
@@ -1115,11 +1097,9 @@ public class TurretAutotuneEngine {
                     results.put("shake_bandwidth", round(shakeBandwidth, 2));
                 }
 
-                //holds the field direction it started at however much the robot spins, swinging round at the ends like the match aim
                 double raw = aimDirection * -(heading - headingStart) * 180 / Math.PI;
                 double low = ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES + TRAVEL_INSET_DEGREES, high = ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES - TRAVEL_INSET_DEGREES;
                 double targetSpeed = aimDirection * -omega * 180 / Math.PI;
-                //same stop the controller plans: one lead, then 0.8 of the coasting deceleration
                 double decel = deg(params.maxDeceleration > 0 ? params.maxDeceleration : params.maxAcceleration > 0 ? params.maxAcceleration : 1000 * tpd);
                 double aim = route.update(raw, targetSpeed, deg(position), low, high, params.deadTime + 2 * safe(loopAverage, 0.02), 0.8 * decel, SWING_MARGIN_DEGREES);
                 if (route.hasSwung()) swinging = true;
@@ -1137,8 +1117,6 @@ public class TurretAutotuneEngine {
                 boolean still = !pinned && Math.abs(desiredVelocity) < 3 * tpd;
                 if (!still) stillSince = Double.NaN;
                 else if (Double.isNaN(stillSince)) stillSince = t;
-                //shake only counts once the target's been still a while and the turret has caught up: before that it's catching up.
-                //After that everything counts, so a soft loop that wanders off doesn't look calm
                 if (!still) caughtUp = false;
                 else if (t - stillSince >= 0.5 && Math.abs(error) < 2 * tpd) caughtUp = true;
                 boolean holding = still && caughtUp;
@@ -1171,12 +1149,9 @@ public class TurretAutotuneEngine {
                     motionTotal += motion;
                     holdTotal += holdTime;
                     windows++;
-                    //gain stays what the stationary run measured: feedback lining up with speed here is the start delay at every
-                    //reversal, not a wrong gain, and chasing it dragged the gain down 30%
                     double rms = n > 20 ? deg(Math.sqrt(ee / n)) : Double.NaN;
                     double correlation = ev / Math.sqrt(ee * vvSum + 1e-12);
                     if (!Double.isNaN(rms)) results.put("driving_tracking_error_deg", round(rms, 3));
-                    //error per speed (s): how fast the driver turned in this window cancels out, the raw error swings 20% with that
                     double lag = n > 20 && vvSum > 0 ? Math.sqrt(ee / vvSum) : Double.NaN;
                     String note;
                     boolean changed = false, unsettled = false;
@@ -1185,17 +1160,15 @@ public class TurretAutotuneEngine {
                         trialTrack += lag;
                         trialTracked++;
                     }
-                    if (windows <= 1) note = " (start-up, not judged)"; //first window has the start-up jump
+                    if (windows <= 1) note = " (start-up, not judged)";
                     else if (holdTime < 0.5) {
                         note = " (no hold, not judged)";
-                        //it was still but never caught up: softer can't hold
                         if (trialJudged >= 0 && stillTime >= 0.5 && ++trialUnsettled >= 2) softerHelped = false;
                     }
                     else {
                         double holdRms = deg(Math.sqrt(holdSquares / holdN)), holdError = deg(Math.sqrt(holdErrorSquares / holdN));
                         double flips = errorSigns / holdTime;
                         calmestShake = Double.isNaN(calmestShake) ? holdRms : Math.min(calmestShake, holdRms);
-                        //slow loops shake more anyway, so only clearly worse than its calmest counts
                         boolean bad = flips > 3 || holdRms > Math.max(6, 1.6 * calmestShake);
                         note = bad ? " shaky" : " calm";
                         if (trialJudged >= 0) {
@@ -1219,7 +1192,6 @@ public class TurretAutotuneEngine {
                             boolean canTry = !shakeIsExternal && next >= Math.max(2, 0.5 * baseBandwidth);
                             badWindows = bad && canTry ? badWindows + 1 : 0;
                             unsettled = bad && canTry;
-                            //only ever softer, and only while it shakes: raising it here chased the lag the start delay makes at every reversal and it hunted
                             if (badWindows >= 2) {
                                 boolean fromFloor = !Double.isNaN(floorShake);
                                 beforeShake = fromFloor ? floorShake : 0.5 * (lastShake + holdRms);

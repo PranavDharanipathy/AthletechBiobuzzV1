@@ -48,7 +48,7 @@ public final class Main {
         try {
             out = new PrintStream(System.out, true, "UTF-8");
         } catch (java.io.UnsupportedEncodingException e) {
-            out = System.out; //UTF-8 is always supported
+            out = System.out;
         }
         try {
             int code = run(argv, out);
@@ -99,7 +99,6 @@ public final class Main {
         return code;
     }
 
-    //a copy of the profile with the gaps filled by placeholders, so every sim runs before everything is measured
     static Path assumed(Path dbPath, Path outDir, PrintStream out) throws Exception {
 
         if (!Files.isRegularFile(dbPath)) throw new IllegalArgumentException("no profile at " + dbPath.toAbsolutePath());
@@ -339,7 +338,7 @@ public final class Main {
                     out.println();
                     LocalizationScenario.run(ctx);
                     out.println();
-                    LoopTimingScenario.run(ctx);   //before the launcher: it produces the loop-timing rpm error
+                    LoopTimingScenario.run(ctx);
                     out.println();
                     LauncherScenario.run(ctx);
                     out.println();

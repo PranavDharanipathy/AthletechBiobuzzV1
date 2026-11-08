@@ -95,7 +95,7 @@ public class ProfileDbTest {
         db.setCurve("drive.time_to_distance", Arrays.asList(new double[]{1, 0.9}, new double[]{0.5, 0.6, 0.01, 10}), src, false);
         ProfileDb.CurveRow c = db.curve("drive.time_to_distance");
         assertEquals(2, c.points().size());
-        assertEquals(0.5, c.points().get(0)[0], 0); //sorted by x
+        assertEquals(0.5, c.points().get(0)[0], 0);
         assertEquals(10, c.points().get(0)[3], 0);
         db.setSurface("drive.time_to_distance_vs_battery", Arrays.asList(new double[]{1, 12, 0.95}, new double[]{1, 13, 0.9}), src, false);
         assertEquals(2, db.surface("drive.time_to_distance_vs_battery").points().size());
@@ -224,7 +224,7 @@ public class ProfileDbTest {
         Files.createDirectories(s);
         StringBuilder sys = new StringBuilder("t_s,loop_ms,loop_avg_ms,hw_ms_per_loop,battery_v,total_current_a\n");
         for (int i = 0; i < 400; i++) {
-            double loop = i % 100 == 50 ? 40 : 10; //a few spikes
+            double loop = i % 100 == 50 ? 40 : 10;
             sys.append(i * 0.1).append(',').append(loop).append(",10,6,12.5,5\n");
         }
         Files.write(s.resolve("system.csv"), sys.toString().getBytes(StandardCharsets.UTF_8));

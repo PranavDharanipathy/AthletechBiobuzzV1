@@ -142,7 +142,7 @@ public final class ChargeSim {
 
     public static final class MatchResult {
         public final List<Event> events = new ArrayList<>();
-        public final List<double[]> series = new ArrayList<>(); //{t, frame kV, electronics - frame kV} every 0.5 s
+        public final List<double[]> series = new ArrayList<>();
         public double maxAbsKv, perimeterKvEnd, tileUcEnd;
         public int internalArcs;
         public final Ledger ledger = new Ledger();

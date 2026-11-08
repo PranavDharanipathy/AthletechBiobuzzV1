@@ -24,10 +24,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/// collects the flywheel speed table (ShooterConstants.FLYWHEEL_DISTANCES / FLYWHEEL_VELOCITIES): drive somewhere, find the
-/// speed that scores, record (distance, speed), repeat. The turret aims at the goal exactly like a match (the Shooter, its
-/// speed held at yours), and the distance is the match's: turret to the goal's CELL point. One goal is enough: the table is
-/// distances, so blue (the same field flipped) uses it too. RED by default
 @Config
 @TeleOp(name = "Flywheel Interpolation Tuner", group = "tuning")
 public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
@@ -35,7 +31,6 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
     public static Alliance ALLIANCE = Alliance.RED;
     public static double FLYWHEEL_VELOCITY = 1450;
     public static double VELOCITY_STEP = 10;
-    //a point is only recorded with the robot this still (in/s, deg/s): its distance is where the shots came from
     public static double MAX_RECORD_SPEED = 2, MAX_RECORD_YAW = 5;
 
     private final List<Double> distances = new ArrayList<>();
@@ -113,7 +108,6 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         if (controller1.dpad_leftHasJustBeenPressed) FLYWHEEL_VELOCITY = Math.max(0, FLYWHEEL_VELOCITY - VELOCITY_STEP);
         if (controller1.yHasJustBeenPressed) showDataset = !showDataset;
 
-        //the match aim, at your speed
         shooter.manualFlywheelVelocity = FLYWHEEL_VELOCITY;
         shooter.updateAutonomous(spinning);
         distance = Goal.isSet(shooter.goalCoordinate) ? shooter.turretPose.distance(shooter.goalCoordinate) : Double.NaN;
@@ -121,7 +115,6 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         boolean shoot = controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && spinning;
         blocker.setState(shoot ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
         intakeComponent.setState(shoot ? Intake.IntakeState.INTAKE : Intake.IntakeState.IDLE);
-        //a component Intake (no gamepad): its update() is the TeleOp one and reads the triggers, so run the motor's speed loop
         intake.update();
 
         if (controller1.dpad_upHasJustBeenPressed) record();

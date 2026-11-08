@@ -6,11 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/// Measures the drivetrain per axis (forward, strafe, turn) and tunes the pose hold, no hardware calls (the sims run it):
-/// static friction (slow ramp), feedforward and lag (power steps both ways, so it comes back), traction (full power burst
-/// then full reverse brake), then hold stiffness: it shoves itself (a motor pulse on top of the hold) at rising bandwidths
-/// until the hold overshoots or chatters, and keeps a margin under the last good one.
-/// Robot frame forward, left, ccw; field pose like Pedro. in, rad, s
 public class DriveAutotuneEngine {
 
     public double travelLimit = 30, safetyRadius = 72, safetyHeading = Math.toRadians(45);
@@ -79,7 +74,6 @@ public class DriveAutotuneEngine {
         for (int a = 0; a < 3; a++) power[a] = 0;
     }
 
-    /// pose and velocity field frame (Pedro), volts: battery
     public void update(double now, double x, double y, double heading, double vx, double vy, double omega, double volts) {
 
         for (int a = 0; a < 3; a++) power[a] = 0;
@@ -201,7 +195,6 @@ public class DriveAutotuneEngine {
         status = String.format(Locale.US, "%s: hold at %.1f rad/s, shove %s", name(axis), bw, kickDir > 0 ? "+" : "-");
         controller.update(dt, command, x, y, heading, vx, vy, omega, volts);
         for (int a = 0; a < 3; a++) power[a] = controller.power[a];
-        //a shove: a motor pulse the hold has to fight off
         if (elapsed < kickTime) power[axis] = clamp(power[axis] + kickDir * kickPower, -1, 1);
         double offset = along * kickDir;
         if (elapsed >= kickTime) {
@@ -258,7 +251,6 @@ public class DriveAutotuneEngine {
         burstAt = Double.NaN;
     }
 
-    //63% of the steady speed, from the samples of the step that just ran
     private double riseTime(double steady) {
 
         for (int k = 0; k < samples; k++) if (sampleV[k] >= 0.632 * steady) return Math.max(sampleT[k], 0.02);

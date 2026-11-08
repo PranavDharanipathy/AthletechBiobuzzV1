@@ -70,7 +70,7 @@ public final class LocalizationScenario {
                 double herr = Math.IEEEremainder(wh - h, 2 * Math.PI);
                 dh = Math.max(-turnRateRad * DT, Math.min(turnRateRad * DT, herr));
                 if (dist < 0.01 && Math.abs(herr) < 0.01) {
-                    pause = rng.uniform(0, 2.5); //stop to intake / score
+                    pause = rng.uniform(0, 2.5);
                     wx = rng.uniform(-half, half);
                     wy = rng.uniform(-half, half);
                     wh = rng.uniform(-Math.PI, Math.PI);
@@ -142,7 +142,7 @@ public final class LocalizationScenario {
             meanN += total.nT[i];
         }
         for (int i = 0; i < total.posD.length; i++) {
-            if (total.nD[i] < Math.max(5, runs / 5)) continue; //too few runs got this far
+            if (total.nD[i] < Math.max(5, runs / 5)) continue;
             posVsD.add(new double[]{(i + 0.5) * DIST_BIN, Math.sqrt(total.posD[i] / total.nD[i]), Double.NaN, total.nD[i]});
         }
         double endPos = posVsT.isEmpty() ? Double.NaN : posVsT.get(posVsT.size() - 1)[1];

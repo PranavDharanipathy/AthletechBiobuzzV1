@@ -349,7 +349,7 @@ public final class MonitorImport {
                     last = t;
                 }
                 boolean read = "R".equals(et.str(row, "kind"));
-                boolean flagged = "1".equals(et.str(row, "flag")); //cache hit (read) or repeated value (write): no hub traffic
+                boolean flagged = "1".equals(et.str(row, "flag"));
                 if (flagged) continue;
                 int k = classOf(types.get(et.str(row, "device")), read);
                 double us = et.num(row, "latency_us");

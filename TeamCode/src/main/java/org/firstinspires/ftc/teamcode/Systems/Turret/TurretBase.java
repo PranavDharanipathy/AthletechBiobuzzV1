@@ -33,7 +33,6 @@ public class TurretBase {
 
     private double targetVelocity = 0;
 
-    /// ticks per second
     public void setTargetVelocity(double targetVelocity) {
         this.targetVelocity = MathUtil.isFinite(targetVelocity) ? targetVelocity : 0;
     }
@@ -66,17 +65,14 @@ public class TurretBase {
         return voltageCompensationEnabled ? voltageCompensator.volts() : TurretConstants.TURRET_NOMINAL_VOLTS;
     }
 
-    /// resets the encoder, so the turret must point straight (home) at INIT
     public TurretBase(HardwareMap hardwareMap) {
         this (hardwareMap, null);
     }
 
-    /// resets the encoder and says the turret is at currentPosition now
-    /// @param currentPosition ticks from home where the turret is right now (like the end of auto), null = at home
     public TurretBase(HardwareMap hardwareMap, Double currentPosition) {
 
         this(hardwareMap, new MonitoredCRServo(hardwareMap, DeviceConstants.leftTurretCRServoDeviceName, false), currentPosition);
-        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache(); //MANUAL bulk cache still has the count from before the reset
+        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache(); //MANUAL bulk cache still has the old count
     }
 
     private TurretBase(HardwareMap hardwareMap, CRServo left, Double currentPosition) {
@@ -100,7 +96,6 @@ public class TurretBase {
 
         batteryVoltageSensor = java.util.Objects.requireNonNull(voltageSensor, "voltage sensor");
 
-        //home is always 0 now, the turret holds where it is until told otherwise
         double now = currentPosition != null && MathUtil.isFinite(currentPosition) ? wrapIntoTravel(currentPosition) : 0;
         encoder.reset((int) Math.round(now));
         startPosition = 0;
@@ -108,7 +103,6 @@ public class TurretBase {
         applyConstants();
     }
 
-    /// a turn either way is the same spot, so a position past the travel gets a turn taken off (350 deg is -10)
     public static double wrapIntoTravel(double ticks) {
 
         double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE, margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
@@ -118,7 +112,6 @@ public class TurretBase {
         return ShooterConstants.TURRET_AIM_DIRECTION * degrees * tpd;
     }
 
-    /// dashboard edits to TurretConstants land on the next update
     public void applyConstants() {
 
         double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
@@ -155,18 +148,15 @@ public class TurretBase {
         return controller;
     }
 
-    //one map for every OpMode, so what TeleOp learned is there next match too (and on file for after a restart)
     private static LanyardMap lanyardMap;
     private static boolean lanyardLearned = false;
 
-    /// the lanyard learning sweep turns learning on even when TURRET_LANYARD_LEARNING is off
     public boolean forceLanyardLearning = false;
 
     public static File lanyardFile() {
         return new File(new File(AppUtil.ROBOT_DATA_DIR, "TurretLanyards"), "map.csv");
     }
 
-    /// loads the saved map the first time, and redoes the bins if the range or bin size got changed on the dashboard
     public static LanyardMap getLanyardMap() {
 
         double margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
@@ -181,14 +171,12 @@ public class TurretBase {
         return fresh;
     }
 
-    /// call when the OpMode stops; only writes when lanyards are on and something could have been learned
     public void saveLanyards() {
 
         if (lanyardMap == null || !TurretConstants.TURRET_LANYARDS_ENABLED || !(controller.lanyardLearning || lanyardLearned)) return;
         lanyardMap.save(lanyardFile());
     }
 
-    /// forgets everything learned, in memory and on file
     public static void clearLanyards() {
 
         getLanyardMap().clear();
@@ -196,7 +184,6 @@ public class TurretBase {
         lanyardMap.save(lanyardFile());
     }
 
-    /// volts the map added this loop
     public double getLanyardVolts() {
         return controller.lanyard;
     }
@@ -215,7 +202,7 @@ public class TurretBase {
             lastTargetPosition = targetPosition;
             targetPosition = position;
 
-            initialError = null; //null means that it's to be determined
+            initialError = null;
         }
     }
 
@@ -235,7 +222,6 @@ public class TurretBase {
         return encoder.getCurrentPosition();
     }
 
-    /// what readSensors last saw
     public double getPosition() {
         return currentPosition;
     }
@@ -262,13 +248,11 @@ public class TurretBase {
         f = controller.f;
         v = controller.v;
 
-        //wiring: past the travel limit it may only come back
         double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
         double aimDegrees = ShooterConstants.TURRET_AIM_DIRECTION * (currentPosition - startPosition) / tpd, outward = ShooterConstants.TURRET_AIM_DIRECTION * volts;
         double margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
         if ((aimDegrees > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + margin && outward > 0) || (aimDegrees < ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - margin && outward < 0)) volts = 0;
 
-        //the limit above only works with a live encoder: a hard push it doesn't see at all means it's dead, stop for good
         double nowSeconds = MathUtil.millisecondsToSeconds(currTime);
         if (currentPosition != lastCurrentPosition || Math.abs(lastVolts) < TurretConstants.TURRET_FROZEN_ENCODER_VOLTS) frozenSince = Double.NaN;
         else if (Double.isNaN(frozenSince)) frozenSince = nowSeconds;
@@ -282,12 +266,10 @@ public class TurretBase {
     private double frozenSince = Double.NaN, lastVolts;
     private boolean encoderFrozen;
 
-    /// the encoder stopped changing under a hard push: the turret is off until the OpMode restarts
     public boolean isEncoderFrozen() {
         return encoderFrozen;
     }
 
-    /// update() calls this, only call it yourself when driving the servos with setVolts
     public void readSensors() {
 
         prevTime = currTime;
@@ -321,8 +303,6 @@ public class TurretBase {
         if (initialError == null) initialError = error;
     }
 
-    /// every turret command ends here: with TurretConstants.TURRET_ENABLED off the servos only ever get 0 (the controller still runs
-    /// and is still recorded, so what it would have done is in the log)
     public void setVolts(double leftVolts, double rightVolts) {
 
         boolean on = TurretConstants.TURRET_ENABLED;
@@ -342,12 +322,10 @@ public class TurretBase {
     private double smoothPosition = Double.NaN, aimInsideSince = Double.NaN;
     private boolean aimReady = false;
 
-    /// target minus where it points, shake smoothed out
     public double getAimErrorDegrees() {
         return Double.isNaN(smoothPosition) ? Double.NaN : (targetPosition - smoothPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE;
     }
 
-    /// stayed within TURRET_AIM_GATE_ENTER_DEGREES for the dwell, until it leaves TURRET_AIM_GATE_HOLD_DEGREES
     public boolean isOnTarget() {
         return aimReady;
     }
@@ -368,7 +346,6 @@ public class TurretBase {
         return error;
     }
 
-    /// @return What the error was initially when the PID started working towards the new target position
     public double getInitialError() {
         return initialError;
     }

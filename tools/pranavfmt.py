@@ -13,7 +13,7 @@ import re
 import sys
 
 BINARY_END = ('&&', '||', '+', '-', '*', '/', '?', '=', '==', '!=', '<', '>', '<=', '>=', '%', '&', '|', '^')
-LEADING = ('&&', '||', '?', '+', ':', '-', '*', '/')  #a leading . is a builder chain, kept one call per line
+LEADING = ('&&', '||', '?', '+', ':', '-', '*', '/')
 
 
 def split_code_comment(line, in_block):
@@ -82,7 +82,7 @@ def ends_with_operator(code):
     for op in sorted(BINARY_END, key=len, reverse=True):
         if c.endswith(op):
             if op == '>' and re.search(r'<[\w\s,.<>?\[\]]*>$', c):
-                return False  #generic
+                return False
             if op in ('*', '/') and c.endswith('*/'):
                 return False
             return True
@@ -124,7 +124,6 @@ def join_wrapped(lines, warnings, path):
 
         stripped = code.rstrip()
 
-        #Pranav's block form: opener ends with "(", one item per line, closer line starts with ")" -> keep it
         if stripped.endswith('('):
             k = find_block_end(lines, i)
             if k is not None:
@@ -164,7 +163,6 @@ def join_wrapped(lines, warnings, path):
             i += 1
             continue
 
-        #gather the statement
         indent = re.match(r'\s*', line).group(0)
         joined = stripped.strip()
         comments = [comment.strip()] if comment.strip() else []
@@ -178,7 +176,7 @@ def join_wrapped(lines, warnings, path):
                 ok = False
                 break
             if ncode.rstrip().endswith('{') and not re.search(r'\)\s*\{$', ncode.rstrip()) and 'new ' in ncode and '(' in ncode:
-                ok = False  #anonymous class starts inside the statement
+                ok = False
                 break
             joined = join_pieces(joined, ncode)
             if ncomment.strip():
@@ -271,7 +269,6 @@ def method_blank_lines(lines):
         line = out[i]
         code = split_code_comment(line, False)[0]
         if (METHOD.match(code) or CTOR.match(code)) and not CONTROL.match(code) and ' new ' not in code and '=' not in code.split('(')[0]:
-            #find the body end
             depth = 0
             stack = []
             bracket_delta(code, stack)
@@ -299,7 +296,6 @@ def method_blank_lines(lines):
                 out.insert(i + 1, '')
                 k += 1
             elif len(body) == 1 and first_blank:
-                #one-liner: drop blank lines around it
                 del out[i + 1]
                 k -= 1
                 if out[k - 1].strip() == '' and k - 1 > i:

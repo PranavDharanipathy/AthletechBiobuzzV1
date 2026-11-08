@@ -22,14 +22,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-//code in the loop: the robot's real TurretAutotuneEngine + TurretController against a sim CR-servo turret
 public final class TurretScenario {
 
     private TurretScenario() {}
 
     static final double H = 0.0005;
     static final double[] TURN_ANGLES = {2, 5, 10, 20, 30, 45, 60, 90};
-    static final double[] MATCH_SPINS = {1.5, 3, 6}; //rad/s
+    static final double[] MATCH_SPINS = {1.5, 3, 6};
 
     static final class Setup {
 
@@ -38,7 +37,7 @@ public final class TurretScenario {
         CodeLoop loop;
         double shakeSync, shakeHz, shakeBand;
         boolean rejection = true;
-        double[][] lanyards = new double[0][]; //degrees: taut at, side, V/deg, max V, drag V
+        double[][] lanyards = new double[0][];
         LanyardMap map;
         boolean learn;
         double startTicks;
@@ -101,7 +100,6 @@ public final class TurretScenario {
         return new TurretAutotuneEngine.Parameters(TurretConstants.TURRET_GAIN, TurretConstants.TURRET_TIME_CONSTANT, TurretConstants.TURRET_KINETIC_FRICTION, TurretConstants.TURRET_BREAKAWAY_FRICTION, TurretConstants.TURRET_DEAD_TIME, TurretConstants.TURRET_BANDWIDTH, TurretConstants.TURRET_DAMPING, TurretConstants.TURRET_INTEGRAL_RATIO, TurretConstants.TURRET_FRICTION_SCALE).capability(TurretConstants.TURRET_MAX_SPEED, TurretConstants.TURRET_MAX_ACCELERATION).startDelay(TurretConstants.TURRET_START_DELAY).deceleration(TurretConstants.TURRET_MAX_DECELERATION).shakeBandwidth(TurretConstants.TURRET_MIN_BANDWIDTH);
     }
 
-    /// what a perfect autotune would give for this sim turret
     static TurretAutotuneEngine.Parameters matched(Setup s, double bandwidth) {
 
         CrServoTurret.Params q = s.plant;
@@ -109,7 +107,6 @@ public final class TurretScenario {
         return new TurretAutotuneEngine.Parameters(q.gain, q.timeConstant, q.kineticFriction, q.breakawayFriction, q.deadTime, bandwidth, 0.9, 0.3, 1).capability(finite, accel).startDelay(q.startDelay).deceleration(coast);
     }
 
-    //autotune driving: 4 s of turning, then 2 s stopped (like stopping to shoot), round and round
     static double drivingTime(double t) {
         return 4 * Math.floor(t / 6) + Math.min(t % 6, 4);
     }
@@ -117,8 +114,6 @@ public final class TurretScenario {
     static boolean stopped(double t) {
         return t % 6 >= 4;
     }
-
-    //two spins mixed so the turret sees reversals and fast swings
 
     static double heading(double t) {
         return 0.6 * Math.sin(2 * Math.PI * 0.25 * t) + 0.3 * Math.sin(2 * Math.PI * 0.7 * t);
@@ -149,7 +144,6 @@ public final class TurretScenario {
         return autotune(s, turret, engine, driving, 0, maxSeconds, seed);
     }
 
-    /// spin = rad/s the robot keeps turning on top of the back and forth, so it goes round and round
     static Tune autotune(Setup s, CrServoTurret turret, TurretAutotuneEngine engine, boolean driving, double spin, double maxSeconds, long seed) {
 
         Encoder filter = newFilter();
@@ -189,7 +183,7 @@ public final class TurretScenario {
         c.vibrationReference = TurretConstants.TURRET_VIBRATION_REFERENCE_DEGREES * tpd;
         c.vibrationDeadband = TurretConstants.TURRET_VIBRATION_DEADBAND_DEGREES * tpd;
         c.minimumBandwidthFraction = TurretConstants.TURRET_MIN_BANDWIDTH_FRACTION;
-        c.minimumBandwidth = p.shakeBandwidth > 0 ? p.shakeBandwidth : p.bandwidth; //same as TurretBase: what DRIVING found, else never soften
+        c.minimumBandwidth = p.shakeBandwidth > 0 ? p.shakeBandwidth : p.bandwidth;
         c.lanyardTicksPerDegree = tpd;
         c.lanyardLearnRate = TurretConstants.TURRET_LANYARD_LEARN_RATE;
         c.lanyardLearnBand = TurretConstants.TURRET_LANYARD_LEARN_BAND_DEGREES * tpd;
@@ -205,7 +199,7 @@ public final class TurretScenario {
         c.stuckVoltsLimit = TurretConstants.TURRET_FROZEN_ENCODER_VOLTS - 0.1;
         c.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
         c.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
-        c.setTravel(ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd); //same as TurretBase
+        c.setTravel(ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd);
         return c;
     }
 
@@ -222,7 +216,6 @@ public final class TurretScenario {
         final List<double[]> trace = new ArrayList<>();
     }
 
-    /// settleFrom >= 0: target is a step at that time, settle = time until it stays within 0.5 deg
     static Track track(Setup s, TurretAutotuneEngine.Parameters p, Target target, double seconds, boolean spinning, double measureFrom, double settleFrom, boolean keepTrace, long seed) {
 
         CrServoTurret turret = s.turret(seed);
@@ -308,10 +301,9 @@ public final class TurretScenario {
     static final class Steps {
 
         double stallSeconds, divergedFraction;
-        final double[] reachSeconds = new double[STEP_SEQUENCE.length]; //to within 5 deg, NaN = never
+        final double[] reachSeconds = new double[STEP_SEQUENCE.length];
     }
 
-    /// STEP_SEQUENCE, STEP_SECONDS apart. Stalled = over 10 deg off and under 15 deg/s; diverged = over 15 deg off its own plan
     static Steps steps(Setup s, TurretAutotuneEngine.Parameters p, long seed) {
 
         Target target = new Target() {
@@ -363,8 +355,6 @@ public final class TurretScenario {
         int swings;
     }
 
-    /// Shooter's match aim (TurretRoute picks the turn) holding a field direction while the robot spins at spin rad/s
-    /// for half the time, then back the other way
     static MatchSpin matchSpin(Setup s, TurretAutotuneEngine.Parameters p, double spin, double seconds, long seed) {
 
         CrServoTurret turret = s.turret(seed);
@@ -431,7 +421,6 @@ public final class TurretScenario {
 
         TurretAutotuneEngine.Parameters drove = null;
         if (tuned != null) {
-            //driven with the flywheel on, like on the robot: that's what finds the rejection floor
             CrServoTurret shaken = new CrServoTurret(s.plant, ctx.seed + 2);
             double deg = rp.opt("turret.vibration_deg", 0.3), part = deg * s.tpd / Math.sqrt(2);
             shaken.setVibration(part, rp.opt("launcher.max_rpm", 3568) / 60, part);
@@ -519,7 +508,6 @@ public final class TurretScenario {
         ctx.log.printf(Locale.ROOT, "    %-28s bandwidth %5.2f: step overshoot %.2f deg, settle %.2f s; spinning %.2f deg RMS, hold shake %.1f deg/s%n", name, p.bandwidth, step.maxOverDeg, step.settleS, spin.rmsDeg, step.holdShakeDps);
     }
 
-    //flywheel shake: half at the flywheel's rotation rate, half in the frame's 8-14 Hz band
     static void vibration(Setup s, RobotParams rp, TurretAutotuneEngine.Parameters p, SimContext ctx) {
 
         double deg = rp.opt("turret.vibration_deg", 0.3), hz = rp.opt("launcher.max_rpm", 3568) / 60;
@@ -534,7 +522,6 @@ public final class TurretScenario {
         }
     }
 
-    //made-up lanyards (the robot has none yet): two that overlap going up, one going down, one that pulls down over the whole range
     static final double[][] TEST_LANYARDS = {
             {40, 1, 0.03, 1.5, 0.1},
             {90, 1, 0.04, 2.0, 0.1},
@@ -547,7 +534,6 @@ public final class TurretScenario {
         return new LanyardMap(ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES, ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES, TurretConstants.TURRET_LANYARD_BIN_DEGREES);
     }
 
-    /// back and forth over the whole travel with a stop at each end, the same sweep the manual tuner's X runs
     static Target sweep(final double tpd) {
 
         return new Target() {
@@ -576,7 +562,6 @@ public final class TurretScenario {
         return lanyardTest(s, p, map, TEST_LANYARDS, false, seed);
     }
 
-    /// learn = keeps learning during the holds and the spin, like TeleOp does
     static LanyardResult lanyardTest(Setup s, TurretAutotuneEngine.Parameters p, LanyardMap map, double[][] lanyards, boolean learn, long seed) {
 
         LanyardResult r = new LanyardResult();
@@ -626,7 +611,6 @@ public final class TurretScenario {
         return r;
     }
 
-    /// sweeps with learning on, returns the map it learned
     static LanyardMap learnLanyards(Setup s, TurretAutotuneEngine.Parameters p, double[][] lanyards, int passes, long seed) {
 
         LanyardMap map = newMap();

@@ -16,10 +16,6 @@ import java.lang.reflect.Field;
 import dev.anygeneric.blazeftc.BlazeDummyPlug;
 import kotlin.Unit;
 
-/// Pedro localizer fed by Blaze's background Pinpoint reads, standing in for Pedro's PinpointLocalizer (kept as the fallback).
-/// Blaze's thread only copies the sample in; update() runs on the loop thread like before, so the follower is never touched
-/// off the loop. setPose is a software offset (Pedro writes the Pinpoint, which would collide with Blaze polling it).
-/// Blaze's Pedro add-on isn't used: its setPose throws and it writes the drive from Blaze's thread
 public final class BlazePinpointLocalizer implements Localizer {
 
     private final Localizer sdk;
@@ -46,7 +42,6 @@ public final class BlazePinpointLocalizer implements Localizer {
         rawH = p.heading();
     }
 
-    /// swaps the follower's PinpointLocalizer for this one and starts Blaze's Pinpoint reads (after its start pose is set)
     static BlazePinpointLocalizer attach(Follower follower, final BlazeRing ring) throws Exception {
 
         Localizer old = follower.localizer;
@@ -68,7 +63,6 @@ public final class BlazePinpointLocalizer implements Localizer {
         return b;
     }
 
-    //Blaze's thread
     private void accept(double x, double y, double h, double vx, double vy, double w) {
 
         if (scale != scale) scale = units(x, y);
@@ -83,7 +77,6 @@ public final class BlazePinpointLocalizer implements Localizer {
         seq++;
     }
 
-    //mm or in: whichever the first sample is closer to, against the SDK's mm read at INIT (needs the robot off (0, 0))
     private double units(double x, double y) {
 
         if (Math.hypot(refX, refY) < 20) return BlazeConstants.PINPOINT_RAW_MM ? 25.4 : 1;
@@ -126,7 +119,6 @@ public final class BlazePinpointLocalizer implements Localizer {
             vy /= k;
         }
         else {
-            //Blaze isn't running yet (INIT) or stalled: a normal blocking read
             usingSdk = true;
             sdkReads++;
             sdk.update();

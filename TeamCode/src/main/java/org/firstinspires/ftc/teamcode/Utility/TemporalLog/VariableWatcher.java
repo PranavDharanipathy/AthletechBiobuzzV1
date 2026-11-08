@@ -6,16 +6,11 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 
-/// every variable of an object graph, logged when it changes. Built once by reflection (and grown when a field that was null
-/// gets an object), then each sample re-reads the chain of fields from the root, so new objects put in a field (a Pose made
-/// each loop) are followed. Primitives, enums, boxed numbers and small primitive arrays are logged; objects of our code,
-/// Pedro and NextFTC are walked into; the SDK, Java and the logging/monitoring internals aren't. Allocates only when it grows
 final class VariableWatcher {
 
     private static final int MAX_DEPTH = 7, MAX_ARRAY = 64, MAX_LEAVES = 12000;
     private static final int D = 0, F = 1, I = 2, J = 3, S = 4, B = 5, Z = 6, C = 7, ENUM = 8, BOXED = 9, ARR_D = 10, ARR_F = 11, ARR_I = 12, ARR_J = 13, ARR_Z = 14;
 
-    //nodes: an object found by following field from the parent node's object (static field when parent < 0)
     private final ArrayList<Field> nodeField = new ArrayList<>();
     private final ArrayList<Class<?>> nodeClass = new ArrayList<>();
     private int[] nodeParent = new int[256], nodeDepth = new int[256];
@@ -24,7 +19,6 @@ final class VariableWatcher {
     private Object[] cur = new Object[256];
     private int nodes;
 
-    //leaves: a value read from a node's object
     private final ArrayList<Field> leafField = new ArrayList<>();
     private int[] leafNode = new int[1024], leafType = new int[1024], leafIndex = new int[1024], leafKey = new int[1024];
     private long[] leafLast = new long[1024];
@@ -89,7 +83,6 @@ final class VariableWatcher {
         leaves++;
     }
 
-    //fields of an object (or the static fields of a class) into leaves and child nodes
     private void expand(int n, Class<?> cls, boolean statics) {
 
         String path = nodePath[n];
@@ -108,7 +101,6 @@ final class VariableWatcher {
                 } catch (Throwable t) {
                     continue;
                 }
-                //a superclass field hidden by a subclass one of the same name gets its class in the name
                 String name = path + "." + (used.add(f.getName()) ? f.getName() : f.getName() + "@" + c.getSimpleName());
                 Class<?> t = f.getType();
                 int type = primitive(t);
@@ -133,7 +125,6 @@ final class VariableWatcher {
         for (int k = 0; k < len; k++) leaf(n, null, type, k, path + "[" + k + "]", type == ARR_Z ? "0=false|1=true" : "");
     }
 
-    //our code, Pedro and NextFTC; not the SDK, Java, Kotlin, or the logging/monitoring internals (huge, and logged elsewhere)
     private static boolean walkable(Class<?> c, boolean statics) {
 
         if (statics) return true;
@@ -169,7 +160,6 @@ final class VariableWatcher {
 
     void sample(long now) {
 
-        //resolve every node's object for this sample (parents come before children)
         for (int n = 0; n < nodes; n++) {
             int p = nodeParent[n];
             if (p < 0) continue;
@@ -195,7 +185,6 @@ final class VariableWatcher {
         }
     }
 
-    //a field that was null (or not looked at) now holds an object: walk it the first time
     private void grow(int n, Object o) {
 
         nodePending[n] = false;
@@ -203,7 +192,6 @@ final class VariableWatcher {
         nodeClass.set(n, cls);
         boolean array = cls.isArray();
         if (array ? arrayType(cls) < 0 : !walkable(cls, false)) {
-            //not ours to walk: boxed numbers in an Object field still count
             if (o instanceof Number || o instanceof Boolean) leaf(n, null, BOXED, -1, nodePath[n], o instanceof Boolean ? "0=false|1=true" : "");
             return;
         }
