@@ -528,7 +528,7 @@ public final class TuningAnalyzer {
 
         StringBuilder b = new StringBuilder();
         b.append("package org.firstinspires.ftc.teamcode.Constants;\n\n");
-        b.append("//written by :Sim:analyzeTuning from TunerTeleOp + Turret / Drivetrain Autotuner data on every build, don't edit by hand\n");
+        b.append("//generated every build, don't edit\n");
         b.append("public class TunedConstants {\n\n");
         for (String[] line : layout) {
             if (line[0].isEmpty()) {

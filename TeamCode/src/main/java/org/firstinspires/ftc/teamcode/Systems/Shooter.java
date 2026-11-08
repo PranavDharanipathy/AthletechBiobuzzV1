@@ -204,7 +204,7 @@ public class Shooter extends Subsystem {
             aimRateDegrees = aimRate;
             if (turretRoute.hasSwung()) {
                 swings++;
-                Recorder.note("turret", "swing a full turn to", tt);
+                Recorder.note("turret", "swing a full turn to", tt);//keep cuz wrap around can overshoot and take a long time to settle so use its log to see how we can improve tuning
             }
 
             turretAimPosition = ShooterConstants.TURRET_AIM_DIRECTION * tt * ShooterConstants.TURRET_TICKS_PER_DEGREE + turretStartPosition;
