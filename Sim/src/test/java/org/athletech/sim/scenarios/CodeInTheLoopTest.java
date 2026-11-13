@@ -88,4 +88,58 @@ public class CodeInTheLoopTest {
         double now = System.nanoTime() * 1e-9;
         assertEquals("the sim gave the robot clock back", now, Clock.seconds(), 1);
     }
+
+    //balls hit 0.24 s after the blocker opens, then every 0.34 s (match logs): the flywheel learns that, and a push just before each
+    //one makes its dip smaller
+    @Test
+    public void flywheelExpectsTheBall() {
+
+        FlywheelCodeScenario.Setup s = FlywheelCodeScenario.setup(new RobotParams(db), ctx);
+        //the example ball is light (~11 ticks/s a hit): about the robot's real dip instead
+        s.ballMass *= 5;
+        double without = dip(s, 0), with = dip(s, 2);
+        System.out.printf(java.util.Locale.ROOT, "FLYWHEEL dip after each ball: %.1f ticks/s without the pre-kick, %.1f with 2 V%n", without, with);
+        assertTrue("pre-kick helps: " + with + " vs " + without, with < without);
+    }
+
+    static double dip(FlywheelCodeScenario.Setup s, double preKick) {
+
+        double target = ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY, sum = 0;
+        int n = 0;
+        try (FlywheelCodeScenario.Rig rig = new FlywheelCodeScenario.Rig(s, s.batteryVolts, 3)) {
+            rig.code.setVelocity(target, true);
+            rig.code.preKickVolts = preKick;
+            rig.code.firstContactSeconds = 0.4;
+            rig.code.ballIntervalSeconds = 0.5;
+            while (rig.t < 3) rig.tick();
+            for (int burst = 0; burst < 4; burst++) {
+                double open = rig.t, watchUntil = -1, low = Double.NaN;
+                double[] contacts = {open + 0.24, open + 0.58, open + 0.92, open + 1.26};
+                int next = 0;
+                while (rig.t < open + 1.6) {
+                    if (rig.tick()) rig.code.setFeeding(rig.t < open + 1.4);
+                    if (rig.t < watchUntil) low = Math.min(low, rig.ticksPerSecond());
+                    else if (low == low) {
+                        if (burst > 0) {
+                            sum += target - low;
+                            n++;
+                        }
+                        low = Double.NaN;
+                    }
+                    if (next < contacts.length && rig.t >= contacts[next]) {
+                        rig.fire();
+                        next++;
+                        watchUntil = rig.t + 0.15;
+                        low = rig.ticksPerSecond();
+                    }
+                }
+                while (rig.t < open + 4) {
+                    if (rig.tick()) rig.code.setFeeding(false);
+                }
+            }
+            assertEquals("learned first contact", 0.24, rig.code.firstContactSeconds, 0.05);
+            assertEquals("learned ball interval", 0.34, rig.code.ballIntervalSeconds, 0.06);
+        }
+        return sum / n;
+    }
 }

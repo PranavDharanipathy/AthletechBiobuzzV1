@@ -33,6 +33,10 @@ public class FlywheelConstants {
     public static double FLYWHEEL_ACCEL_PER_VOLT = 165;
 
     public static double FLYWHEEL_FEED_BOOST_VOLTS = 0, FLYWHEEL_SHOT_KICK_VOLTS = 0, FLYWHEEL_SHOT_KICK_TIME = 0.08, FLYWHEEL_SHOT_DETECT_DROP = 25;
+    //a push just before each ball should hit, from when the blocker opened (logs 2028-05-10..12: first ball 0.24 s after the trigger,
+    //then one every 0.34 s, medians of 131 bursts); the times are learned from every contact, the SHT tuner tunes the push
+    public static double FLYWHEEL_PRE_KICK_VOLTS = 0, FLYWHEEL_PRE_KICK_LEAD = 0.04, FLYWHEEL_PRE_KICK_HOLD = 0.08;
+    public static double FLYWHEEL_FIRST_CONTACT_SECONDS = 0.24, FLYWHEEL_BALL_INTERVAL_SECONDS = 0.34;
 
     public static double FLYWHEEL_VELOCITY_MARGIN_OF_ERROR = 50;
     public static double FLYWHEEL_STABILITY_MARGIN_OF_ERROR = 20;

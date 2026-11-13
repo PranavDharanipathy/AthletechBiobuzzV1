@@ -4,6 +4,7 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.Findings;
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.FlywheelHyperTuner;
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.OnlineTuner;
+import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.TurretHyperTuner;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.junit.Test;
 
@@ -50,7 +51,7 @@ public class HyperTuningTest {
 
     static double burstCost(FlywheelPIDVSCoefficients c, double dip) {
 
-        FlywheelHyperTuner h = new FlywheelHyperTuner(c, 0, 0, 0.08);
+        FlywheelHyperTuner h = new FlywheelHyperTuner(c, 0, 0, 0.08, 0, 0.04);
         Random rnd = new Random(4);
         double v = 1450, t = 0;
         int shots = 0;
@@ -72,13 +73,35 @@ public class HyperTuningTest {
     public void findingsCallOutAPinnedKnob() {
 
         FlywheelPIDVSCoefficients c = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
-        FlywheelHyperTuner f = new FlywheelHyperTuner(c, 0, 0, 0.08);
+        FlywheelHyperTuner f = new FlywheelHyperTuner(c, 0, 0, 0.08, 0, 0.04);
         OnlineTuner.Knob boost = f.shots.knob("feed_boost_volts");
         boost.value = boost.max;
         boost.kept = 3;
         boost.atBound = 2;
-        String md = Findings.markdown("test", 60, f);
+        String md = Findings.markdown("test", 60, f, new TurretHyperTuner());
         assertTrue(md, md.contains("feed_boost_volts wants past its top"));
         assertTrue(md, md.contains("iterative learning control"));
+    }
+
+    //a shaky hold costs more than a still one, shaking while a shot is fed costs more again, and moving aims are scored apart
+    @Test
+    public void turretTunerScoresHoldAndTrack() {
+
+        double still = holdCost(0, false), shaky = holdCost(3, false), shakyFeeding = holdCost(3, true);
+        assertTrue("still " + still + " shaky " + shaky, shaky > 2 * still);
+        assertTrue("feeding counts more: " + shakyFeeding + " vs " + shaky, shakyFeeding > shaky);
+        TurretHyperTuner h = new TurretHyperTuner();
+        for (int k = 0; k < 200; k++) h.update(k * 0.02, 0.02, 20 * k * 0.02, 20 * k * 0.02 - 1.5, 20, 1, false);
+        assertEquals(1.5, h.lastTrackCost, 1e-6);
+    }
+
+    static double holdCost(double shake, boolean feeding) {
+
+        TurretHyperTuner h = new TurretHyperTuner();
+        for (int k = 0; k < 300; k++) {
+            double t = k * 0.02, pos = 0.4 + shake * Math.sin(2 * Math.PI * 4 * t);
+            h.update(t, 0.02, 0, pos, 0, Math.cos(2 * Math.PI * 4 * t), feeding && t > 1);
+        }
+        return h.lastHoldCost;
     }
 }

@@ -90,8 +90,6 @@ public class Intake extends Subsystem {
         this.controller1 = controller1;
     }
 
-    private boolean fiArmState = false;
-
     @Override
     public void update() {
 
@@ -107,8 +105,8 @@ public class Intake extends Subsystem {
 
         FIArm arm = ((Intake) intake).getFIArm();
         if (arm != null) {
-            if (controller1.dpad_downHasJustBeenPressed) fiArmState = !fiArmState;
-            arm.setState(fiArmState ? FIArm.FIArmState.DEPLOY : FIArm.FIArmState.RETRACT);
+            //down only while gamepad 1 left bumper is held
+            arm.setState(controller1.left_bumper() ? FIArm.FIArmState.DEPLOY : FIArm.FIArmState.RETRACT);
         }
 
         ((GeneralVeloMotor) ((Intake) intake).getIntake()).update();

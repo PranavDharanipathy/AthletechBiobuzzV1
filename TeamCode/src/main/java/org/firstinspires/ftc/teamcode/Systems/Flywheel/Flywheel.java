@@ -85,6 +85,12 @@ public final class Flywheel {
     public double shotKickTime = FlywheelConstants.FLYWHEEL_SHOT_KICK_TIME, shotDetectDrop = FlywheelConstants.FLYWHEEL_SHOT_DETECT_DROP;
     public double boost = 0;
     public int shotsSeen = 0;
+    public double preKickVolts = FlywheelConstants.FLYWHEEL_PRE_KICK_VOLTS, preKickLead = FlywheelConstants.FLYWHEEL_PRE_KICK_LEAD, preKickHold = FlywheelConstants.FLYWHEEL_PRE_KICK_HOLD;
+    public double firstContactSeconds = FlywheelConstants.FLYWHEEL_FIRST_CONTACT_SECONDS, ballIntervalSeconds = FlywheelConstants.FLYWHEEL_BALL_INTERVAL_SECONDS;
+    public double expectedContact = Double.NaN;
+    private double feedStart = Double.NaN, lastContact = Double.NaN;
+    private int burstContacts;
+    private boolean wasFeedingTick;
     private boolean feeding = false;
     private double kickUntil = -1;
 
@@ -236,14 +242,30 @@ public final class Flywheel {
             load = MathUtil.clamp(load, -FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS, FlywheelConstants.FLYWHEEL_MAX_LOAD_VOLTS);
         }
 
+        if (feeding && !wasFeedingTick) {
+            feedStart = now;
+            burstContacts = 0;
+            lastContact = Double.NaN;
+        }
+        wasFeedingTick = feeding;
         boost = 0;
         if (targetVelocity != 0 && feeding) {
             boost = feedBoostVolts;
             if (!wasFirstTick && lastCurrentVelocity - currentVelocity > shotDetectDrop) {
                 kickUntil = now + shotKickTime;
                 shotsSeen++;
+                //one dip spans a few loops: a new ball only after 80 ms
+                if (burstContacts == 0 || now - lastContact > 0.08) {
+                    if (burstContacts == 0) firstContactSeconds += 0.3 * (MathUtil.clamp(now - feedStart, 0.05, 1.5) - firstContactSeconds);
+                    else ballIntervalSeconds += 0.3 * (MathUtil.clamp(now - lastContact, 0.08, 1.5) - ballIntervalSeconds);
+                    burstContacts++;
+                    lastContact = now;
+                }
             }
+            expectedContact = burstContacts == 0 ? feedStart + firstContactSeconds : lastContact + ballIntervalSeconds;
+            if (now >= kickUntil && now >= expectedContact - preKickLead && now < expectedContact + preKickHold) boost += preKickVolts;
         }
+        else expectedContact = Double.NaN;
         if (targetVelocity != 0 && now < kickUntil) boost += shotKickVolts;
 
         power = voltageCompensator.toPower(p + i + d + v + s + load + boost);

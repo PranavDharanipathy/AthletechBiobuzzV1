@@ -19,9 +19,10 @@ Newest notes at the top.
 - First completed run (20280512-230114): 150 deg/s per V, kinetic = breakaway = 1.18 V (ramps 0.95-1.24), score 11.2 -> 4.0.
   So the 2.02 / 2.33 V in use were about double: the shake was mostly overcompensated friction, and the "~2.3 V breakaway"
   below came from what that controller pushed, not the turret. Build pull wrote it into `TunedConstants`.
+- Second run (20280513-222052, with the match course): 162 deg/s per V, friction 0.98 V (ramps 0.91-1.07, so friction drifts ~0.2 V day to day. The in-match friction learning handles +-15% fine, but in the sim these gains on the 1.18 V turret stall 2.5 deg short of a 30 deg step for over 4 s, so rerun the autotuner if the turret feels sticky), steps 5.70 -> 5.62, match course 16.6 -> 13.2. Kept kp far 7.92 / close 9.64, ki close 12, kd far 0.19.
 - Everything that was a fixed volt number tied to the old breakaway is now relative to `TURRET_BREAKAWAY_FRICTION`: the pulse
   (+0.12 V), the dead-encoder cutoff (+0.5 V; at 2.6 V a dead encoder at 30 deg ran 476 deg) and the uncounted cap (+1.0 V).
-- Sim (`TurretPlants` = this autotune): plain PID and pulse hold both hold calm (~0.6 deg); with friction 20% under tuned the
+- Sim (`TurretPlants` = the newest autotune, now the second run): plain PID and pulse hold both hold calm (~0.6 deg); with friction 20% under tuned the
   PID shakes ~2.7/s (small) and pulses ~0.4/s, with it 20-30% over pulses rest further off (2.6-3.2 vs 1.7-2.6 deg). Pulse
   stays on for the shake; `TURRET_PULSE_ENABLED` false favours aim.
 
@@ -217,7 +218,7 @@ Match runs 2028-05-12 (robot clock), judged with `tools/blaze_check.py`:
 - **Time of flight:** SOTM time of flight still uses the table (`lookUp`); all its values are 0 for now.
 - **Hypertuner:** `FlywheelHyperTuner` now restarts its steady window only when the target moves by more than 10 ticks/s.
   The target follows the distance now, so every tiny change would otherwise restart it.
-- **FlywheelInterpolationTuner:** its dataset view (Y) shows the fit through the collected points next to the one in use.
+- **FlywheelInterpolationTuner:** its dataset view (Y) shows the fit through the collected points next to the one in use. It runs the match's own blocker (shot gate), intake and FIArm with the match controls, the turret aims itself, and each point's distance is `Shooter.shotDistance`, turret to the CELL, the exact number the match looks up.
 - **Tested:** `FlywheelVelocityModelTest` (matches numpy, clamping, refits only on change, degrades safely) and the whole Sim
   suite pass. Not run on the robot.
 

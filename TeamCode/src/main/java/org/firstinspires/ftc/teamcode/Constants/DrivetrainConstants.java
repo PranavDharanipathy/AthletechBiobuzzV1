@@ -70,6 +70,9 @@ public class DrivetrainConstants {
     );
 
     public static boolean DRIVE_HOLD_ENABLED = false;
+    //autos: a path whose end it can't reach exactly (pushed into a wall or POLLEN) still counts as there once it's this close and has stopped
+    //this long; before, it sat until the path timeout faulted and the whole auto stopped
+    public static double AUTO_ARRIVE_INCHES = 3, AUTO_ARRIVE_DEGREES = 10, AUTO_STILL_INCHES_PER_SECOND = 1, AUTO_STILL_DEGREES_PER_SECOND = 5, AUTO_STILL_SECONDS = 0.3;
     public static double[] DRIVE_KS = {TunedConstants.DRIVE_FORWARD_KS, TunedConstants.DRIVE_STRAFE_KS, TunedConstants.DRIVE_TURN_KS};
     public static double[] DRIVE_KV = {TunedConstants.DRIVE_FORWARD_KV, TunedConstants.DRIVE_STRAFE_KV, TunedConstants.DRIVE_TURN_KV};
     public static double[] DRIVE_KA = {TunedConstants.DRIVE_FORWARD_KA, TunedConstants.DRIVE_STRAFE_KA, TunedConstants.DRIVE_TURN_KA};

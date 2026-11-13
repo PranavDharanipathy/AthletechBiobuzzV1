@@ -30,7 +30,7 @@ public final class RedPreloadPark extends NextOpMode {
         robot.init(hardwareMap, start);
         robot.configureAuto(AUTO_LIMIT_SECONDS, MAX_LOOP_SECONDS);
         robot.drive.configure(POSITION_ERROR_INCHES, HEADING_ERROR_DEGREES, PATH_TIMEOUT_SECONDS);
-        robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND);
+        robot.configureShots(SHOT_FEED_SECONDS, SHOT_SETTLE_SECONDS, SHOT_TIMEOUT_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND);
 
         routine = robot.autonomous(
                 robot.shooter.rampUp(),

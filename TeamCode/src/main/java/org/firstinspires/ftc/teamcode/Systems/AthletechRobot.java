@@ -50,7 +50,7 @@ public final class AthletechRobot implements NextRobot {
     private final Set<Mechanism> mechanisms = new LinkedHashSet<>();
     private List<LynxModule> hubs = Collections.emptyList();
 
-    private double feedSeconds = 1.5, shotTimeout = 4, flywheelBand = 50, maxLoop = 0.15;
+    private double feedSeconds = 2, settleSeconds = 0.15, shotTimeout = 4, flywheelBand = 50, maxLoop = 0.15;
     private double shotStart, feedStart;
     private boolean feeding, shotDone, shotLate, handoff;
     private String autoName = "";
@@ -132,9 +132,10 @@ public final class AthletechRobot implements NextRobot {
         }
     }
 
-    public void configureShots(double feedSeconds, double timeoutSeconds, double flywheelBand) {
+    public void configureShots(double feedSeconds, double settleSeconds, double timeoutSeconds, double flywheelBand) {
 
         this.feedSeconds = feedSeconds;
+        this.settleSeconds = settleSeconds;
         shotTimeout = timeoutSeconds;
         this.flywheelBand = flywheelBand;
     }
@@ -159,12 +160,23 @@ public final class AthletechRobot implements NextRobot {
     }
 
     public Command shoot(final Pose at) {
+        return shoot(at, Double.NaN);
+    }
 
+    //shoots where the robot already is (it stays held there), feeding for seconds: every ball the intake takes in goes straight out
+    public Command shootHere(final double seconds) {
+        return shoot(null, seconds);
+    }
+
+    private Command shoot(final Pose at, final double seconds) {
+
+        final double[] feed = {feedSeconds};
         return Command.build()
                 .requiring(drive, blocker, intake)
                 .setStart(() -> {
-                    status = "shooting";
-                    drive.follower.hold(at);
+                    status = at == null ? "shooting in place" : "shooting";
+                    feed[0] = seconds == seconds ? seconds : feedSeconds;
+                    if (at != null) drive.follower.hold(at);
                     blocker.set(false);
                     intake.setVelocity(0);
                     shotStart = Clock.seconds();
@@ -184,7 +196,12 @@ public final class AthletechRobot implements NextRobot {
                             intake.setVelocity(IntakeConstants.INTAKE_VELOCITY);
                         }
                     }
-                    else if (now - feedStart >= feedSeconds) shotDone = true;
+                    //intake stops after the feed, the blocker stays open a moment so the last ball clears, then shuts before it drives off
+                    else if (now - feedStart >= feed[0] + settleSeconds) {
+                        blocker.set(false);
+                        shotDone = true;
+                    }
+                    else if (now - feedStart >= feed[0]) intake.setVelocity(0);
                 })
                 .setDone(() -> shotDone)
                 .setEnd(condition -> {

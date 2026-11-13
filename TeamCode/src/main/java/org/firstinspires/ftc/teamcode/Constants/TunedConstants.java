@@ -27,14 +27,14 @@ public class TunedConstants {
     public static double SHOT_GATE_HOLD_BAND = 52;
     public static double SHOT_GATE_DWELL = 0.06;
 
-    public static double TURRET_GAIN = 10220.8;
-    public static double TURRET_KINETIC_FRICTION = 1.17554;
-    public static double TURRET_BREAKAWAY_FRICTION = 1.17554;
-    public static double TURRET_KP_FAR = 5.62;
-    public static double TURRET_KP_CLOSE = 8.49;
+    public static double TURRET_GAIN = 11051.9;
+    public static double TURRET_KINETIC_FRICTION = 0.979294;
+    public static double TURRET_BREAKAWAY_FRICTION = 0.979294;
+    public static double TURRET_KP_FAR = 7.92;
+    public static double TURRET_KP_CLOSE = 9.64;
     public static double TURRET_KI_FAR = 16.4;
-    public static double TURRET_KI_CLOSE = 13;
-    public static double TURRET_KD_FAR = 0.24;
+    public static double TURRET_KI_CLOSE = 12;
+    public static double TURRET_KD_FAR = 0.19;
     public static double TURRET_KD_CLOSE = 0.465;
     public static double TURRET_K_HOLD_VOLTS = 0.386;
     public static double TURRET_FRICTION_DEADBAND_DEGREES = 0.96;
@@ -45,7 +45,7 @@ public class TunedConstants {
     public static double TURRET_PULSE_ZONE_DEGREES = 8;
     public static double TURRET_FRICTION_RAMP_DEGREES_PER_SECOND = 60;
     public static double TURRET_RATE_FEEDFORWARD_SCALE = 1;
-    public static String TURRET_AUTOTUNE = "20280512-230114";
+    public static String TURRET_AUTOTUNE = "20280513-222052";
 
     public static double DRIVE_FORWARD_KS = 0.06;
     public static double DRIVE_FORWARD_KV = 0.01053;

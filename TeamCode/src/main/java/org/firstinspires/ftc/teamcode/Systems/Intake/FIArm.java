@@ -76,13 +76,8 @@ public class FIArm extends Subsystem {
         this.controller1 = controller1;
     }
 
-    private boolean deployed = false;
-
     @Override
     public void update() {
-
-        if (controller1.dpad_downHasJustBeenPressed) deployed = !deployed;
-
-        setState(deployed ? FIArmState.DEPLOY : FIArmState.RETRACT);
+        setState(controller1.left_bumper() ? FIArmState.DEPLOY : FIArmState.RETRACT);
     }
 }

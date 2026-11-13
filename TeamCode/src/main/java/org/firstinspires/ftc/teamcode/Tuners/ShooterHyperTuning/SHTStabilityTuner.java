@@ -45,6 +45,8 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
 
     private FlywheelPIDVSCoefficients coefficients;
     private FlywheelHyperTuner flywheelTuner;
+    private final TurretHyperTuner turretTuner = new TurretHyperTuner();
+    private double lastLoopTime = Double.NaN;
     private OnlineTuner.Knob[] allKnobs;
     private String resumedFrom = "defaults";
 
@@ -72,12 +74,15 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         FlywheelPIDVSCoefficients c = org.firstinspires.ftc.teamcode.Constants.FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
         coefficients = new FlywheelPIDVSCoefficients(c.kpFar, c.kpClose, c.kiFar, c.kiClose, c.kd, c.kv, c.ks, c.ksSignWidth, c.iSwitch, c.pSwitch, c.kISmash, c.minP, c.maxP, c.minI, c.maxI, c.minD, c.maxD);
         flywheel.setVelocityPIDVSCoefficients(coefficients);
-        flywheelTuner = new FlywheelHyperTuner(coefficients, flywheel.feedBoostVolts, flywheel.shotKickVolts, flywheel.shotKickTime);
+        flywheelTuner = new FlywheelHyperTuner(coefficients, flywheel.feedBoostVolts, flywheel.shotKickVolts, flywheel.shotKickTime, flywheel.preKickVolts, flywheel.preKickLead);
         List<OnlineTuner.Knob> knobs = new ArrayList<>();
-        for (OnlineTuner t : new OnlineTuner[] {flywheelTuner.stability, flywheelTuner.shots}) knobs.addAll(Arrays.asList(t.knobs));
+        for (OnlineTuner t : new OnlineTuner[] {flywheelTuner.stability, flywheelTuner.shots, turretTuner.hold, turretTuner.track}) knobs.addAll(Arrays.asList(t.knobs));
         allKnobs = knobs.toArray(new OnlineTuner.Knob[0]);
         resume();
         flywheelTuner.apply(flywheel, coefficients);
+        final double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
+        turret.overrides = controller -> turretTuner.apply(controller, tpd);
+        shooter.turretRateScale = turretTuner.rateScale();
 
         intake.provideComponents(new Intake(super.intake, fiArm), controller1);
         blocker.provideComponents(super.blocker, controller1, flywheel, turret);
@@ -92,7 +97,8 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
 
         telemetry.addLine("SHT STABILITY TUNER (red): play it like a match.");
         telemetry.addLine("Shoot a lot, in bursts, from different spots.");
-        telemetry.addLine("Flywheel gains change while you play, every change is logged. Starting from: " + resumedFrom);
+        telemetry.addLine("Flywheel and turret gains change while you play, every change is logged. Starting from: " + resumedFrom);
+        telemetry.addLine("Hold still on targets sometimes and turn while aiming sometimes: the turret is scored on both.");
         telemetry.update();
     }
 
@@ -143,11 +149,22 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         if (flywheelTuner.shots.trials > shotTrials) trial(t, 1, flywheelTuner.shots);
         flywheelTuner.apply(flywheel, coefficients);
 
+        double dt = lastLoopTime == lastLoopTime ? now - lastLoopTime : 0;
+        lastLoopTime = now;
+        int holdTrials = turretTuner.hold.trials, trackTrials = turretTuner.track.trials;
+        turretTuner.update(now, dt, target, position, dir * shooter.turretAimVelocity / tpd, turretVolts, flywheel.isFeeding());
+        if (turretTuner.hold.trials > holdTrials) trial(t, 2, turretTuner.hold);
+        if (turretTuner.track.trials > trackTrials) trial(t, 3, turretTuner.track);
+        shooter.turretRateScale = turretTuner.rateScale();
+
         log(t, target, position, turretVelocity, turretVolts, targetRate, omega);
 
         telemetry.addData("Recording", folder.getName());
         telemetry.addData("Flywheel stability", status(flywheelTuner.stability, flywheelTuner.lastSteadyCost));
         telemetry.addData("Flywheel shots", status(flywheelTuner.shots, flywheelTuner.lastShotCost));
+        telemetry.addData("Ball expected in", "%.2f s (first %.2f s, then every %.2f s)", flywheel.expectedContact - Clock.seconds(), flywheel.firstContactSeconds, flywheel.ballIntervalSeconds);
+        telemetry.addData("Turret hold", status(turretTuner.hold, turretTuner.lastHoldCost));
+        telemetry.addData("Turret track", status(turretTuner.track, turretTuner.lastTrackCost));
         telemetry.addData("Drive hold", drivetrain.isHolding() ? "on (back: off)" : "off (back: on)");
         for (int k = Math.max(0, recent.size() - 4); k < recent.size(); k++) telemetry.addLine(recent.get(k));
         telemetry.addData("Loop ms", "%.1f", HardwareMonitor.get().getLastLoopMs());
@@ -157,6 +174,8 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
     @Override
     public void stop() {
 
+        turret.overrides = null;
+        shooter.turretRateScale = Double.NaN;
         super.stop();
         if (loopLog != null) loopLog.close();
         if (eventLog != null) eventLog.close();
@@ -164,7 +183,7 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         if (folder != null) {
             File file = new File(folder, "findings.md");
             try (Writer w = new OutputStreamWriter(new FileOutputStream(file), Charset.forName("UTF-8"))) {
-                w.write(Findings.markdown(folder.getName(), Clock.seconds() - startTime, flywheelTuner));
+                w.write(Findings.markdown(folder.getName(), Clock.seconds() - startTime, flywheelTuner, turretTuner));
             } catch (IOException e) {
                 telemetry.log().add("couldn't write " + file);
             }

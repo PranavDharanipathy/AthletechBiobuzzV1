@@ -23,7 +23,7 @@ added alongside the competition code.
 
 ```
 Autonomous/        Autonomous OpModes
-  Autos/           Six self-contained autos (Red/Blue Park, Preload + Park, 2 Tip Garden + Park), nothing shared between them
+  Autos/           Six self-contained autos (Red/Blue Park, Preload + Park, 2 Tip Flowers + Park), nothing shared between them
   AutoSubsystems/  Auto-only helpers
 Constants/         Robot + Pedro Pathing constants, hardware maps
 Sim/               Bridge between robot code and the Sim module
@@ -252,8 +252,8 @@ also pulls them into `tuning-data/robot-logs` (git-ignored). TunerTeleOp differs
 
 ## Turret control and tuning
 
-**`TurretConstants.TURRET_ENABLED`:** off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos, tuners). The
-aim and the controller still run and are recorded, so the log shows what it would have done.
+**`TurretConstants.TURRET_ENABLED`:** on. Turned off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos,
+tuners), while the aim and the controller still run and are recorded, so the log shows what it would have done.
 
 **Controller** (`Systems/Turret/TurretController`, pure Java, the Sim runs it): a position PID (far/close kp and kd, zoned ki
 with smash, filtered d, hold feedforward) whose output is a speed (ticks/s), plus the aim rate from `Shooter` (which already turns
@@ -310,6 +310,8 @@ The turret travels **±200° from home** (20° past straight back each way) (`Sh
 and the robot may spin forever. `TurretRoute` follows the aim round continuously. The match aim (`Shooter`) uses the whole ±200°
 and swings a full turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`).
 In the match TeleOps (`Shooter.update`), **gamepad 1 Y** toggles a turret lock: held still at home (0 deg) instead of aiming.
+The flywheel runs from START until the OpMode stops (no toggle), and the FIArm dropdown is down only while **gamepad 1 left
+bumper** is held.
 
 ## Drivetrain pose hold
 
@@ -328,7 +330,7 @@ So shoves, pushes from behind and twists get pushed back against, and slow means
 
 ## Match autos
 
-There are six NextFTC autos (group A_Match): Red and Blue each have Park, Preload + Park and 2 Tip Garden + Park. Each auto is
+There are six NextFTC autos (group A_Match): Red and Blue each have Park, Preload + Park and 2 Tip Flowers + Park (classes still `*TwoTipGarden`). Each auto is
 one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<Auto>Constants` (poses and timing).
 
 - **Command based (Ivy on NextFTC):** each auto builds its paths, then one Ivy sequence of the robot's commands inside
@@ -346,20 +348,27 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 - **Frame:** all poses are in the turret's frame (`FieldConstants`), which is also the Pedro visualizer's BIOBUZZ field. No
   mirroring.
 - **Goal:** the shooter aims at its own color's goal on the robot's half (the one in front). Preload + Park (1 tip) starts
-  where 2 Tip Garden does, in line with the upward CELL, and shoots the same first volley; both check their shot poses'
+  where 2 Tip Flowers does, in line with the upward CELL, and shoots the same first volley; both check their shot poses'
   halves at INIT.
 - **FIArm:** every auto sends it to RETRACT at INIT.
 - **Auto to TeleOp handoff** (`Utility/AutoHandoff`): from START every auto (`robot.handOffAs(name)`) keeps the robot's pose and
   the turret's ticks from home in statics and sets `infoFromAuto`. `TeleOpBaseOpMode` takes it once at INIT (and sets the
   flag false): the turret starts from where it really is instead of calling that home, and the follower from the auto's
   pose. Ignored if older than `AutoHandoff.MAX_AGE_SECONDS` or past the turret's travel. Telemetry "Start" says which.
+- **Paths that can't quite finish:** `Drive.follow` also counts a path done once it's at the end within `AUTO_ARRIVE_INCHES` /
+  `AUTO_ARRIVE_DEGREES` and stopped for `AUTO_STILL_SECONDS` (`DrivetrainConstants`), noting it in the log. Before, a robot pressed into
+  a wall or POLLEN sat until the 8 s path timeout, which faulted and stopped the whole auto.
 - **Visualizer projects:** `docs/autos/*.pp`.
 - **Rules, routes and field checks:** `docs/AUTOS.md`.
 
 ## Hypertuning and system evolution
 
-**SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp. While it's played it keeps tuning the
-flywheel (stability at speed, power around shots) with `OnlineTuner`; the turret plays with its own constants.
+**SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp. While it's played it keeps tuning, with
+`OnlineTuner`:
+- the flywheel: stability at speed, and shots, including a pre-kick just before each ball hits. `Flywheel` learns when balls
+  come, from every contact: first one after the blocker opens (logs: 0.24 s), then the gap between them (0.34 s);
+- the turret (`TurretHyperTuner`, live through `TurretBase.overrides`): holding (aim still: error, swings, flips, counted double
+  while a shot is fed) and tracking (aim moving: error) are scored apart.
 It logs everything to the SD card, and `findings.md` names principle candidates. Agents turn those into new or removed
 control features by the protocol in
 [SYSTEM_EVOLUTION.md](./TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md):

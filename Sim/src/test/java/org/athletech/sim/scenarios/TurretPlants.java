@@ -13,7 +13,8 @@ final class TurretPlants {
     //the servos ignore commands this long after an OpMode starts
     static final double SERVO_WAKE = TurretScenario.SERVO_WAKE;
     static final double MAX_SPEED = 26233, MAX_ACCELERATION = 118456, COAST_DECELERATION = 71702;
-    static final double GAIN = 10220.8, KINETIC = 1.18, BREAKAWAY = 1.24;
+    //autotune 20280513-222052 (the one before it read 1.18 V friction, so it drifts)
+    static final double GAIN = 11051.9, KINETIC = 0.98, BREAKAWAY = 1.04;
 
     static CrServoTurret.Params params(double gainScale, double frictionScale) {
         return params(gainScale, frictionScale, frictionScale);

@@ -230,7 +230,7 @@ public final class RobotRecording {
     public static void shooter(Recorder r, final Shooter s) {
 
         if (s == null) return;
-        r.flag("shooter", "on", "flywheel toggle", s::isShooterOn);
+        r.flag("shooter", "on", "flywheel on (always from START in TeleOp)", s::isShooterOn);
         r.flag("shooter", "auto_aim", "", s::isAutoAimOn);
         r.flag("shooter", "locked", "turret held at 0 (gamepad 1 Y)", s::isTurretLocked);
         r.flag("shooter", "aim_usable", "inside the travel, not mid-swing", s::isAimSolutionUsable);

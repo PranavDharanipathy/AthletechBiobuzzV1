@@ -32,8 +32,8 @@ public class ShooterConstants {
 
     public static double TURRET_AIM_LEAD_TIME = 0;
 
-    public static List<Double> FLYWHEEL_DISTANCES = new ArrayList<>(Arrays.asList(0.0, 10.0));
-    public static List<Double> FLYWHEEL_VELOCITIES = new ArrayList<>(Arrays.asList(1450.0, 1450.0));
+    public static List<Double> FLYWHEEL_DISTANCES = new ArrayList<>(Arrays.asList(36.0, 42.0, 51.0, 53.0, 58.8));
+    public static List<Double> FLYWHEEL_VELOCITIES = new ArrayList<>(Arrays.asList(1450.0, 1450.0, 1460.0, 1490.0, 1520.0));
     public static boolean SOTM_ENABLED = false;
     public static List<Double> SHOT_TIMES_OF_FLIGHT = new ArrayList<>(Arrays.asList(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
     public static double SHOT_LAUNCH_ANGLE_DEGREES = 72, SHOT_RISE_INCHES = 48.05;

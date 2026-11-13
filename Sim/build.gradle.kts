@@ -86,6 +86,7 @@ val teamCodeSources = tasks.register<Sync>("copyTeamCodeSources") {
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/OnlineTuner.java")
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/FlywheelHyperTuner.java")
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/Findings.java")
+        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/TurretHyperTuner.java")
         include("org/firstinspires/ftc/teamcode/Tuners/FlywheelVoltageFilterFit.java")
     }
     from(file("src/ftcStubs/java"))

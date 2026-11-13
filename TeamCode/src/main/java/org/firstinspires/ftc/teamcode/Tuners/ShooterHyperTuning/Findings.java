@@ -6,13 +6,13 @@ public final class Findings {
 
     private Findings() {}
 
-    public static String markdown(String session, double seconds, FlywheelHyperTuner flywheel) {
+    public static String markdown(String session, double seconds, FlywheelHyperTuner flywheel, TurretHyperTuner turret) {
 
         StringBuilder b = new StringBuilder();
         b.append("# Shooter hypertuning findings: ").append(session).append("\n\n");
         b.append(String.format(Locale.US, "%.0f s played, %d bursts scored.\n\n", seconds, flywheel.bursts));
         StringBuilder principles = new StringBuilder();
-        for (OnlineTuner t : new OnlineTuner[] {flywheel.stability, flywheel.shots}) tuner(b, principles, t);
+        for (OnlineTuner t : new OnlineTuner[] {flywheel.stability, flywheel.shots, turret.hold, turret.track}) tuner(b, principles, t);
         b.append("## Principle candidates\n\n");
         b.append(principles.length() == 0 ? "None: every tuner moved its cost and nothing is pinned at a bound.\n" : principles.toString());
         return b.toString();
@@ -48,6 +48,14 @@ public final class Findings {
             case "kp_close":
             case "kp_far":
                 return top ? "Drift wins: an integral or a faster load observer is the next principle." : "Noise wins: a better velocity estimate (filter, encoder) is the next principle.";
+            case "pre_kick_volts":
+                return top ? "The ball's load is bigger than a short push: feed a learned per-ball load profile forward from the blocker opening." : "Expecting the ball doesn't help: contact timing may vary too much, check first_contact / interval spread in loop.csv.";
+            case "pre_kick_lead":
+                return top ? "It wants to push well before contact: the motor's lag is longer than thought, raise the lead range." : "Pushing early overspeeds: contact timing is tight, the reactive kick is enough.";
+            case "turret_pulse_zone_degrees":
+                return top ? "Pulse hold helps everywhere it's allowed: widen the zone." : "Pulse hold hurts: the plain PID holds better on this turret.";
+            case "turret_rate_feedforward_scale":
+                return top ? "Tracking lags the aim: the measured robot spin is late, lead it." : "Tracking overshoots: the spin feedforward is too strong or noisy, filter omega.";
             case "kd":
                 return top ? "Damping wants more than D can give on a noisy velocity: model-based damping (acceleration from current) instead." : "D only adds noise: drop it.";
             default:

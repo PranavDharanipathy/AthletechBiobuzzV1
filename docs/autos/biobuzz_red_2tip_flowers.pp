@@ -1,55 +1,127 @@
 {
   "version": "2.0.0",
   "startPoint": {
-    "x": 84.75,
-    "y": 134.28,
-    "headingDeg": -90,
+    "x": 59.25,
+    "y": 9.72,
+    "headingDeg": 90,
     "locked": false
   },
   "lines": [
     {
-      "id": "line-bb-1",
-      "color": "#2563eb",
-      "name": "To garden",
+      "id": "line-1",
+      "color": "#dc2626",
+      "name": "To Red Alliance FLOWER (shoot first)",
       "locked": false,
       "waitBeforeMs": 3500,
       "waitAfterMs": 0,
-      "waitBeforeName": "Shoot 4 preload: TIP 1 (CLOSE cell)",
+      "waitBeforeName": "Shoot 4 preload: TIP 1 (FAR cell)",
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 135.36,
-        "y": 122
+        "x": 19.47,
+        "y": 47
       },
       "controlPoints": [
         {
-          "x": 110,
-          "y": 110
+          "x": 48,
+          "y": 24
         },
         {
-          "x": 110,
-          "y": 105
+          "x": 24,
+          "y": 40
         }
       ],
       "heading": {
         "type": "linear",
-        "startDeg": -90,
+        "startDeg": 90,
+        "endDeg": 180
+      }
+    },
+    {
+      "id": "line-2",
+      "color": "#16a34a",
+      "name": "Touch Red Alliance FLOWER (dropdown down)",
+      "locked": false,
+      "waitBeforeMs": 0,
+      "waitAfterMs": 1200,
+      "waitBeforeName": "",
+      "waitAfterName": "Take POLLEN",
+      "kind": "atomic",
+      "endPoint": {
+        "x": 12.49,
+        "y": 47
+      },
+      "controlPoints": [],
+      "heading": {
+        "type": "linear",
+        "startDeg": 180,
+        "endDeg": 180
+      }
+    },
+    {
+      "id": "line-3",
+      "color": "#16a34a",
+      "name": "Back out",
+      "locked": false,
+      "waitBeforeMs": 0,
+      "waitAfterMs": 0,
+      "waitBeforeName": "",
+      "waitAfterName": "",
+      "kind": "atomic",
+      "endPoint": {
+        "x": 19.47,
+        "y": 47
+      },
+      "controlPoints": [],
+      "heading": {
+        "type": "linear",
+        "startDeg": 180,
+        "endDeg": 180
+      }
+    },
+    {
+      "id": "line-4",
+      "color": "#dc2626",
+      "name": "To Scoring-Side FLOWER",
+      "locked": false,
+      "waitBeforeMs": 0,
+      "waitAfterMs": 400,
+      "waitBeforeName": "",
+      "waitAfterName": "Dropdown down",
+      "kind": "atomic",
+      "endPoint": {
+        "x": 46.75,
+        "y": 122.03
+      },
+      "controlPoints": [
+        {
+          "x": 24,
+          "y": 116
+        },
+        {
+          "x": 40,
+          "y": 108
+        }
+      ],
+      "heading": {
+        "type": "linear",
+        "startDeg": 180,
         "endDeg": 90
       }
     },
     {
-      "id": "line-bb-2",
-      "color": "#06b6d4",
-      "name": "Garden sweep (intake only, FIArm up)",
+      "id": "line-4b",
+      "color": "#16a34a",
+      "name": "In to the shot pose (dropdown down)",
       "locked": false,
       "waitBeforeMs": 0,
-      "waitAfterMs": 600,
+      "waitAfterMs": 2150,
       "waitBeforeName": "",
-      "waitAfterName": "Intake garden POLLEN",
+      "waitAfterName": "Shoot alliance FLOWER POLLEN: TIP 2 (CLOSE cell)",
       "kind": "atomic",
       "endPoint": {
-        "x": 135.36,
-        "y": 133.28
+        "x": 46.75,
+        "y": 124.51
       },
       "controlPoints": [],
       "heading": {
@@ -59,33 +131,75 @@
       }
     },
     {
-      "id": "line-bb-3",
-      "color": "#2563eb",
-      "name": "To loading zone",
+      "id": "line-5",
+      "color": "#16a34a",
+      "name": "Touch Scoring-Side FLOWER (dropdown down)",
       "locked": false,
       "waitBeforeMs": 0,
-      "waitAfterMs": 3000,
+      "waitAfterMs": 4150,
       "waitBeforeName": "",
-      "waitAfterName": "Shoot 4: TIP 2 (FAR cell), parked",
+      "waitAfterName": "Sit in the FLOWER shooting every ball",
       "kind": "atomic",
       "endPoint": {
-        "x": 129,
-        "y": 36
+        "x": 46.75,
+        "y": 131.01
+      },
+      "controlPoints": [],
+      "heading": {
+        "type": "linear",
+        "startDeg": 90,
+        "endDeg": 90
+      }
+    },
+    {
+      "id": "line-6",
+      "color": "#16a34a",
+      "name": "Back out",
+      "locked": false,
+      "waitBeforeMs": 0,
+      "waitAfterMs": 0,
+      "waitBeforeName": "",
+      "waitAfterName": "",
+      "kind": "atomic",
+      "endPoint": {
+        "x": 46.75,
+        "y": 122.03
+      },
+      "controlPoints": [],
+      "heading": {
+        "type": "linear",
+        "startDeg": 90,
+        "endDeg": 90
+      }
+    },
+    {
+      "id": "line-7",
+      "color": "#7f1d1d",
+      "name": "Park in loading zone",
+      "locked": false,
+      "waitBeforeMs": 0,
+      "waitAfterMs": 0,
+      "waitBeforeName": "",
+      "waitAfterName": "",
+      "kind": "atomic",
+      "endPoint": {
+        "x": 15,
+        "y": 108
       },
       "controlPoints": [
         {
-          "x": 115,
-          "y": 114
+          "x": 16,
+          "y": 108
         },
         {
-          "x": 115,
-          "y": 54
+          "x": 32,
+          "y": 116
         }
       ],
       "heading": {
         "type": "linear",
         "startDeg": 90,
-        "endDeg": 180
+        "endDeg": 0
       }
     }
   ],
@@ -254,15 +368,35 @@
   "sequence": [
     {
       "kind": "path",
-      "lineId": "line-bb-1"
+      "lineId": "line-1"
     },
     {
       "kind": "path",
-      "lineId": "line-bb-2"
+      "lineId": "line-2"
     },
     {
       "kind": "path",
-      "lineId": "line-bb-3"
+      "lineId": "line-3"
+    },
+    {
+      "kind": "path",
+      "lineId": "line-4"
+    },
+    {
+      "kind": "path",
+      "lineId": "line-4b"
+    },
+    {
+      "kind": "path",
+      "lineId": "line-5"
+    },
+    {
+      "kind": "path",
+      "lineId": "line-6"
+    },
+    {
+      "kind": "path",
+      "lineId": "line-7"
     }
   ],
   "pathChains": [],

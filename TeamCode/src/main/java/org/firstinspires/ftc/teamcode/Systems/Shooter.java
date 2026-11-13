@@ -75,7 +75,6 @@ public class Shooter extends Subsystem {
         flywheel.reset();
     }
 
-    private boolean shooterToggle = false;
 
     private double turretAimPosition;
     private final TurretRoute turretRoute = new TurretRoute();
@@ -95,6 +94,8 @@ public class Shooter extends Subsystem {
 
     public double flywheelTargetVelocity;
     public double manualFlywheelVelocity = Double.NaN;
+    //a live tuner's TURRET_RATE_FEEDFORWARD_SCALE, NaN = the constant
+    public double turretRateScale = Double.NaN;
 
     private boolean autoAim = true;
     private boolean turretLocked;
@@ -110,10 +111,6 @@ public class Shooter extends Subsystem {
 
         currentRobotPose = follower.pose();
         goalAimUpdate();
-        if (controller1.left_bumperHasJustBeenPressed) {
-            shooterToggle = !shooterToggle;
-            Recorder.note("driver", shooterToggle ? "flywheel on" : "flywheel off");
-        }
         if (controller2.right_bumperHasJustBeenPressed) {
             autoAim = !autoAim;
             Recorder.note("driver", autoAim ? "auto aim on" : "auto aim off");
@@ -122,7 +119,8 @@ public class Shooter extends Subsystem {
             turretLocked = !turretLocked;
             Recorder.note("driver", turretLocked ? "turret locked at 0" : "turret aiming");
         }
-        updateMechanisms(shooterToggle, autoAim && !turretLocked);
+        //flywheel always on from START
+        updateMechanisms(true, autoAim && !turretLocked);
     }
 
     public void provideComponents(Flywheel flywheel, TurretBase turret, Follower follower) {
@@ -209,7 +207,7 @@ public class Shooter extends Subsystem {
 
             turretAimPosition = ShooterConstants.TURRET_AIM_DIRECTION * tt * ShooterConstants.TURRET_TICKS_PER_DEGREE + turretStartPosition;
 
-            turretAimVelocity = turretRoute.isOutside(min, max) ? 0 : ShooterConstants.TURRET_AIM_DIRECTION * TurretConstants.TURRET_RATE_FEEDFORWARD_SCALE * aimRate * ShooterConstants.TURRET_TICKS_PER_DEGREE;
+            turretAimVelocity = turretRoute.isOutside(min, max) ? 0 : ShooterConstants.TURRET_AIM_DIRECTION * (turretRateScale == turretRateScale ? turretRateScale : TurretConstants.TURRET_RATE_FEEDFORWARD_SCALE) * aimRate * ShooterConstants.TURRET_TICKS_PER_DEGREE;
         }
         else {
             turretRoute.reset();
@@ -330,7 +328,7 @@ public class Shooter extends Subsystem {
     }
 
     public boolean isShooterOn() {
-        return shooterToggle;
+        return true;
     }
 
     public boolean isAutoAimOn() {

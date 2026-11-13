@@ -8,7 +8,6 @@ import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Field.Goal;
@@ -37,9 +36,10 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
     private final List<Double> velocities = new ArrayList<>();
     private final FlywheelVelocityModel collected = new FlywheelVelocityModel();
     private final Shooter shooter = new Shooter();
+    private final Intake intakeSystem = new Intake().asSubsystem();
+    private final Blocker blockerSystem = new Blocker().asSubsystem();
 
     private Drivetrain drivetrain;
-    private Intake intakeComponent;
     private Telemetry telemetry;
     private boolean localized, spinning = true, showDataset;
     private double distance = Double.NaN;
@@ -52,12 +52,13 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         initializeComponents(ALLIANCE);
         applyComponentTraits();
         drivetrain = createDrivetrain();
-        intakeComponent = new Intake(intake);
+        intakeSystem.provideComponents(new Intake(intake, fiArm), controller1);
+        blockerSystem.provideComponents(blocker, controller1, flywheel, turret);
         shooter.provideComponents(flywheel, turret, follower);
         turret.setVolts(0, 0);
         recorder.channel("interp", "velocity", "ticks/s", "speed being tried", () -> FLYWHEEL_VELOCITY);
         recorder.channel("interp", "points", "", "recorded so far", () -> distances.size());
-        record(shooter, null, intakeComponent, drivetrain);
+        record(shooter, blockerSystem, intakeSystem, drivetrain);
         setUpLynxModule();
     }
 
@@ -73,12 +74,13 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         telemetry.addLine("After START:");
         telemetry.addLine(" 1. Drive into the " + ALLIANCE + " GARDEN corner: front against the GARDEN's wall, side against the other wall.");
         telemetry.addLine(" 2. Press the MAIN button (PS / guide) to localize. Only then does it aim and spin up.");
-        telemetry.addLine(" 3. Drive to a spot and stop. LEFT TRIGGER (hold) shoots.");
+        telemetry.addLine(" 3. Drive to a spot and stop. Same controls as the match: RIGHT TRIGGER intake, RIGHT BUMPER reverse,");
+        telemetry.addLine("    LEFT BUMPER (hold) FIArm down, LEFT TRIGGER (hold) opens the blocker to shoot. Turret aims itself.");
         telemetry.addLine(" 4. DPAD LEFT/RIGHT: speed -/+ " + VELOCITY_STEP + " (or FLYWHEEL_VELOCITY on the Dashboard) until shots land in the middle of the CELL.");
         telemetry.addLine(" 5. DPAD UP records (distance, speed), robot still. DPAD DOWN removes the last one.");
         telemetry.addLine(" 6. Repeat from close to far (more points = better fit). Y shows the table to copy into ShooterConstants.");
         telemetry.addLine();
-        telemetry.addLine("B: flywheel on/off. MAIN again: re-localize. Distances are turret to the CELL point the match aims at (CLOSE if y > 72).");
+        telemetry.addLine("B: flywheel on/off. MAIN again: re-localize. Distance is from the TURRET to the CELL point the match aims at (CLOSE if y > 72), the same number the match looks up.");
         telemetry.update();
     }
 
@@ -93,10 +95,12 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         clearCacheOfLynxModule();
         controller1.getInformation();
         follower.update();
+        intakeSystem.update();
         drivetrain.update();
 
         if (controller1.main_buttonHasJustBeenPressed) localize();
         if (!localized) {
+            blockerSystem.setState(Blocker.BlockerState.BLOCK);
             telemetry.addLine("Drive into the " + ALLIANCE + " GARDEN corner (front on the GARDEN's wall, side on the other wall), then press MAIN.");
             telemetry.addData("Pose now", poseText(follower.pose()));
             telemetry.update();
@@ -109,13 +113,11 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
         if (controller1.yHasJustBeenPressed) showDataset = !showDataset;
 
         shooter.manualFlywheelVelocity = FLYWHEEL_VELOCITY;
+        if (spinning) blockerSystem.update();
+        else blockerSystem.setState(Blocker.BlockerState.BLOCK);
         shooter.updateAutonomous(spinning);
-        distance = Goal.isSet(shooter.goalCoordinate) ? shooter.turretPose.distance(shooter.goalCoordinate) : Double.NaN;
-
-        boolean shoot = controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD) && spinning;
-        blocker.setState(shoot ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
-        intakeComponent.setState(shoot ? Intake.IntakeState.INTAKE : Intake.IntakeState.IDLE);
-        intake.update();
+        //turret to the CELL, the number the match's flywheel lookup uses
+        distance = Goal.isSet(shooter.goalCoordinate) ? shooter.shotDistance : Double.NaN;
 
         if (controller1.dpad_upHasJustBeenPressed) record();
         else if (controller1.dpad_downHasJustBeenPressed && !distances.isEmpty()) {
@@ -156,13 +158,14 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
     private void showLive() {
 
         telemetry.addData("Note", note);
-        telemetry.addData("Distance to goal (in)", "%.1f", distance);
+        telemetry.addData("Turret to goal (in)", "%.1f", distance);
         telemetry.addData("Aiming at", Goal.isClose(follower.pose()) ? "CLOSE cell" : "FAR cell");
         telemetry.addData("Flywheel target / actual", "%.0f / %.0f%s", FLYWHEEL_VELOCITY, flywheel.getCurrentVelocity(), spinning ? "" : " (OFF, B)");
         telemetry.addData("Turret on target", turret.isOnTarget());
+        telemetry.addData("Blocker / intake / FIArm", "%s / %s / %s", blockerSystem.getState(), intakeSystem.getState(), fiArm.getState());
         telemetry.addData("Pose", poseText(follower.pose()));
         telemetry.addData("Points", distances.size());
-        telemetry.addLine("LT shoot | DPAD L/R speed | DPAD UP record | DPAD DOWN undo | Y table | B flywheel | MAIN re-localize");
+        telemetry.addLine("RT intake | RB reverse | LB FIArm | LT shoot | DPAD L/R speed | DPAD UP record | DPAD DOWN undo | Y table | B flywheel | MAIN re-localize");
     }
 
     private void showDataset() {

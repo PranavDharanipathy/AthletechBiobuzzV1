@@ -12,4 +12,4 @@ Written into `TeamCode/.../Constants/TunedConstants.java`. Flywheel gains are ne
 - **Flywheel vibration** (shooter on, settled, not feeding): 13.2 ticks/s RMS, about 1.7 Hz. Shot gate bands 26 / 52, dwell 0.060 s.
 - TURRET_VIBRATION_RMS kept: not enough turret holding time.
 - Drivetrain model kept: no finished Drivetrain Autotuner run pulled yet.
-- **Turret** from Turret Autotuner 20280512-230114: 149.7 deg/s per V, friction 1.18 / 1.18 V, score 11.244079791976956 -> 4.032145725333396.
+- **Turret** from Turret Autotuner 20280513-222052: 161.9 deg/s per V, friction 0.98 / 0.98 V, score 5.700533588311664 -> 5.6233759353249, match course 16.60129892470688 -> 13.238672489947852.

@@ -17,10 +17,10 @@ public class FlywheelHyperTuner {
     private double contactSum, contactSq, contacts, dipSum;
     private int lastShots;
 
-    public FlywheelHyperTuner(FlywheelPIDVSCoefficients start, double feedBoostVolts, double shotKickVolts, double shotKickTime) {
+    public FlywheelHyperTuner(FlywheelPIDVSCoefficients start, double feedBoostVolts, double shotKickVolts, double shotKickTime, double preKickVolts, double preKickLead) {
 
         stability = new OnlineTuner("flywheel stability", 2, new OnlineTuner.Knob("kp_close", start.kpClose, 0.2 * start.kpClose, 3 * start.kpClose, 0.15 * start.kpClose, 0.02 * start.kpClose), new OnlineTuner.Knob("kd", start.kd, 0, Math.max(5 * start.kd, 0.002), Math.max(0.3 * start.kd, 0.0002), 0.00002));
-        shots = new OnlineTuner("flywheel shots", 2, new OnlineTuner.Knob("feed_boost_volts", feedBoostVolts, 0, 3, 0.4, 0.05), new OnlineTuner.Knob("shot_kick_volts", shotKickVolts, 0, 6, 0.8, 0.1), new OnlineTuner.Knob("shot_kick_time", shotKickTime, 0.02, 0.3, 0.04, 0.01), new OnlineTuner.Knob("kp_far", start.kpFar, 0.3 * start.kpFar, 3 * start.kpFar, 0.2 * start.kpFar, 0.02 * start.kpFar), new OnlineTuner.Knob("max_p", start.maxP, 2, 12, 1, 0.25));
+        shots = new OnlineTuner("flywheel shots", 2, new OnlineTuner.Knob("feed_boost_volts", feedBoostVolts, 0, 3, 0.4, 0.05), new OnlineTuner.Knob("shot_kick_volts", shotKickVolts, 0, 6, 0.8, 0.1), new OnlineTuner.Knob("shot_kick_time", shotKickTime, 0.02, 0.3, 0.04, 0.01), new OnlineTuner.Knob("kp_far", start.kpFar, 0.3 * start.kpFar, 3 * start.kpFar, 0.2 * start.kpFar, 0.02 * start.kpFar), new OnlineTuner.Knob("max_p", start.maxP, 2, 12, 1, 0.25), new OnlineTuner.Knob("pre_kick_volts", preKickVolts, 0, 4, 0.5, 0.1), new OnlineTuner.Knob("pre_kick_lead", preKickLead, 0, 0.15, 0.03, 0.01));
     }
 
     public void apply(Flywheel flywheel, FlywheelPIDVSCoefficients coefficients) {
@@ -32,6 +32,8 @@ public class FlywheelHyperTuner {
         flywheel.feedBoostVolts = shots.value("feed_boost_volts");
         flywheel.shotKickVolts = shots.value("shot_kick_volts");
         flywheel.shotKickTime = shots.value("shot_kick_time");
+        flywheel.preKickVolts = shots.value("pre_kick_volts");
+        flywheel.preKickLead = shots.value("pre_kick_lead");
     }
 
     public boolean update(double now, double target, double velocity, boolean feeding, int shotsSeen) {

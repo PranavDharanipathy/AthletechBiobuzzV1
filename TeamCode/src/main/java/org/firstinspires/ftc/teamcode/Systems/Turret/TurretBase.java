@@ -115,6 +115,9 @@ public class TurretBase {
         controller.applyConstants(ShooterConstants.TURRET_TICKS_PER_DEGREE);
     }
 
+    //runs right after the constants every loop, so a live tuner's values stick
+    public java.util.function.Consumer<TurretController> overrides;
+
     public TurretController getController() {
         return controller;
     }
@@ -167,6 +170,7 @@ public class TurretBase {
 
         readSensors();
         applyConstants();
+        if (overrides != null) overrides.accept(controller);
 
         double volts = controller.update(getLoopDt(), targetPosition, targetVelocity, currentPosition);
         p = controller.p / controller.gain;
