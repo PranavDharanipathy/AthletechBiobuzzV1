@@ -17,7 +17,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -235,11 +234,38 @@ public final class MonitorWebServer {
         for (String pair : qs.split("&")) {
             if (pair.isEmpty()) continue;
             int eq = pair.indexOf('=');
-            String k = URLDecoder.decode(eq < 0 ? pair : pair.substring(0, eq), "UTF-8");
-            String v = eq < 0 ? "" : URLDecoder.decode(pair.substring(eq + 1), "UTF-8");
+            String k = unescape(eq < 0 ? pair : pair.substring(0, eq));
+            String v = eq < 0 ? "" : unescape(pair.substring(eq + 1));
             out.put(k, v);
         }
         return out;
+    }
+
+    //%XX and + in a query string, UTF-8
+    static String unescape(String text) throws UnsupportedEncodingException {
+
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream(text.length());
+        int k = 0;
+        while (k < text.length()) {
+            char c = text.charAt(k);
+            int hi = k + 2 < text.length() ? Character.digit(text.charAt(k + 1), 16) : -1;
+            int lo = k + 2 < text.length() ? Character.digit(text.charAt(k + 2), 16) : -1;
+            if (c == '+') {
+                bytes.write(' ');
+                k++;
+            }
+            else if (c == '%' && hi >= 0 && lo >= 0) {
+                bytes.write(hi * 16 + lo);
+                k += 3;
+            }
+            else {
+                int end = k + Character.charCount(text.codePointAt(k));
+                byte[] b = text.substring(k, end).getBytes("UTF-8");
+                bytes.write(b, 0, b.length);
+                k = end;
+            }
+        }
+        return new String(bytes.toByteArray(), "UTF-8");
     }
 
     private static void num(JSONObject o, String key, double v) throws JSONException {

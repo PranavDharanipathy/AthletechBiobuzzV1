@@ -195,6 +195,18 @@ public final class BlazeSession {
         }
     }
 
+    //ms since that hub's last Blaze bulk update, NaN when Blaze doesn't feed it
+    public static double bulkAgeMs(int index) {
+
+        long t = LAST_BULK_NS.get(index);
+        if (FED[index] == null || !running || t == 0) return Double.NaN;
+        return (System.nanoTime() - t) * 1e-6;
+    }
+
+    public static boolean fedNow(int index) {
+        return FED[index] != null && feeds(FED[index]);
+    }
+
     public static boolean isOpen() {
         return open;
     }

@@ -1,9 +1,9 @@
 {
   "version": "2.0.0",
   "startPoint": {
-    "x": 134.28,
-    "y": 56.23,
-    "headingDeg": 180,
+    "x": 84.75,
+    "y": 134.28,
+    "headingDeg": -90,
     "locked": false
   },
   "lines": [
@@ -14,18 +14,27 @@
       "locked": false,
       "waitBeforeMs": 3500,
       "waitAfterMs": 0,
-      "waitBeforeName": "Shoot 4 preload (goal in front)",
+      "waitBeforeName": "Shoot 4 preload: TIP (CLOSE cell, same start as 2 Tip)",
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
         "x": 129,
         "y": 36
       },
-      "controlPoints": [],
+      "controlPoints": [
+        {
+          "x": 130,
+          "y": 104
+        },
+        {
+          "x": 114,
+          "y": 92
+        }
+      ],
       "heading": {
         "type": "linear",
-        "startDeg": 180,
-        "endDeg": 180
+        "startDeg": -90,
+        "endDeg": -180
       }
     }
   ],

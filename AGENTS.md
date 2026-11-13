@@ -41,6 +41,10 @@ Utility/           Shared helpers (MathUtil, BetterGamepad, RobotLogger, ...)
   opmodes/         Utility OpModes (Hardware Monitor Viewer, Clear Database, example, Limelight Lab)
 ```
 
+The match OpModes (Red/Blue TeleOp and their Easy / Temporal Log versions, the six autos) show a **Loop** telemetry line from
+`Utility/TickRateChecker`: last loop, smoothed average and Hz, worst in the last 5 s. `tick()` runs once per loop
+(`TeleOpBaseOpMode.clearCacheOfLynxModule`, `AthletechRobot.periodic`); the line only reads it.
+
 ### `Sim` layout (`org.athletech.sim`)
 
 ```
@@ -111,7 +115,7 @@ with `=`. Genuine AGP DSL methods (`keyAlias`, `pickFirst`, `abiFilters`,
 | Pedro tuning | `com.pedropathing:tuning:1.0.1` (pulls Sloth) | Maven Central + `https://repo.dairy.foundation/releases/` |
 | NextFTC v2 | `dev.nextftc.v2:control` / `hardware` / `robot`, all `0.3.0` | Maven Central |
 | Ivy Pedro commands | `com.pedropathing.ivy:pedro:1.1.1` (`PedroCommands`) | Maven Central |
-| BlazeFTC (beta, on by default) | `dev.anygeneric:blazeftc:0.1.66` | `https://maven.anygeneric.dev/` |
+| BlazeFTC (beta, **off**) | `dev.anygeneric:blazeftc:0.1.66` | `https://maven.anygeneric.dev/` |
 | Apache Commons Math | `org.apache.commons:commons-math3:3.6.1` | Maven Central |
 | Kotlin stdlib | `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` | Maven Central |
 
@@ -130,18 +134,26 @@ Never add NextFTC v1 (`dev.nextftc:ftc`, `dev.nextftc:hardware`) or `dev.nextftc
 v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep exactly one
 `NextRobot` (`Systems/AthletechRobot`) with no hardware access in its constructor. Details are in DEV_NOTES.
 
-**BlazeFTC** (`dev.anygeneric:blazeftc` 0.1.66) runs the hub link for every robot OpMode except `Testing/` testers, the
-utility OpModes and Pedro's own tuners. It's a beta Rust runtime with its own native threads. All of it goes through
-`Utility/Blaze/BlazeSession`, switched by `Constants/BlazeConstants`.
+**BlazeFTC** (`dev.anygeneric:blazeftc` 0.1.66) runs the hub link for every robot OpMode and every tuner except `Testing/`
+testers and the utility OpModes. It's a beta Rust runtime with its own native threads. All of it goes through
+`Utility/Blaze/BlazeSession`, switched by `Constants/BlazeConstants`. **`ENABLED` is false**: in the 2028-05-12 match runs
+its hub and Pinpoint feeds died ~0.8 s after START with no fault (every loop fell back to SDK reads), loops went 28 -> 38 ms
+median with 150-650 ms freezes about once a second (the "lag"), and `MOTOR_ACCELERATION` left the intake under half speed
+the whole time (its `setPower` ignores RUN_USING_ENCODER). Don't turn it on again without a `blaze_check.py` run that passes.
+Every TeleOp records `blaze.*` (hub data age and staleness, update counts, Pinpoint use, faults) and `pose.blaze_age_ms`;
+`python -I tools/blaze_check.py [RUN]` judges a run against the newest Blaze-off TeleOp (feeds, faults, loop times,
+command-to-motion lag, pose resets, turret, intake).
 
 - **TeleOps and tuners:**
   - `TeleOpBaseOpMode` calls `begin` (first thing in `initializeComponents`), `engage` (in `setUpLynxModule`), `tick` (in
     `clearCacheOfLynxModule`) and `end` (in `stop`).
   - The four standalone tuners call the same four themselves.
+  - Pedro's Foresight tuner and Tests get their Mecanum through `Tuning.blazeMecanum` (`begin` + `tick`, motors only, so a
+    no-op while `MOTOR_ACCELERATION` is off).
 - **Autos:** plain `NextOpMode`, no Blaze. As `BlazeOpMode`s, NextFTC started Blaze's proxy for them even with Blaze off, and
   the hubs retransmitted packets every auto (robot log 2028-05-08).
 - **What Blaze does:**
-  - motor `setPower` goes straight to Blaze;
+  - motor `setPower` goes straight to Blaze (only with `MOTOR_ACCELERATION`, off);
   - each hub's bulk data is kept fresh in the background, and `tick` never clears a hub Blaze feeds;
   - `BlazePinpointLocalizer` gets Pedro its Pinpoint data from Blaze, falling back to an SDK read when Blaze's sample is
     stale. Its `setPose` is a software offset.
@@ -226,8 +238,8 @@ and every auto records everything every loop to `/sdcard/FIRST/data/RobotLog/<ti
 and fixed without the robot:
 
 - `frames.bin` + `channels.tsv`: ~170 numbers per loop: loop and power, both gamepads (every stick, trigger, button), pose and
-  velocity, the drive's command, wheels and pose hold, the turret and its controller (target, plan, every volt term, learned
-  state, resyncs, kicks, gates), the flywheel and its controller, the shooter's aim (raw and routed), cell, goal, distance, shot
+  velocity, the drive's command, wheels and pose hold, the turret and its controller (target, PID speed, every volt term,
+  gates), the flywheel and its controller, the shooter's aim (raw and routed), cell, goal, distance, shot
   solution and gates, blocker, intake, FIArm, plus each tuner's own (autotune target and stage, ...).
 - `events.tsv`: swings, cell switches, relocalizations, driver toggles, auto status/fault/shot-wait changes, autotune stages.
 - `meta.tsv`: every Constants value at the start, every hardware device, the hubs, the OpMode, where it started from.
@@ -240,38 +252,64 @@ also pulls them into `tuning-data/robot-logs` (git-ignored). TunerTeleOp differs
 
 ## Turret control and tuning
 
-**`TurretConstants.TURRET_ENABLED` (off for now):** off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos,
-tuners). The aim and the controller still run and are recorded, so the log shows what it would have done.
+**`TurretConstants.TURRET_ENABLED`:** off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos, tuners). The
+aim and the controller still run and are recorded, so the log shows what it would have done.
 
-`Systems/Turret/TurretController` is model based (speed per volt, lag, dead time, friction, and also top speed and
-acceleration, because the servos run out of torque long before volts), not a hand-tuned PIDF. Its gains come from `TURRET_BANDWIDTH`. Tune it with the **Turret Autotuner** OpMode: run STATIONARY
-first, with the robot still and the turret straight at INIT, then DRIVING (press A, then drive). Each run saves
-`/sdcard/FIRST/data/TurretAutotune/...`, and the next build pulls it into `TunedConstants`. **Turret Manual
-Tuner** is for dashboard tweaking. `TurretAutotuneEngine` has no hardware calls, so keep it that way and
-test it against a simulated turret. Details are in DEV_NOTES.
+**Controller** (`Systems/Turret/TurretController`, pure Java, the Sim runs it): a position PID (far/close kp and kd, zoned ki
+with smash, filtered d, hold feedforward) whose output is a speed (ticks/s), plus the aim rate from `Shooter` (which already turns
+against the robot's spin, scaled by `TURRET_RATE_FEEDFORWARD_SCALE`). There's no velocity loop under it: that speed goes out
+through `TURRET_GAIN` (speed per volt) plus a friction feedforward:
 
-The turret travels **±200° from home** (20° past straight back each way) (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`) and the robot may spin
-forever. `TurretRoute` follows the aim round continuously. The match aim (`Shooter`) uses the whole ±200° and swings a full
-turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`); the autotuner's DRIVING mode swings early, before
-the turret's stopping distance. `TurretController`'s plan never heads for an end faster than it can stop (`setTravel`).
-When the turret ends up more than `TURRET_RESYNC_DEGREES` off its own plan (lagged, coasted on, stalled) the plan moves
-onto where it really is instead of the two fighting to 0 V; stopped well short, it kicks through the whole start delay. Past the limit plus
-`TURRET_HARD_LIMIT_MARGIN_DEGREES`, `TurretBase` will only drive back toward home, which protects the wiring.
-Near the ends the lanyards pull back harder than friction, and resync kept dragging the plan onto the stalled turret (~20 deg
-short of 180). The **stuck push** (`TURRET_STUCK_*`) builds toward the real target when the target is within 60 deg of an end and the
-turret has made no real progress for 0.2 s, and keeps the output under `TURRET_FROZEN_ENCODER_VOLTS` so the frozen-encoder cutoff
-can't trip. Only near the ends: mid-travel any extra push overshoots (the servo breaks free at ~1.16 V but slides on ~0.65 V,
-with ~70 ms of delay), see DEV_NOTES.
-Flywheel shake is handled by **vibration rejection** in `TurretController`: it measures shake from the error's
-second difference and lowers stiffness while the turret shakes, down to `TURRET_MIN_BANDWIDTH`, which DRIVING
-derives (`TURRET_SHAKE_BANDWIDTH`: the softest bandwidth that really shook less without holding or tracking worse; equal
-to the bandwidth = never soften). The autotuner turns rejection off while it measures.
-Holding, the friction push lets go early when the turret comes in much faster than the loop asked for (the friction
-guess is too high: it slides on less than it takes to start), and the target rate gets a deadband sized to its measured
-noise, so the Pinpoint's heading-rate jitter can't flip the push every loop.
+- signed by the commanded speed (`TURRET_FRICTION_FROM_VELOCITY`);
+- the full breakaway push only while the encoder says it's still (Stribeck on the measured speed,
+  `TURRET_STRIBECK_FROM_MEASURED`): with no velocity loop to wind up, it otherwise never starts small moves;
+- nothing inside `TURRET_FRICTION_DEADBAND_DEGREES` while the aim is still.
+
+**Pulse hold** (`TURRET_PULSE_*`, on): within `TURRET_PULSE_ZONE_DEGREES` of a still aim (and once the turret has slowed) the
+PID is replaced by timed pushes `TURRET_PULSE_OVER_BREAKAWAY_VOLTS` over breakaway, a wait, and a look at where it landed; the push length is learned from that (no move:
+longer, overshoot: shorter). Pushing until the encoder shows motion (~110 ms late) threw it ~10 deg past every time, while
+50-100 ms pushes move it ~0.7 deg (logs 2028-05-12). Outward pushes near a travel end stay at the minimum. 8 pushes in a row
+without a count trips the dead-encoder cutoff (pulses never stay over it long).
+The pulses also learn friction during the match (`TURRET_FRICTION_LEARN_*`, `frictionTrim`, recorded as `turret.friction_trim`): a
+full-length push that didn't move raises it, a shortest push that overshot lowers it, and it applies to the PID's friction push
+too. That carries the hold through battery sag and friction drift (`TurretBatteryTest`: 12.6 -> 10.5 V, servos regulated or on
+the battery, friction +-15%: ~0.5 deg, no lurches). `TURRET_VOLTAGE_COMPENSATION` is off: both servos are on hub servo ports,
+a regulated supply, so dividing by the battery only pushed harder as it sagged.
+
+It never heads for an end of the travel faster than it can still coast to a stop before it (`TURRET_END_DECEL_DEGREES_PER_S2`,
+`TURRET_END_LAG_SECONDS`). `TurretBase` adds the wiring hard limit (past the travel plus `TURRET_HARD_LIMIT_MARGIN_DEGREES` it
+only drives back) and the dead-encoder cutoff (`TURRET_FROZEN_ENCODER_*`: 0.5 V over breakaway for 0.3 s with no
+counts; an unplugged encoder once spun the turret round. Relative, because breakaway went 1.16 -> ~2.3 -> 1.18 V). The servos ignore commands for ~1.1 s after an OpMode starts (every
+log shows it), so the cutoff only counts after `TURRET_SERVO_WAKE_SECONDS` (counting from the start, it killed a working turret
+0.7 s in); until the encoder has counted once the push is capped at
+`TURRET_UNCOUNTED_OVER_BREAKAWAY_VOLTS` over breakaway. The cutoff latches for the OpMode and the Driver Station "Turret" line says so; "Turret encoder" shows its angle at INIT, so turn the turret by hand there.
+
+**Turret Autotuner** (`Tuners/TurretAutotuner` + `TurretAutotuneEngine`, one OpMode, no hardware calls in the engine; sim-tested
+in `TurretAutotuneTest`): robot still, turret straight at INIT. Stages:
+
+1. after the servos wake (~1.1 s), a 4 V kick each way: no count is retried longer (0.15 / 0.22 / 0.3 s, alternating so a dead
+   encoder can't carry it far); still no count after all three, or counts the wrong way, = fault;
+2. breakaway ramps;
+3. open-loop speed holds (speed per volt, sliding friction);
+4. `ROUNDS` of step-trial knob tuning scored on settle time, overshoot, final error, holding jitter and volt flips (shake);
+5. the **match course** (`COURSE`, same every trial): linear / quadratic / cubic ramps, a wobble, a jittery drift, a big step,
+   0.5-2 deg nudges and plain holds, aim rate fed forward like the Shooter. Scored mostly on holding (error, swings, flips) plus
+   tracking error, it tunes the close gains, deadband, pulse hold, friction ramp, rate feedforward scale and friction trims.
+   B during it keeps what's tuned so far.
+
+B stops it. It saves `/sdcard/FIRST/data/TurretAutotune/<time>/`; the build pulls it into `TunedConstants.TURRET_*` (gain,
+friction and the gains), which `TurretConstants` points at (`TurretTuningPullTest`; older-format runs in that folder are skipped).
+**Turret Manual Tuner** is for dashboard tweaking. `TurretControllerTest` sims the controller.
+
+Offline: `python -I tools/turret_fit.py fit` fits the turret model to every turret log, `python -I tools/turret_fit.py export`
+pulls real-match aim traces into `Sim/out/turret-traces`, and `TURRET_TUNE=1 ./gradlew :Sim:test --tests "*TurretTuning*"`
+replays them on the measured turret, a stickier one and the log-fitted one and searches the knobs. The ~120 ms from command to
+motion caps match tracking near 50% of loops within 2 deg; only less delay (faster loops) beats that.
+
+The turret travels **±200° from home** (20° past straight back each way) (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`)
+and the robot may spin forever. `TurretRoute` follows the aim round continuously. The match aim (`Shooter`) uses the whole ±200°
+and swings a full turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`).
 In the match TeleOps (`Shooter.update`), **gamepad 1 Y** toggles a turret lock: held still at home (0 deg) instead of aiming.
-**Lanyard compensation** (`LanyardMap`, `TURRET_LANYARDS_ENABLED`, off for now) learns the volts the lanyards need at
-each angle (the Manual Tuner's X sweep) and adds them as feedforward. When it's off it must add exactly 0.
 
 ## Drivetrain pose hold
 
@@ -307,8 +345,9 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 
 - **Frame:** all poses are in the turret's frame (`FieldConstants`), which is also the Pedro visualizer's BIOBUZZ field. No
   mirroring.
-- **Goal:** the shooter aims at its own color's goal on the robot's half (the one in front). The Preload starts sit at its
-  y facing it, so the turret's home points straight at it. 2 Tip Garden checks its shot poses' halves at INIT.
+- **Goal:** the shooter aims at its own color's goal on the robot's half (the one in front). Preload + Park (1 tip) starts
+  where 2 Tip Garden does, in line with the upward CELL, and shoots the same first volley; both check their shot poses'
+  halves at INIT.
 - **FIArm:** every auto sends it to RETRACT at INIT.
 - **Auto to TeleOp handoff** (`Utility/AutoHandoff`): from START every auto (`robot.handOffAs(name)`) keeps the robot's pose and
   the turret's ticks from home in statics and sets `infoFromAuto`. `TeleOpBaseOpMode` takes it once at INIT (and sets the
@@ -320,7 +359,7 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 ## Hypertuning and system evolution
 
 **SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp. While it's played it keeps tuning the
-flywheel (stability at speed, power around shots) and the turret (fast, smooth moves, spin cancelling) with `OnlineTuner`.
+flywheel (stability at speed, power around shots) with `OnlineTuner`; the turret plays with its own constants.
 It logs everything to the SD card, and `findings.md` names principle candidates. Agents turn those into new or removed
 control features by the protocol in
 [SYSTEM_EVOLUTION.md](./TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md):

@@ -786,12 +786,12 @@ public void record(double time, double x, double y, double heading) {
 |---|---|---|
 | **Shutter** | Rolling vs **global** | Rolling captures rows one after another, so fast motion skews the image. Global captures the whole frame at once, which suits a spinning robot and AprilTag pose. |
 | **Sensor colour** | Colour vs **mono** | Mono collects more light (no colour filter), so it gets shorter exposure and less blur. It's fine for AprilTags, useless for colour-coded pieces. |
-| **Resolution** | 320×240 to 1080p+ | More pixels give more range and precision, but cost USB bandwidth, decode time, and CPU on the hub. |
+| **Resolution** | 320×240 to 1080p+ | More pixels give more range and precision, but cost USB bandwidth, processing time, and CPU on the hub. |
 | **Frame rate** | 30 / 60 / 90 / 120 fps | Sets how fresh the newest frame is, and how many samples the filters get. |
 | **Field of view** | Narrow (~55° diagonal) vs wide (~80°+) | Wide sees more of the field but gets fewer pixels per degree and more distortion. Narrow gets more range and precision but loses targets when turning. |
 | **Focus** | Fixed vs autofocus | Autofocus hunts and changes the intrinsics. Lock it, or pick fixed focus. |
 | **Exposure control** | Auto vs manual (UVC) | Manual exposure and gain are required for low blur and stable colours. Check the camera exposes them. |
-| **Stream format** | Uncompressed (YUY2) vs **MJPEG** | YUY2 costs no decoding but lots of bandwidth. MJPEG fits USB 2.0 at high resolution but costs CPU to decode on the hub. |
+| **Stream format** | Uncompressed (YUY2) vs **MJPEG** | YUY2 costs no decompression but lots of bandwidth. MJPEG fits USB 2.0 at high resolution but costs CPU to decompress on the hub. |
 | **Interface** | USB UVC, I2C/UART smart camera, USB "Ethernet" (Limelight) | Decides where the compute happens and how results reach the loop. |
 
 **USB bandwidth, worked out.** YUY2 uses 2 bytes per pixel:

@@ -52,7 +52,7 @@ Dashboard and commons-math — it needs network access to Maven Central and
 - **Drivetrain Autotuner** (tuning group): the robot drives itself for about a minute (forward/back, strafe, spin, then
   shoves itself while holding), with about 3 ft clear every way. Any stick or B stops it. The result goes into
   `TunedConstants.DRIVE_*` on the next build. Run it again after drivetrain changes or if the hold feels soft or twitchy.
-- **SHT Stability Tuner** (tuning group): play it like a match. Flywheel and turret gains keep changing, and sessions land
+- **SHT Stability Tuner** (tuning group): play it like a match. Flywheel gains keep changing, and sessions land
   in `tuning-data/hypertuning/` on build. Read `findings.md`, then follow `Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md`.
   Never change a match default from one session.
 - **Temporal Log Red** (A_Match): the RED TeleOp with everything logged against time (every read/write with value and
@@ -62,9 +62,10 @@ Dashboard and commons-math — it needs network access to Maven Central and
     2. Then `summary latest`, `decisions latest`, or `csv latest --grep flywheel -o out.csv` (see `--help`).
   - Sessions are big (hundreds of KB/s) and go to `temporal-logs/`, which is git-ignored.
   - Its `temporal.watch_us` record is the logging's own cost per loop.
-- **Blaze** runs the hub link for every robot OpMode except testers, utility OpModes and Pedro's tuners. The `Blaze`
+- **Blaze** runs the hub link for every robot OpMode and tuner except testers and utility OpModes. The `Blaze`
   telemetry line says what's on.
-  - To go back to the stock SDK for TeleOps and tuners, set `BlazeConstants.ENABLED = false` on the Dashboard before INIT.
+  - It's off (`BlazeConstants.ENABLED`): unreliable in the 2028-05-12 match runs. To try it, set it true on the Dashboard
+    before INIT, then judge the run with `python -I tools/blaze_check.py`.
   - The autos always go through NextFTC's `BlazeOpMode`.
   - If a motor won't move in a tester after a Blaze OpMode, restart the robot and tell an agent (see DEV_NOTES).
 - **Limelight Lab** (live vision tuning; moves nothing): run the `Limelight Lab` OpMode

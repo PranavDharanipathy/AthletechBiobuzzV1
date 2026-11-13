@@ -6,6 +6,7 @@ import com.pedropathing.math.Velocity;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Blocker;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.Drive;
 import org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems.FIArm;
@@ -22,6 +23,7 @@ import org.firstinspires.ftc.teamcode.Utility.Recording.RobotRecording;
 import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
+import org.firstinspires.ftc.teamcode.Utility.TickRateChecker;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -111,9 +113,12 @@ public final class AthletechRobot implements NextRobot {
         return mechanisms;
     }
 
+    private final TickRateChecker tickRate = new TickRateChecker();
+
     @Override
     public void periodic() {
 
+        tickRate.tick();
         clearCaches();
         HardwareMonitor.get().update();
         recordHandoff();
@@ -255,6 +260,8 @@ public final class AthletechRobot implements NextRobot {
         if (shoots) Telemetry.log("4 POLLEN loaded.");
         Telemetry.log("Start pose", drive.pose());
         Telemetry.log("Blaze", BlazeSession.status());
+        shooter.turret.readSensors();
+        Telemetry.log("Turret encoder", String.format(java.util.Locale.US, "%.1f deg", (shooter.turret.getPosition() - shooter.turret.startPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE) + (shooter.turret.hasEncoderCounted() ? "" : ", turn the turret by hand: this must change"));
     }
 
     public void show() {
@@ -265,5 +272,6 @@ public final class AthletechRobot implements NextRobot {
         Telemetry.log("Pose", drive.pose());
         Telemetry.log("Shots", shotsTaken + " (" + shotTimeouts + " fed before the flywheel was up)");
         Telemetry.log("Shot waiting on", shotWaitingOn);
+        Telemetry.log("Loop", tickRate.describe());
     }
 }

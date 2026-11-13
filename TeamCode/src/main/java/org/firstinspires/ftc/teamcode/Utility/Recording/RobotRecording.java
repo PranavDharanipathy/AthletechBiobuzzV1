@@ -19,6 +19,8 @@ import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretController;
 import org.firstinspires.ftc.teamcode.Utility.AutoHandoff;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazePinpointLocalizer;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
 
@@ -55,6 +57,30 @@ public final class RobotRecording {
         r.channel("power", "current_a", "A", "all hubs (sampled)", () -> HardwareMonitor.get().getTotalCurrentAmps());
         r.channel("power", "energy_wh", "Wh", "used so far", () -> HardwareMonitor.get().getEnergyWh());
         r.channel("loop", "heap_mb", "MB", "Java heap in use", () -> (runtime.totalMemory() - runtime.freeMemory()) / 1048576.0);
+    }
+
+    public static void blaze(Recorder r) {
+
+        r.channel("blaze", "open", "0/1", "started this OpMode", () -> BlazeSession.isOpen() ? 1 : 0);
+        r.channel("blaze", "running", "0/1", "", () -> BlazeSession.isRunning() ? 1 : 0);
+        r.channel("blaze", "ch_age_ms", "ms", "since Blaze's last Control Hub bulk update (NaN = not fed)", () -> BlazeSession.bulkAgeMs(BlazeSession.CONTROL_HUB));
+        r.channel("blaze", "eh_age_ms", "ms", "Expansion Hub", () -> BlazeSession.bulkAgeMs(BlazeSession.EXPANSION_HUB));
+        r.channel("blaze", "ch_live", "0/1", "1 = this loop read Blaze's Control Hub data, 0 = stale so normal reads", () -> BlazeSession.fedNow(BlazeSession.CONTROL_HUB) ? 1 : 0);
+        r.channel("blaze", "eh_live", "0/1", "", () -> BlazeSession.fedNow(BlazeSession.EXPANSION_HUB) ? 1 : 0);
+        r.channel("blaze", "ch_updates", "", "Control Hub bulk updates so far", () -> BlazeSession.BULK[BlazeSession.CONTROL_HUB].total);
+        r.channel("blaze", "eh_updates", "", "", () -> BlazeSession.BULK[BlazeSession.EXPANSION_HUB].total);
+        r.channel("blaze", "pinpoint_updates", "", "Pinpoint samples from Blaze so far", () -> BlazeSession.PINPOINT.total);
+        r.channel("blaze", "pinpoint_used", "", "loops that used Blaze's Pinpoint sample", () -> {
+
+            BlazePinpointLocalizer p = BlazeSession.pinpoint();
+            return p == null ? Double.NaN : p.samples;
+        });
+        r.channel("blaze", "pinpoint_sdk_reads", "", "loops that read the Pinpoint through the SDK instead", () -> {
+
+            BlazePinpointLocalizer p = BlazeSession.pinpoint();
+            return p == null ? Double.NaN : p.sdkReads;
+        });
+        r.watch("blaze", "fault", () -> BlazeSession.fault);
     }
 
     public static void gamepad(Recorder r, String name, final BetterGamepad g) {
@@ -109,6 +135,16 @@ public final class RobotRecording {
         r.channel("pose", "vy", "in/s", "field", () -> m.vy);
         r.channel("pose", "speed", "in/s", "", () -> Math.hypot(m.vx, m.vy));
         r.channel("pose", "omega", "deg/s", "turn rate (+ = counterclockwise)", () -> Math.toDegrees(m.omega));
+        r.channel("pose", "blaze_age_ms", "ms", "age of Blaze's Pinpoint sample (NaN = no Blaze)", () -> {
+
+            BlazePinpointLocalizer p = BlazeSession.pinpoint();
+            return p == null ? Double.NaN : 1000 * p.sampleAgeSeconds;
+        });
+        r.channel("pose", "blaze_sdk", "0/1", "1 = that sample was stale, read the SDK instead", () -> {
+
+            BlazePinpointLocalizer p = BlazeSession.pinpoint();
+            return p == null ? Double.NaN : p.usingSdk ? 1 : 0;
+        });
     }
 
     public static void drivetrain(Recorder r, final Drivetrain d) {
@@ -141,39 +177,30 @@ public final class RobotRecording {
         final TurretController c = t.getController();
         r.channel("turret", "target", "deg", "where it's told to go", () -> (t.getTargetPosition() - t.startPosition) / tpd());
         r.channel("turret", "position", "deg", "encoder", () -> (t.getCurrentPosition() - t.startPosition) / tpd());
-        r.channel("turret", "reference", "deg", "the plan, a dead time back", () -> (t.getReference() - t.startPosition) / tpd());
         r.channel("turret", "error", "deg", "target - position", () -> (t.getTargetPosition() - t.getCurrentPosition()) / tpd());
         r.channel("turret", "aim_error", "deg", "what the aim gate checks (smoothed)", t::getAimErrorDegrees);
         r.channel("turret", "velocity", "deg/s", "filtered", () -> t.getVelocity() / tpd());
         r.channel("turret", "raw_velocity", "deg/s", "encoder", () -> t.getRawVelocity() / tpd());
-        r.channel("turret", "target_velocity", "deg/s", "feedforward rate (robot spin, aim motion)", () -> t.getTargetVelocity() / tpd());
-        r.channel("turret", "reference_velocity", "deg/s", "", () -> c.getReferenceVelocity() / tpd());
-        r.channel("turret", "plan_velocity", "deg/s", "", () -> c.getPlannedVelocity() / tpd());
+        r.channel("turret", "target_velocity", "deg/s", "aim rate feedforward (turns against the robot's spin)", () -> t.getTargetVelocity() / tpd());
+        r.channel("turret", "pid_velocity", "deg/s", "position PID output", () -> c.positionalVelocity / tpd());
         r.channel("turret", "power", "", "servo power (-1..1)", t::getPower);
-        r.channel("turret", "volts", "V", "controller output", () -> c.volts);
+        r.channel("turret", "volts", "V", "sent, after the limits", t::getVolts);
         r.channel("turret", "servo_left", "", "", () -> t.getServoPowers()[0]);
         r.channel("turret", "servo_right", "", "", () -> t.getServoPowers()[1]);
         r.channel("turret", "supply_v", "V", "what the volts are scaled against", t::getCompensationVolts);
-        r.channel("turret", "p", "V", "", () -> c.p);
-        r.channel("turret", "i", "V", "", () -> c.i);
-        r.channel("turret", "d", "V", "", () -> c.d);
-        r.channel("turret", "f", "V", "friction push / brake / kick", () -> c.f);
-        r.channel("turret", "v", "V", "plan feedforward", () -> c.v);
-        r.channel("turret", "lanyard", "V", "lanyard map", () -> c.lanyard);
-        r.channel("turret", "stuck_v", "V", "stuck push near the ends", c::getStuckVolts);
-        r.channel("turret", "kp", "V/tick", "", () -> c.kp);
-        r.channel("turret", "ki", "V/tick/s", "", () -> c.ki);
-        r.channel("turret", "kd", "V/(tick/s)", "", () -> c.kd);
-        r.channel("turret", "bandwidth", "rad/s", "after vibration rejection", t::getEffectiveBandwidth);
-        r.channel("turret", "vibration", "deg", "shake it measures", t::getVibrationDegrees);
-        r.channel("turret", "hold_scale", "", "learned hold push share", c::getHoldScale);
-        r.channel("turret", "kick_boost", "V", "learned extra on kicks", c::getKickBoost);
-        r.channel("turret", "rate_noise", "deg/s", "target rate jitter it measured", () -> c.getRateNoise() / tpd());
-        r.channel("turret", "resyncs", "", "count: plan moved onto the turret", () -> c.resyncs);
-        r.channel("turret", "landings", "", "count", () -> c.landings);
-        r.flag("turret", "landing", "", () -> c.landing);
+        r.channel("turret", "p", "V", "", () -> t.p);
+        r.channel("turret", "i", "V", "", () -> t.i);
+        r.channel("turret", "d", "V", "", () -> t.d);
+        r.channel("turret", "f", "V", "friction push + hold", () -> t.f);
+        r.channel("turret", "v", "V", "aim rate feedforward", () -> t.v);
+        r.channel("turret", "friction", "V", "friction push alone", () -> c.s);
+        r.channel("turret", "hold", "V", "hold push alone", () -> c.f);
         r.flag("turret", "on_target", "aim gate", t::isOnTarget);
         r.flag("turret", "encoder_frozen", "cut off for good this OpMode", t::isEncoderFrozen);
+        r.channel("turret", "pulsing", "0/1", "holding with timed pushes (small error, still aim)", () -> c.pulsing ? 1 : 0);
+        r.channel("turret", "pulses_no_count", "", "pushes in a row without an encoder count", () -> c.pulsesWithoutCounts);
+        r.channel("turret", "friction_trim", "V", "friction learned this match on top of the tuned breakaway", () -> c.frictionTrim);
+        r.channel("turret", "pulse_length", "s", "learned push length", () -> c.pulseLength);
         r.channel("turret", "loop_dt", "s", "its own update gap", t::getLoopDt);
         r.channel("turret", "filter_hz", "Hz", "velocity filter", t::getFilterBandwidth);
     }

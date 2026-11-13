@@ -1,9 +1,9 @@
 {
   "version": "2.0.0",
   "startPoint": {
-    "x": 9.72,
-    "y": 87.77,
-    "headingDeg": 0,
+    "x": 59.25,
+    "y": 9.72,
+    "headingDeg": 90,
     "locked": false
   },
   "lines": [
@@ -14,17 +14,26 @@
       "locked": false,
       "waitBeforeMs": 3500,
       "waitAfterMs": 0,
-      "waitBeforeName": "Shoot 4 preload (goal in front)",
+      "waitBeforeName": "Shoot 4 preload: TIP (FAR cell, same start as 2 Tip)",
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
         "x": 15,
         "y": 108
       },
-      "controlPoints": [],
+      "controlPoints": [
+        {
+          "x": 23,
+          "y": 34
+        },
+        {
+          "x": 23,
+          "y": 50
+        }
+      ],
       "heading": {
         "type": "linear",
-        "startDeg": 0,
+        "startDeg": 90,
         "endDeg": 0
       }
     }

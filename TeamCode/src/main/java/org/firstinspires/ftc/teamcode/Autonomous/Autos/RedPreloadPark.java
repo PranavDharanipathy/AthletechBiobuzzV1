@@ -26,16 +26,16 @@ public final class RedPreloadPark extends NextOpMode {
 
         Pose start = Drive.pose(START);
         Pose park = Drive.pose(PARK);
+        AthletechRobot.requireCell(start, FIRST_CELL_CLOSE, "START");
         robot.init(hardwareMap, start);
         robot.configureAuto(AUTO_LIMIT_SECONDS, MAX_LOOP_SECONDS);
         robot.drive.configure(POSITION_ERROR_INCHES, HEADING_ERROR_DEGREES, PATH_TIMEOUT_SECONDS);
         robot.configureShots(SHOT_FEED_SECONDS, SHOT_TIMEOUT_SECONDS, FLYWHEEL_ERROR_TICKS_PER_SECOND);
 
         routine = robot.autonomous(
-                robot.shooter.velocity(FLYWHEEL_VELOCITY),
                 robot.shooter.rampUp(),
                 robot.shoot(start),
-                robot.drive.follow(Drive.line(start, park))
+                robot.drive.follow(Drive.curve(start, PARK_CONTROLS, park))
         );
     }
 

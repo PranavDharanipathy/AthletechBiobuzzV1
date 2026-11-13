@@ -60,15 +60,14 @@ Everything runs through Gradle from the repo root (PowerShell needs the `./`):
 classes, copied in at build time (`copyTeamCodeSources` in `build.gradle.kts`, compiled against the
 SDK stand-ins in `src/ftcStubs`):
 
-- **`sim turret`**: `TurretAutotuneEngine` (STATIONARY, then DRIVING) and `TurretController` with
+- **`sim turret`**: `TurretAutotuneEngine` and `TurretController` with
   the robot's `TurretConstants`, against `robot/CrServoTurret`. That turret has speed per volt, lag,
   dead time, stick-slip friction and encoder noise, from `turret.*`. It prints:
   - what the autotuner would find;
   - how the robot's current constants and the tuned ones do on a 30° step and with the robot spinning;
   - time to turn.
 
-  `--faults` adds broken turrets (reversed encoder, fighting servos, dead servo, jam) to check the
-  autotuner's diagnostics. `profile import-autotune` loads a real Turret Autotuner run into `turret.*`,
+  `profile import-autotune` loads a real Turret Autotuner run into `turret.*`,
   so the sim turret becomes the robot's turret.
 - **`sim flywheel`**: `Flywheel` (PIDVS, voltage compensation, velocity filter) and `ShotGate`, with
   `FlywheelConstants` as they are, against the sim flywheel + battery from `launcher.*` / `battery.*`.

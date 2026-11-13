@@ -3,8 +3,6 @@ package org.firstinspires.ftc.teamcode.Tuners;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
-import com.pedropathing.math.Pose;
-import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -12,9 +10,6 @@ import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
-import org.firstinspires.ftc.teamcode.Systems.Blocker;
-import org.firstinspires.ftc.teamcode.Systems.Drivetrain.Drivetrain;
-import org.firstinspires.ftc.teamcode.Systems.Intake.Intake;
 import org.firstinspires.ftc.teamcode.TeleOp.TeleOpBaseOpMode;
 import org.firstinspires.ftc.teamcode.Utility.CsvLogger;
 
@@ -34,17 +29,9 @@ import java.util.Map;
 @TeleOp(name = "Turret Autotuner", group = "tuning")
 public class TurretAutotuner extends TeleOpBaseOpMode {
 
-    public static TurretAutotuneEngine.Mode MODE = TurretAutotuneEngine.Mode.STATIONARY;
-    public static long PAD_LOOP_TO_MS = 0;
+    public static int ROUNDS = TurretAutotuneEngine.ROUNDS;
 
-    private static final String[] COLUMNS = {
-            "t", "stage", "target", "target_vel", "reference", "position", "velocity", "left_volts", "right_volts",
-            "available_volts", "heading", "omega", "p", "i", "d", "f", "v"
-    };
-
-    private final Intake intake = new Intake().asSubsystem();
-    private final Blocker blocker = new Blocker().asSubsystem();
-    private Drivetrain drivetrain;
+    private static final String[] COLUMNS = {"t", "stage", "target", "position", "volts", "available_volts", "p", "i", "d", "f", "s", "v"};
 
     private TurretAutotuneEngine engine;
     private CsvLogger logger;
@@ -52,7 +39,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     private File folder;
     private String lastStage = "";
     private int stageNumber = 0;
-    private boolean saved = false, flywheelOn = false;
+    private boolean saved = false, stopped = false;
     private double startTime;
     private Telemetry telemetry;
 
@@ -60,42 +47,23 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     public void init() {
 
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
-
         initializeComponents(Alliance.BLUE);
         applyComponentTraits();
-
-        drivetrain = createDrivetrain();
-
-        intake.provideComponents(new Intake(super.intake, fiArm), controller1);
-        blocker.provideComponents(super.blocker, controller1, flywheel);
-
         recorder.channel("autotune", "target", "deg", "what the engine asks for", () -> engine != null ? engine.getTarget() / ShooterConstants.TURRET_TICKS_PER_DEGREE : Double.NaN);
-        recorder.channel("autotune", "reference", "deg", "", () -> engine != null ? engine.getReference() / ShooterConstants.TURRET_TICKS_PER_DEGREE : Double.NaN);
-        recorder.channel("autotune", "left_volts", "V", "", () -> engine != null ? engine.getLeftVolts() : Double.NaN);
-        recorder.channel("autotune", "right_volts", "V", "", () -> engine != null ? engine.getRightVolts() : Double.NaN);
+        recorder.channel("autotune", "volts", "V", "", () -> engine != null ? engine.getVolts() : Double.NaN);
         recorder.watch("autotune", "stage", () -> engine != null ? engine.getStage() : null);
-        record(null, blocker, intake, drivetrain);
+        record(null, null, null, null);
         setUpLynxModule();
     }
 
     @Override
     public void init_loop() {
 
-        controller1.getInformation();
-        if (controller1.dpad_upHasJustBeenPressed) MODE = TurretAutotuneEngine.Mode.STATIONARY;
-        if (controller1.dpad_downHasJustBeenPressed) MODE = TurretAutotuneEngine.Mode.DRIVING;
-
         telemetry.addLine("TURRET AUTOTUNER");
-        telemetry.addData("Mode (dpad up = stationary, dpad down = driving)", MODE);
-        telemetry.addLine("Turret must point straight ahead when you hit INIT, that's 0.");
-        if (MODE == TurretAutotuneEngine.Mode.STATIONARY) {
-            telemetry.addLine("Robot stays still, on blocks or the floor. The turret is stopped past " + ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES + " / " + ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + " deg (ShooterConstants), keep hands and wires clear.");
-            telemetry.addLine("Takes about 2 to 3 minutes and stops by itself.");
-        }
-        else {
-            telemetry.addLine("Run STATIONARY first. After START, get ready and press A. Nothing else works until then.");
-            telemetry.addLine("Then drive like a match (spin a lot). It finishes by itself, usually in about a minute.");
-        }
+        telemetry.addLine("Turret straight ahead at INIT (that's 0). Robot still, hands and wires clear: it swings up to ~90 deg each way.");
+        telemetry.addLine("Measures friction and speed per volt, tunes the gains with step moves, then runs a match course (ramps, wobble, nudges, holds) to tune out shake. About " + (5 + 5 * ROUNDS) + " minutes.");
+        telemetry.addLine("B during the match course keeps what's tuned so far; B before it throws the run away.");
+        telemetry.addData("Rounds (dashboard ROUNDS)", ROUNDS);
         telemetry.update();
     }
 
@@ -103,11 +71,11 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     public void start() {
 
         turret.setVoltageCompensation(TurretConstants.TURRET_VOLTAGE_COMPENSATION);
-        TurretAutotuneEngine.Parameters current = new TurretAutotuneEngine.Parameters(TurretConstants.TURRET_GAIN, TurretConstants.TURRET_TIME_CONSTANT, TurretConstants.TURRET_KINETIC_FRICTION, TurretConstants.TURRET_BREAKAWAY_FRICTION, TurretConstants.TURRET_DEAD_TIME, TurretConstants.TURRET_BANDWIDTH, TurretConstants.TURRET_DAMPING, TurretConstants.TURRET_INTEGRAL_RATIO, TurretConstants.TURRET_FRICTION_SCALE).capability(TurretConstants.TURRET_MAX_SPEED, TurretConstants.TURRET_MAX_ACCELERATION).startDelay(TurretConstants.TURRET_START_DELAY).deceleration(TurretConstants.TURRET_MAX_DECELERATION);
-        engine = new TurretAutotuneEngine(MODE, ShooterConstants.TURRET_TICKS_PER_DEGREE, ShooterConstants.TURRET_AIM_DIRECTION, current);
-
+        double[] knobs = {TurretConstants.TURRET_KP_FAR, TurretConstants.TURRET_KP_CLOSE, TurretConstants.TURRET_KI_FAR, TurretConstants.TURRET_KI_CLOSE, TurretConstants.TURRET_KD_FAR, TurretConstants.TURRET_KD_CLOSE, TurretConstants.TURRET_K_HOLD_VOLTS, TurretConstants.TURRET_FRICTION_DEADBAND_DEGREES, TurretConstants.TURRET_MAX_I, TurretConstants.TURRET_STRIBECK_DEGREES_PER_SECOND};
+        engine = new TurretAutotuneEngine(ShooterConstants.TURRET_TICKS_PER_DEGREE, knobs, TurretConstants.TURRET_GAIN, TurretConstants.TURRET_KINETIC_FRICTION, TurretConstants.TURRET_BREAKAWAY_FRICTION);
+        engine.rounds = Math.max(1, ROUNDS);
         String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
-        folder = new File(new File(AppUtil.ROBOT_DATA_DIR, "TurretAutotune"), stamp + "-" + MODE.name().toLowerCase(Locale.US));
+        folder = new File(new File(AppUtil.ROBOT_DATA_DIR, "TurretAutotune"), stamp);
         logger = new CsvLogger(new File(folder, "samples.csv"), COLUMNS);
         startTime = System.nanoTime() * 1e-9;
     }
@@ -115,53 +83,31 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     @Override
     public void loop() {
 
-        long loopStart = System.nanoTime();
         clearCacheOfLynxModule();
         controller1.getInformation();
-        controller2.getInformation();
-
-        boolean drivingAllowed = engine.isDrivingAllowed();
-        if (engine.isWaitingForStart() && controller1.aHasJustBeenPressed) engine.requestStart();
+        //B after the step moves keeps what's tuned; before that, nothing is used
+        if (controller1.bHasJustBeenPressed && engine != null && !engine.keepEarly()) stopped = true;
 
         turret.readSensors();
-        Pose pose = follower.pose();
-        Velocity velocity = follower.velocity();
         double now = System.nanoTime() * 1e-9 - startTime;
-        double availableVolts = turret.getCompensationVolts();
+        if (!stopped) engine.update(now, turret.getPosition() - turret.startPosition);
+        double volts = stopped ? 0 : engine.getVolts();
+        turret.setVolts(volts, volts);
 
-        engine.update(now, turret.getPosition() - turret.startPosition, turret.getVelocity(), availableVolts, pose.heading(), velocity.omega);
-        turret.setVolts(engine.getLeftVolts(), engine.getRightVolts());
-
-        follower.update();
-        if (drivingAllowed) {
-            drivetrain.update();
-            intake.update();
-            blocker.update();
-            if (controller1.left_bumperHasJustBeenPressed) flywheelOn = !flywheelOn;
-        }
-        else {
-            flywheelOn = false;
-            left_front.setPower(0);
-            right_front.setPower(0);
-            left_back.setPower(0);
-            right_back.setPower(0);
-        }
-        if (flywheelOn) flywheel.setVelocity(ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY, false);
-        else flywheel.setVelocity(0, true);
+        left_front.setPower(0);
+        right_front.setPower(0);
+        left_back.setPower(0);
+        right_back.setPower(0);
+        flywheel.setVelocity(0, true);
         flywheel.update();
 
         if (!engine.getStage().equals(lastStage)) {
             lastStage = engine.getStage();
             stageNumber++;
         }
-        log(now, availableVolts, pose, velocity);
-
-        if ((engine.isDone() || engine.isFaulted()) && !saved) save();
-
+        log(now, volts);
+        if ((engine.isDone() || engine.isFaulted() || stopped) && !saved) save();
         show();
-
-        long left = PAD_LOOP_TO_MS - (System.nanoTime() - loopStart) / 1000000;
-        if (left > 0) android.os.SystemClock.sleep(left);
     }
 
     @Override
@@ -170,88 +116,55 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
         if (engine != null && !saved) save();
         if (logger != null) logger.close();
         turret.setVolts(0, 0);
+        super.stop();
     }
 
-    private void log(double now, double availableVolts, Pose pose, Velocity velocity) {
+    private void log(double now, double volts) {
 
         int k = 0;
         row[k++] = now;
         row[k++] = stageNumber;
         row[k++] = engine.getTarget();
-        row[k++] = engine.getTargetVelocity();
-        row[k++] = engine.getReference();
         row[k++] = turret.getPosition() - turret.startPosition;
-        row[k++] = turret.getVelocity();
-        row[k++] = engine.getLeftVolts();
-        row[k++] = engine.getRightVolts();
-        row[k++] = availableVolts;
-        row[k++] = pose.heading();
-        row[k++] = velocity.omega;
+        row[k++] = volts;
+        row[k++] = turret.getCompensationVolts();
         row[k++] = engine.getController().p;
         row[k++] = engine.getController().i;
         row[k++] = engine.getController().d;
         row[k++] = engine.getController().f;
+        row[k++] = engine.getController().s;
         row[k++] = engine.getController().v;
         logger.row(row);
     }
 
     private void show() {
 
-        telemetry.addData("Mode", MODE);
         telemetry.addData("Stage", engine.getStage());
-        telemetry.addLine(engine.getStatus());
-        if (engine.isWaitingForStart()) telemetry.addLine(">>> PRESS A TO START <<<");
+        telemetry.addLine(stopped ? "STOPPED (B): not used" : engine.getStatus());
         telemetry.addData("Turret (deg)", "%.1f -> %.1f", (turret.getPosition() - turret.startPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE, engine.getTarget() / ShooterConstants.TURRET_TICKS_PER_DEGREE);
-
-        for (String w : engine.getWarnings()) telemetry.addLine("! " + w);
-
         List<String> history = engine.getHistory();
-        for (int k = Math.max(0, history.size() - 6); k < history.size(); k++) telemetry.addLine(history.get(k));
-
+        for (int k = Math.max(0, history.size() - 8); k < history.size(); k++) telemetry.addLine(history.get(k));
         if (engine.isDone()) {
             telemetry.addLine("DONE. Saved to " + folder.getPath());
-            telemetry.addLine("Plug in and build, it goes into TunedConstants by itself. Or copy into TurretConstants:");
-            Map<String, Double> r = engine.getResults();
-            line("TURRET_GAIN", r.get("gain"));
-            line("TURRET_TIME_CONSTANT", r.get("time_constant"));
-            line("TURRET_DEAD_TIME", r.get("dead_time"));
-            line("TURRET_KINETIC_FRICTION", r.get("kinetic_friction"));
-            line("TURRET_BREAKAWAY_FRICTION", r.get("breakaway_friction"));
-            line("TURRET_BANDWIDTH", r.get("bandwidth"));
-            line("TURRET_DAMPING", r.get("damping"));
-            line("TURRET_INTEGRAL_RATIO", r.get("integral_ratio"));
-            line("TURRET_FRICTION_SCALE", r.get("friction_scale"));
-            line("TURRET_MAX_SPEED", r.get("max_speed"));
-            line("TURRET_MAX_ACCELERATION", r.get("max_acceleration"));
-            line("TURRET_START_DELAY", r.get("start_delay"));
-            line("TURRET_MAX_DECELERATION", r.get("max_deceleration"));
-            line("TURRET_SHAKE_BANDWIDTH", r.get("shake_bandwidth"));
-            telemetry.addLine("Results:");
-            for (Map.Entry<String, Double> e : r.entrySet()) telemetry.addData(e.getKey(), e.getValue());
+            telemetry.addLine("Plug in and build: it goes into TunedConstants.TURRET_* by itself.");
+            for (Map.Entry<String, Double> e : engine.getResults().entrySet()) telemetry.addData(e.getKey(), "%.4g", e.getValue());
         }
-        if (engine.isFaulted()) telemetry.addLine("STOPPED: " + engine.getStatus());
+        if (engine.isFaulted()) telemetry.addLine("FAULT: " + engine.getStatus());
         telemetry.update();
-    }
-
-    private void line(String name, Double value) {
-        telemetry.addData(name, value == null ? "-" : String.valueOf(value));
     }
 
     private void save() {
 
         saved = true;
         StringBuilder b = new StringBuilder("key,value\n");
-        b.append("mode,").append(MODE.name().toLowerCase(Locale.US)).append('\n');
         b.append("status,").append(engine.isDone() ? "done" : engine.isFaulted() ? "fault" : "stopped").append('\n');
         b.append("message,").append(engine.getStatus().replace(',', ';')).append('\n');
         b.append("ticks_per_degree,").append(ShooterConstants.TURRET_TICKS_PER_DEGREE).append('\n');
-        b.append("voltage_compensation,").append(TurretConstants.TURRET_VOLTAGE_COMPENSATION).append('\n');
+        b.append("rounds,").append(engine.rounds).append('\n');
         if (engine.isDone()) {
             for (Map.Entry<String, Double> e : engine.getResults().entrySet()) b.append(e.getKey()).append(',').append(e.getValue()).append('\n');
         }
-        for (String w : engine.getWarnings()) b.append("warning,").append(w.replace(',', ';')).append('\n');
         for (String h : engine.getHistory()) b.append("history,").append(h.replace(',', ';')).append('\n');
-
         folder.mkdirs();
         File file = new File(folder, "result.csv");
         try (Writer w = new OutputStreamWriter(new FileOutputStream(file), Charset.forName("UTF-8"))) {

@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
+import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.DrivetrainConstants;
 import org.firstinspires.ftc.teamcode.Constants.FieldConstants;
@@ -34,6 +35,7 @@ import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredServo;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
+import org.firstinspires.ftc.teamcode.Utility.TickRateChecker;
 
 import java.util.List;
 import java.util.Locale;
@@ -65,10 +67,11 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
     protected Recorder recorder;
 
+    protected final TickRateChecker tickRate = new TickRateChecker();
+
     @Override
     public void stop() {
 
-        if (turret != null) turret.saveLanyards();
         if (recorder != null) {
             recorder.sample();
             recorder.close();
@@ -87,8 +90,25 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         telemetry.addData("Blaze", BlazeSession::status);
         telemetry.addData("Start", () -> AutoHandoff.lastResult);
         telemetry.addData("Log", () -> recorder != null ? recorder.status() : "off");
-        telemetry.addData("Turret", () -> !TurretConstants.TURRET_ENABLED ? "DISABLED (TurretConstants.TURRET_ENABLED)" : turret.isEncoderFrozen() ? "STOPPED: encoder not changing under a hard push (check its cable, or Blaze). Restart the OpMode" : shooter.isTurretLocked() ? "LOCKED at 0 (gamepad 1 Y to aim again)" : "aiming (gamepad 1 Y locks it at 0)");
+        telemetry.addData("Turret", () -> !TurretConstants.TURRET_ENABLED ? "DISABLED (TurretConstants.TURRET_ENABLED)" : turret.isEncoderFrozen() ? "STOPPED: encoder not changing under a push (check its cable). Restart the OpMode" : shooter.isTurretLocked() ? "LOCKED at 0 (gamepad 1 Y to aim again)" : "aiming (gamepad 1 Y locks it at 0)");
+        telemetry.addData("Turret encoder", () -> String.format(Locale.US, "%.1f deg", (turret.getPosition() - turret.startPosition) / ShooterConstants.TURRET_TICKS_PER_DEGREE) + (turret.hasEncoderCounted() ? "" : ", hasn't counted yet: at INIT turn the turret by hand, this must change"));
         telemetry.addData("Relocalize (gamepad 1 PS/guide)", () -> (controller1.curr_main_button ? "button DOWN" : "button up") + ", done " + shooter.getRelocalizations() + "x, to the " + Garden.forAlliance(alliance.getAlliance()) + " GARDEN corner");
+    }
+
+    //keeps the turret reading live at INIT, so turning it by hand shows the encoder works
+    @Override
+    public void init_loop() {
+
+        if (robotHubs != null) {
+            for (LynxModule hub : robotHubs) {
+                if (!BlazeSession.feeds(hub)) hub.clearBulkCache();
+            }
+        }
+        if (turret != null) turret.readSensors();
+    }
+
+    public void addLoopTimeTelemetry() {
+        telemetry.addData("Loop", tickRate::describe);
     }
 
     public void setUpLynxModule() {
@@ -105,6 +125,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     public void clearCacheOfLynxModule() {
 
         BlazeSession.tick();
+        tickRate.tick();
 
         HardwareMonitor.get().update();
         if (recorder != null) recorder.sample();
@@ -144,6 +165,7 @@ public abstract class TeleOpBaseOpMode extends OpMode {
         recorder = RobotRecording.open(getClass().getSimpleName());
         RobotRecording.context(recorder, getClass().getSimpleName(), alliance.toString(), hardwareMap);
         RobotRecording.loop(recorder);
+        RobotRecording.blaze(recorder);
         RobotRecording.gamepad(recorder, "gamepad1", controller1);
         RobotRecording.gamepad(recorder, "gamepad2", controller2);
         RobotRecording.pose(recorder, follower);

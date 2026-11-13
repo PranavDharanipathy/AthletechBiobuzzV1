@@ -49,7 +49,7 @@ tasks.register('pullTuningData') {
     group = 'tuning'
     def sets = [
             [remote: '/sdcard/FIRST/data/TunerTeleOp', file: 'loop.csv', pattern: /\/TunerTeleOp\/(\d{8}-\d{6})\/loop\.csv (\d+)/, local: rootProject.file('tuning-data/sessions')],
-            [remote: '/sdcard/FIRST/data/TurretAutotune', file: 'result.csv', pattern: /\/TurretAutotune\/(\d{8}-\d{6}-[a-z]+)\/result\.csv (\d+)/, local: rootProject.file('tuning-data/turret-autotune')],
+            [remote: '/sdcard/FIRST/data/TurretAutotune', file: 'result.csv', pattern: /\/TurretAutotune\/(\d{8}-\d{6}(?:-[a-z]+)?)\/result\.csv (\d+)/, local: rootProject.file('tuning-data/turret-autotune')],
             [remote: '/sdcard/FIRST/data/DriveAutotune', file: 'result.csv', pattern: /\/DriveAutotune\/(\d{8}-\d{6})\/result\.csv (\d+)/, local: rootProject.file('tuning-data/drive-autotune')],
             [remote: '/sdcard/FIRST/data/ShooterHyperTuning', file: 'gains.csv', pattern: /\/ShooterHyperTuning\/(\d{8}-\d{6})\/gains\.csv (\d+)/, local: rootProject.file('tuning-data/hypertuning')],
             [remote: '/sdcard/FIRST/data/RobotLog', file: 'frames.bin', pattern: /\/RobotLog\/(\d{8}-\d{6}-[A-Za-z0-9]+)\/frames\.bin (\d+)/, local: rootProject.file('tuning-data/robot-logs')]

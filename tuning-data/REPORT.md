@@ -11,7 +11,5 @@ Written into `TeamCode/.../Constants/TunedConstants.java`. Flywheel gains are ne
 - **turret velocity filter:** 0.50-32.0 Hz, memory 0.90, stale 0.085 s (hub updates every 0.034 s). Next-reading error 2031.3 ticks/s (was 2031.3).
 - **Flywheel vibration** (shooter on, settled, not feeding): 13.2 ticks/s RMS, about 1.7 Hz. Shot gate bands 26 / 52, dwell 0.060 s.
 - TURRET_VIBRATION_RMS kept: not enough turret holding time.
-- **Turret model** from Turret Autotuner 20280507-210857-driving (driving): 166.6 deg/s per V, lag 46 ms, dead time 36 ms, friction 1.01 / 1.16 V, bandwidth 3.2 rad/s.
-  - driving_tracking_error_deg: 16.246
-  - driving_hold_vibration_deg_s: 16.96
 - Drivetrain model kept: no finished Drivetrain Autotuner run pulled yet.
+- **Turret** from Turret Autotuner 20280512-230114: 149.7 deg/s per V, friction 1.18 / 1.18 V, score 11.244079791976956 -> 4.032145725333396.

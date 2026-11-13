@@ -6,17 +6,13 @@ public final class Findings {
 
     private Findings() {}
 
-    public static String markdown(String session, double seconds, FlywheelHyperTuner flywheel, TurretHyperTuner turret) {
+    public static String markdown(String session, double seconds, FlywheelHyperTuner flywheel) {
 
         StringBuilder b = new StringBuilder();
         b.append("# Shooter hypertuning findings: ").append(session).append("\n\n");
-        b.append(String.format(Locale.US, "%.0f s played, %d bursts scored, %d turret moves scored.\n\n", seconds, flywheel.bursts, turret.movesScored));
+        b.append(String.format(Locale.US, "%.0f s played, %d bursts scored.\n\n", seconds, flywheel.bursts));
         StringBuilder principles = new StringBuilder();
-        for (OnlineTuner t : new OnlineTuner[] {flywheel.stability, flywheel.shots, turret.moves}) tuner(b, principles, t);
-        b.append("## Rotation negation\n\n");
-        b.append(String.format(Locale.US, "Rate feedforward scale %.3f (1 = cancel all of the spin). Last window: bias %.2f deg (+ = lags the spin), RMS %.2f deg.\n\n", turret.rateScale, turret.lastTrackBias, turret.lastTrackRms));
-        if (turret.rateScale >= 1.29) principles.append("- **Turret can't keep up with spins even fully fed** (scale pinned at 1.3): speed or acceleration limits it. Candidate: lead the aim by the spin (the SOTM idea for rotation), or re-measure TURRET_MAX_SPEED (logs showed 460 deg/s against 384 measured).\n");
-        if (turret.rateScale <= 0.71) principles.append("- **Turret overdoes the spin** (scale pinned at 0.7): the omega it's fed leads reality. Candidate: check Pinpoint heading-rate scale and latency, or delay the rate feedforward by the measured lag.\n");
+        for (OnlineTuner t : new OnlineTuner[] {flywheel.stability, flywheel.shots}) tuner(b, principles, t);
         b.append("## Principle candidates\n\n");
         b.append(principles.length() == 0 ? "None: every tuner moved its cost and nothing is pinned at a bound.\n" : principles.toString());
         return b.toString();
@@ -54,17 +50,6 @@ public final class Findings {
                 return top ? "Drift wins: an integral or a faster load observer is the next principle." : "Noise wins: a better velocity estimate (filter, encoder) is the next principle.";
             case "kd":
                 return top ? "Damping wants more than D can give on a noisy velocity: model-based damping (acceleration from current) instead." : "D only adds noise: drop it.";
-            case "bandwidth":
-                return top ? "The turret wants to be stiffer: shake isn't the limit, so raise the cap or re-run the autotuner." : "Shake sets stiffness: isolate the turret from the flywheel (mechanical) or notch the flywheel frequency out of the error.";
-            case "brake_degrees":
-                return top ? "Softer cruise braking keeps winning: the plan's speed is optimistic, re-measure top speed." : "Hard flip braking wins: the fade isn't needed.";
-            case "max_speed_fraction":
-            case "acceleration_fraction":
-                return top ? "It wants to plan faster than allowed: re-measure TURRET_MAX_SPEED / ACCELERATION with the autotuner." : "Slower plans win: the turret can't do what it measured (battery, drag), re-run the autotuner under match load.";
-            case "resync_degrees":
-                return top ? "Resyncs hurt: the plan matches the turret well, the feature can go." : "Resync as tight as allowed wins: the model is far off, re-run the autotuner.";
-            case "landing":
-                return top ? "The landing brake beats the plan's stop on this robot: make TURRET_LANDING_ENABLED default." : "The landing brake loses: measure reverse braking (an autotuner stage) before trying it again.";
             default:
                 return "";
         }

@@ -30,6 +30,7 @@ public class RedTeleOp extends TeleOpBaseOpMode {
         blocker.provideComponents(super.blocker, controller1, flywheel, turret);
         shooter.provideComponents(flywheel, turret, follower, controller1, controller2);
         addDriverTelemetry(shooter);
+        addLoopTimeTelemetry();
         record(shooter, blocker, intake, drivetrain);
 
         setUpLynxModule();

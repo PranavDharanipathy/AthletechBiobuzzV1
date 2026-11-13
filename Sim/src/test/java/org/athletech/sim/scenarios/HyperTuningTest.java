@@ -4,7 +4,6 @@ import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.Findings;
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.FlywheelHyperTuner;
 import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.OnlineTuner;
-import org.firstinspires.ftc.teamcode.Tuners.ShooterHyperTuning.TurretHyperTuner;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.junit.Test;
 
@@ -38,23 +37,6 @@ public class HyperTuningTest {
         OnlineTuner t = new OnlineTuner("flat", 3, new OnlineTuner.Knob("a", 1, 0, 2, 0.2, 0.01));
         for (int k = 0; k < 300; k++) t.submit(10 * (1 + 0.01 * rnd.nextGaussian()));
         assertEquals(1, t.value("a"), 0.25);
-    }
-
-    @Test
-    public void spinShareConvergesToMeetingTheSpin() {
-
-        for (double start : new double[] {0.75, 1.25}) {
-            TurretHyperTuner h = new TurretHyperTuner();
-            h.rateScale = start;
-            Random rnd = new Random(3);
-            double t = 0;
-            for (int k = 0; k < 3000; k++, t += 0.02) {
-                double rate = 180 * Math.signum(Math.sin(0.5 * t) + 1e-9);
-                double target = 0, lag = (1 - h.rateScale) * rate * 0.1;
-                h.update(t, target, target - lag + 0.2 * rnd.nextGaussian(), rate, 2, rate, rate, true);
-            }
-            assertEquals("from " + start, 1, h.rateScale, 0.03);
-        }
     }
 
     @Test
@@ -95,7 +77,7 @@ public class HyperTuningTest {
         boost.value = boost.max;
         boost.kept = 3;
         boost.atBound = 2;
-        String md = Findings.markdown("test", 60, f, new TurretHyperTuner());
+        String md = Findings.markdown("test", 60, f);
         assertTrue(md, md.contains("feed_boost_volts wants past its top"));
         assertTrue(md, md.contains("iterative learning control"));
     }

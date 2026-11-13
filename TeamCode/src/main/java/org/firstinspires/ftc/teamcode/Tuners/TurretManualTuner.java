@@ -40,9 +40,6 @@ public class TurretManualTuner extends OpMode {
     private BetterGamepad controller1;
     private Telemetry telemetry;
     private double sineStart;
-    private boolean sweeping = false;
-    private double sweepStart;
-    private String lanyardNote = "";
 
     @Override
     public void init() {
@@ -57,7 +54,7 @@ public class TurretManualTuner extends OpMode {
         BlazeSession.engage(hardwareMap, null);
         TARGET_DEGREES = 0;
         telemetry.addLine("Turret must point straight when you INIT. dpad left/right = step, dpad down = center, A = sine on/off, B = flywheel on/off.");
-        telemetry.addLine("Lanyards: X = learning sweep over the whole travel on/off (saves when you stop it), back = forget the map.");
+        telemetry.addLine("Edit TurretConstants on the dashboard, it applies live.");
         telemetry.addData("match loop time (ms)", TunedConstants.LOOP_TIME_MS);
         telemetry.update();
     }
@@ -84,38 +81,11 @@ public class TurretManualTuner extends OpMode {
             SINE = !SINE;
             sineStart = time;
         }
-        if (controller1.xHasJustBeenPressed) {
-            if (sweeping) {
-                sweeping = false;
-                turret.forceLanyardLearning = false;
-                TARGET_DEGREES = 0;
-                turret.saveLanyards();
-                lanyardNote = "sweep stopped, map saved";
-            }
-            else if (!TurretConstants.TURRET_LANYARDS_ENABLED) lanyardNote = "turn on TURRET_LANYARDS_ENABLED first";
-            else {
-                sweeping = true;
-                SINE = false;
-                sweepStart = time;
-                turret.forceLanyardLearning = true;
-                lanyardNote = "";
-            }
-        }
-        if (controller1.backHasJustBeenPressed && !sweeping) {
-            TurretBase.clearLanyards();
-            lanyardNote = "map cleared";
-        }
         TARGET_DEGREES = Math.max(ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, Math.min(ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES, TARGET_DEGREES));
 
         double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
         double degrees = TARGET_DEGREES, degreesPerSecond = 0;
-        double low = ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES + 5, high = ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES - 5;
-        double speed = TurretConstants.TURRET_LANYARD_SWEEP_DEGREES_PER_SECOND, dwell = TurretConstants.TURRET_LANYARD_SWEEP_DWELL;
-        if (sweeping) {
-            degrees = TurretLanyardSweep.position(time - sweepStart, low, high, speed, dwell);
-            degreesPerSecond = TurretLanyardSweep.velocity(time - sweepStart, low, high, speed, dwell);
-        }
-        else if (SINE) {
+        if (SINE) {
             double w = 2 * Math.PI * SINE_HZ, s = time - sineStart;
             degrees += SINE_AMPLITUDE_DEGREES * Math.sin(w * s);
             degreesPerSecond = SINE_AMPLITUDE_DEGREES * w * Math.cos(w * s);
@@ -128,27 +98,18 @@ public class TurretManualTuner extends OpMode {
 
         TurretController c = turret.getController();
         telemetry.addData("target (deg)", degrees);
-        telemetry.addData("reference (deg)", (turret.getReference() - turret.startPosition) / tpd);
         telemetry.addData("position (deg)", (turret.getPosition() - turret.startPosition) / tpd);
         telemetry.addData("error (deg)", turret.getError() / tpd);
         telemetry.addData("velocity (deg/s)", turret.getVelocity() / tpd);
-        telemetry.addData("p", "%.3f", turret.p);
-        telemetry.addData("i", "%.3f", turret.i);
-        telemetry.addData("d", "%.3f", turret.d);
-        telemetry.addData("f", "%.3f", turret.f);
-        telemetry.addData("v", "%.3f", turret.v);
+        telemetry.addData("PID speed (deg/s)", c.positionalVelocity / tpd);
+        telemetry.addData("p / i / d (V)", "%.3f / %.3f / %.3f", turret.p, turret.i, turret.d);
+        telemetry.addData("friction / hold (V)", "%.3f / %.3f", c.s, c.f);
+        telemetry.addData("feedforward (V)", "%.3f", turret.v);
+        telemetry.addData("sent (V)", "%.3f", turret.getVolts());
         telemetry.addData("power", "%.3f", turret.getPower());
-        telemetry.addData("kp / kd / ki", "%.6f / %.6f / %.6f", c.kp, c.kd, c.ki);
         telemetry.addData("flywheel (B)", flywheelOn ? String.format(java.util.Locale.US, "%.0f / %.0f ticks/s", flywheel.getCurrentVelocity(), FLYWHEEL_VELOCITY) : "off");
-        telemetry.addData("shake (deg RMS)", "%.3f", turret.getVibrationDegrees());
-        telemetry.addData("bandwidth now", "%.2f of %.2f", turret.getEffectiveBandwidth(), TurretConstants.TURRET_BANDWIDTH);
         telemetry.addData("on target (aim gate)", turret.isOnTarget());
-        if (TurretConstants.TURRET_LANYARDS_ENABLED) {
-            telemetry.addData("lanyard volts now", "%.2f (map's biggest %.2f)", turret.getLanyardVolts(), TurretBase.getLanyardMap().largestVolts());
-            if (sweeping) telemetry.addData("lanyard sweep", "%.1f sweeps done, let it do about 8, X stops", (time - sweepStart) / TurretLanyardSweep.period(low, high, speed, dwell));
-        }
-        else telemetry.addData("lanyards", "off (TURRET_LANYARDS_ENABLED)");
-        if (!lanyardNote.isEmpty()) telemetry.addLine(lanyardNote);
+        if (turret.isEncoderFrozen()) telemetry.addLine("STOPPED: encoder not changing under a push (check its cable). Restart the OpMode");
         telemetry.addData("dividing by (V)", "%.2f", turret.getCompensationVolts());
         telemetry.addData("loop (ms)", "%.1f", 1000 * turret.getLoopDt());
         telemetry.update();
@@ -159,7 +120,6 @@ public class TurretManualTuner extends OpMode {
     @Override
     public void stop() {
 
-        turret.saveLanyards();
         turret.setVolts(0, 0);
         flywheel.setVelocity(0, true);
         flywheel.update();

@@ -57,10 +57,10 @@ evidence in the logs, is tried in the sim, and is switchable. The robot then dec
 
 | File | What |
 |---|---|
-| `loop.csv` | Every loop. Flywheel: target, speed, power, boost, feeding, balls seen. Turret: target, position, speed, volts, spin rate it was given, landing. Robot: omega, pose, drive hold. The tuners' last costs, then every knob's value. |
-| `events.csv` | Every finished trial: `t`, `tuner` (0 flywheel stability, 1 flywheel shots, 2 turret moves), `knob` (column index into the knob list, in `gains.csv` order), `from`, `to`, `cost`, `baseline_kept` (the baseline, negative when the change was not kept). |
-| `gains.csv` | One row each time a change is kept: every knob, plus `rate_scale`. The last row is where the next session starts. |
-| `findings.md` | Each tuner's cost before and after, a knob table, and **principle candidates**: knobs pinned at a bound, tuners whose knobs can't move their cost, and the spin-cancel scale pinned. |
+| `loop.csv` | Every loop. Flywheel: target, speed, power, boost, feeding, balls seen. Turret: target, position, speed, volts, aim rate it was given. Robot: omega, pose, drive hold. The tuners' last costs, then every knob's value. |
+| `events.csv` | Every finished trial: `t`, `tuner` (0 flywheel stability, 1 flywheel shots), `knob` (column index into the knob list, in `gains.csv` order), `from`, `to`, `cost`, `baseline_kept` (the baseline, negative when the change was not kept). |
+| `gains.csv` | One row each time a change is kept: every knob. The last row is where the next session starts. |
+| `findings.md` | Each tuner's cost before and after, a knob table, and **principle candidates**: knobs pinned at a bound, and tuners whose knobs can't move their cost. |
 
 ## The costs (what "better" means)
 
@@ -72,19 +72,13 @@ evidence in the logs, is tried in the sim, and is switchable. The robot then dec
   - plus 300 × recovery seconds.
 
   Knobs: `feed_boost_volts`, `shot_kick_volts`, `shot_kick_time`, `kp_far`, `max_p`.
-- **Turret moves.** Per aim jump of 15° or more with the robot under 30°/s: seconds to within 1° + 0.03 × overshoot° +
-  0.1 × volt flips mid-rotation (above 60°/s, more than 20° out) + 0.01 × end shake (°/s RMS). Knobs: `bandwidth`,
-  `brake_degrees`, `max_speed_fraction`, `acceleration_fraction`, `resync_degrees`, `landing` (A/B).
-- **Spin cancelling.** This is learned, not trialled. While the robot spins faster than 60°/s with a real aim, a turret
-  that lags the spin raises `TURRET_RATE_FEEDFORWARD_SCALE`, and one that leads it lowers it (bounds 0.7..1.3). It settles
-  where it meets the spin exactly.
 
 ## Adding to the hypertuner
 
 - **A knob:** add an `OnlineTuner.Knob(name, start, min, max, step, minStep)` to the right tuner. Write it into the
   controller in that tuner's `apply()`. Restore it in `SHTStabilityTuner.stop()` if it's a shared static. Add a `hint`
   case in `Findings`.
-- **A cost term:** add it where the tuner scores (`FlywheelHyperTuner.update`, `TurretHyperTuner.update`). Write down the
+- **A cost term:** add it where the tuner scores (`FlywheelHyperTuner.update`). Write down the
   units and weight in "The costs" above.
 - **A new hypertuning OpMode** (drive, intake, auto paths): reuse `OnlineTuner` and `Findings`. Write its own folder under
   `/sdcard/FIRST/data/`, and add a pull set in `TeamCode/build.gradle`.
@@ -94,20 +88,11 @@ evidence in the logs, is tried in the sim, and is switchable. The robot then dec
 | # | Principle | Status | Evidence |
 |---|---|---|---|
 | 1 | **Pose-holding drive**: the sticks move a reference, and the robot is held to it in all 3 axes with a feedforward + PID from an identified model; speed only while slowing; traction-limited reference; leash; relocalization jumps carried over. | adopted (sim) | Sim, 60 N shoves: 17.8 in → 1–2 in, slow drive pushed 18 → 40 in/s → held at 20, twist 16.6° → 2.5°, stop as short as before. `DriveCodeTest`. |
-| 2 | **Turret plan resync**: more than `TURRET_RESYNC_DEGREES` off its own plan, the plan moves onto the turret instead of the two fighting to 0 V. | adopted | TeleOp 20280507-230429: 31% of loops 15°+ off the plan, 2 s stuck 30° short. Sim: 6–8% → 0%. `turretNeverFightsItsOwnPlan`. |
-| 3 | **Brake fade**: cruising, the friction push fades to reverse over `TURRET_BRAKE_DEGREES` instead of flipping at 1° (stopping still flips). | adopted | Sim: speed chopped 100–320°/s → smooth 384°/s cruise. |
-| 4 | **Landing brake**: predict the stop with the model (dead time, lag, coasting, friction, reverse braking) and bisect the braking volts that land on the aim; learn the rest offset. | trial (off, `landing` A/B knob) | Sim: ~10% sooner to 1°, but 3–5° overshoot against 1–2°. Reverse braking authority was never measured. |
 | 5 | **Shot power**: feed boost while the blocker is open, and a kick after a detected ball hit. | trial (0 V, tuned by SHT) | Log: a ball drops 22–78 ticks/s in one loop. Sim: 0.5 V boost tightened exit-speed spread 0.008 → 0.003 m/s, and 1–2 V overspeeds. |
-| 6 | **Spin-cancel scale**: learned share of the robot's spin fed forward to the turret. | trial (learned, starts at 1) | Request: "meet it, don't overdo it". `spinShareConvergesToMeetingTheSpin`. |
 
 ### Not built yet (candidates waiting for evidence)
 
 - **Shot load profile (iterative learning control).** Learn each ball's load as volts vs time from the blocker opening, and
   feed it forward. Trigger: `feed_boost_volts` pinned at its top.
-- **Reverse-braking stage in the Turret Autotuner.** Measure deceleration under reverse volts, so landing's model is right.
-  Trigger: `landing` loses, or `brakeScale` saturates.
-- **Notch at the flywheel frequency in the turret error.** Trigger: turret `bandwidth` pinned at its bottom while the
-  flywheel runs.
-- **Spin lead in the aim.** Trigger: spin-cancel scale pinned at 1.3.
 - **Drive hypertuner.** Tune the hold bandwidth and leash in matches, scored on pushes survived and driver stick-to-motion
   error.

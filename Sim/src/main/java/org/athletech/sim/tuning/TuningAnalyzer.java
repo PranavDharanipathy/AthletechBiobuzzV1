@@ -61,7 +61,7 @@ public final class TuningAnalyzer {
         File driveDir = new File(args.length > 4 ? args[4] : "tuning-data/drive-autotune");
 
         List<Session> sessions = load(sessionsDir);
-        File autotune = latestAutotune(autotuneDir);
+        File autotune = latestAutotune(autotuneDir, "kp_far");
         File drive = latestAutotune(driveDir);
         if (sessions.isEmpty() && autotune == null && drive == null) {
             System.out.println("tuning: no TunerTeleOp sessions or Turret / Drivetrain Autotuner results, TunedConstants left alone");
@@ -71,8 +71,8 @@ public final class TuningAnalyzer {
         TuningAnalyzer analyzer = new TuningAnalyzer();
         analyzer.keepCurrent();
         if (!sessions.isEmpty()) analyzer.analyze(sessions);
-        analyzer.turretModel(autotune);
         analyzer.driveModel(drive);
+        analyzer.turretModel(autotune);
 
         boolean changed = writeIfChanged(constantsFile, analyzer.constantsSource());
         writeIfChanged(reportFile, analyzer.reportText(sessions));
@@ -163,6 +163,11 @@ public final class TuningAnalyzer {
     }
 
     public static File latestAutotune(File dir) throws IOException {
+        return latestAutotune(dir, null);
+    }
+
+    //newest finished run that isn't IGNORED; with a key, only runs whose result has it (older formats are skipped)
+    public static File latestAutotune(File dir, String requiredKey) throws IOException {
 
         File[] folders = dir.listFiles();
         if (folders == null) return null;
@@ -170,7 +175,9 @@ public final class TuningAnalyzer {
         for (int k = folders.length - 1; k >= 0; k--) {
             File result = new File(folders[k], "result.csv");
             if (new File(folders[k], "IGNORED").isFile()) continue;
-            if (result.isFile() && "done".equals(readKeyValues(result).get("status"))) return folders[k];
+            if (!result.isFile()) continue;
+            Map<String, String> r = readKeyValues(result);
+            if ("done".equals(r.get("status")) && (requiredKey == null || r.containsKey(requiredKey))) return folders[k];
         }
         return null;
     }
@@ -183,48 +190,6 @@ public final class TuningAnalyzer {
             if (comma > 0 && !out.containsKey(line.substring(0, comma).trim())) out.put(line.substring(0, comma).trim(), line.substring(comma + 1).trim());
         }
         return out;
-    }
-
-    void turretModel(File folder) throws IOException {
-
-        if (folder == null) {
-            report.add("- Turret model kept: no finished Turret Autotuner run pulled yet.");
-            return;
-        }
-        Map<String, String> r = readKeyValues(new File(folder, "result.csv"));
-        String[][] keys = {
-                {"gain", "TURRET_GAIN"}, {"time_constant", "TURRET_TIME_CONSTANT"}, {"dead_time", "TURRET_DEAD_TIME"},
-                {"kinetic_friction", "TURRET_KINETIC_FRICTION"}, {"breakaway_friction", "TURRET_BREAKAWAY_FRICTION"},
-                {"bandwidth", "TURRET_BANDWIDTH"}, {"damping", "TURRET_DAMPING"},
-                {"integral_ratio", "TURRET_INTEGRAL_RATIO"}, {"friction_scale", "TURRET_FRICTION_SCALE"}
-        };
-        Map<String, Double> parsed = new LinkedHashMap<>();
-        for (String[] key : keys) {
-            double v;
-            try {
-                v = Double.parseDouble(r.get(key[0]));
-            } catch (RuntimeException e) {
-                v = Double.NaN;
-            }
-            if (!finite(v) || v < 0 || (key[0].equals("gain") && v <= 0)) {
-                report.add("- Turret model kept: " + folder.getName() + " has a bad " + key[0] + ".");
-                return;
-            }
-            parsed.put(key[1], v);
-        }
-        for (Map.Entry<String, Double> e : parsed.entrySet()) put(e.getKey(), fmt(e.getValue()));
-        put("TURRET_MAX_SPEED", fmt(positiveOrZero(r.get("max_speed"))));
-        put("TURRET_MAX_ACCELERATION", fmt(positiveOrZero(r.get("max_acceleration"))));
-        put("TURRET_START_DELAY", fmt(positiveOrZero(r.get("start_delay"))));
-        put("TURRET_MAX_DECELERATION", fmt(positiveOrZero(r.get("max_deceleration"))));
-        double shake = positiveOrZero(r.get("shake_bandwidth"));
-        put("TURRET_SHAKE_BANDWIDTH", fmt("driving".equals(r.get("mode")) && shake > 0 ? Math.min(shake, parsed.get("TURRET_BANDWIDTH")) : parsed.get("TURRET_BANDWIDTH")));
-        put("TURRET_AUTOTUNE", "\"" + folder.getName() + "\"");
-        report.add(String.format(Locale.US, "- **Turret model** from Turret Autotuner %s (%s): %.1f deg/s per V, lag %.0f ms, dead time %.0f ms, friction %.2f / %.2f V, bandwidth %.1f rad/s.", folder.getName(), r.get("mode"), parsed.get("TURRET_GAIN") / tpd(r), 1000 * parsed.get("TURRET_TIME_CONSTANT"), 1000 * parsed.get("TURRET_DEAD_TIME"), parsed.get("TURRET_KINETIC_FRICTION"), parsed.get("TURRET_BREAKAWAY_FRICTION"), parsed.get("TURRET_BANDWIDTH")));
-        for (Map.Entry<String, String> e : r.entrySet()) {
-            if (e.getKey().endsWith("_deg") || e.getKey().endsWith("_deg_s") || e.getKey().endsWith("_pct") || e.getKey().equals("settle_s"))
-                report.add("  - " + e.getKey() + ": " + e.getValue());
-        }
     }
 
     void driveModel(File folder) throws IOException {
@@ -246,6 +211,50 @@ public final class TuningAnalyzer {
         }
         put("DRIVE_AUTOTUNE", "\"" + folder.getName() + "\"");
         report.add(String.format(Locale.US, "- **Drivetrain model** from Drivetrain Autotuner %s: top speed %s / %s in/s, %s rad/s; hold bandwidth %s / %s / %s rad/s.", folder.getName(), r.get("forward_max_speed"), r.get("strafe_max_speed"), r.get("turn_max_speed"), r.get("forward_bandwidth"), r.get("strafe_bandwidth"), r.get("turn_bandwidth")));
+    }
+
+    void turretModel(File folder) throws IOException {
+
+        if (folder == null) {
+            report.add("- Turret kept: no finished Turret Autotuner run pulled yet.");
+            return;
+        }
+        Map<String, String> r = readKeyValues(new File(folder, "result.csv"));
+        String[][] keys = {
+                {"gain", "TURRET_GAIN"}, {"kinetic_friction", "TURRET_KINETIC_FRICTION"}, {"breakaway_friction", "TURRET_BREAKAWAY_FRICTION"},
+                {"kp_far", "TURRET_KP_FAR"}, {"kp_close", "TURRET_KP_CLOSE"}, {"ki_far", "TURRET_KI_FAR"}, {"ki_close", "TURRET_KI_CLOSE"},
+                {"kd_far", "TURRET_KD_FAR"}, {"kd_close", "TURRET_KD_CLOSE"}, {"k_hold_volts", "TURRET_K_HOLD_VOLTS"},
+                {"friction_deadband_degrees", "TURRET_FRICTION_DEADBAND_DEGREES"}, {"max_i", "TURRET_MAX_I"}, {"stribeck_degrees_per_second", "TURRET_STRIBECK_DEGREES_PER_SECOND"}
+        };
+        Map<String, Double> parsed = new LinkedHashMap<>();
+        for (String[] key : keys) {
+            double v;
+            try {
+                v = Double.parseDouble(r.get(key[0]));
+            } catch (RuntimeException e) {
+                v = Double.NaN;
+            }
+            if (!finite(v) || v < 0 || (key[0].equals("gain") && v <= 0)) {
+                report.add("- Turret kept: " + folder.getName() + " has a bad " + key[0] + ".");
+                return;
+            }
+            parsed.put(key[1], v);
+        }
+        for (Map.Entry<String, Double> e : parsed.entrySet()) put(e.getKey(), fmt(e.getValue()));
+        //from the match course; runs before it have none, so those keep what's there
+        String[][] course = {
+                {"pulse_over_breakaway_volts", "TURRET_PULSE_OVER_BREAKAWAY_VOLTS"}, {"pulse_wait_seconds", "TURRET_PULSE_WAIT_SECONDS"}, {"pulse_zone_degrees", "TURRET_PULSE_ZONE_DEGREES"},
+                {"friction_ramp_degrees_per_second", "TURRET_FRICTION_RAMP_DEGREES_PER_SECOND"}, {"rate_feedforward_scale", "TURRET_RATE_FEEDFORWARD_SCALE"}
+        };
+        for (String[] key : course) {
+            try {
+                double v = Double.parseDouble(r.get(key[0]));
+                if (finite(v) && v >= 0) put(key[1], fmt(v));
+            } catch (RuntimeException ignored) {
+            }
+        }
+        put("TURRET_AUTOTUNE", "\"" + folder.getName() + "\"");
+        report.add(String.format(Locale.US, "- **Turret** from Turret Autotuner %s: %.1f deg/s per V, friction %.2f / %.2f V, score %s -> %s%s.", folder.getName(), parsed.get("TURRET_GAIN") / tpd(r), parsed.get("TURRET_KINETIC_FRICTION"), parsed.get("TURRET_BREAKAWAY_FRICTION"), r.get("score_before"), r.get("score_after"), r.containsKey("match_score_after") ? ", match course " + r.get("match_score_before") + " -> " + r.get("match_score_after") : ""));
     }
 
     static double positiveOrZero(String text) {
@@ -518,8 +527,7 @@ public final class TuningAnalyzer {
                 {"FLYWHEEL_FILTER_MIN_BANDWIDTH"}, {"FLYWHEEL_FILTER_MAX_BANDWIDTH"}, {"FLYWHEEL_FILTER_SCORE_MEMORY"}, {"FLYWHEEL_FILTER_STALE_TIME"}, {""},
                 {"TURRET_FILTER_MIN_BANDWIDTH"}, {"TURRET_FILTER_MAX_BANDWIDTH"}, {"TURRET_FILTER_SCORE_MEMORY"}, {"TURRET_FILTER_STALE_TIME"}, {""},
                 {"SHOT_GATE_ENTER_BAND"}, {"SHOT_GATE_HOLD_BAND"}, {"SHOT_GATE_DWELL"}, {""},
-                {"TURRET_GAIN"}, {"TURRET_TIME_CONSTANT"}, {"TURRET_DEAD_TIME"}, {"TURRET_KINETIC_FRICTION"}, {"TURRET_BREAKAWAY_FRICTION"},
-                {"TURRET_BANDWIDTH"}, {"TURRET_DAMPING"}, {"TURRET_INTEGRAL_RATIO"}, {"TURRET_FRICTION_SCALE"}, {"TURRET_MAX_SPEED"}, {"TURRET_MAX_ACCELERATION"}, {"TURRET_START_DELAY"}, {"TURRET_MAX_DECELERATION"}, {"TURRET_SHAKE_BANDWIDTH"}, {"TURRET_AUTOTUNE", "String"}, {""},
+                {"TURRET_GAIN"}, {"TURRET_KINETIC_FRICTION"}, {"TURRET_BREAKAWAY_FRICTION"}, {"TURRET_KP_FAR"}, {"TURRET_KP_CLOSE"}, {"TURRET_KI_FAR"}, {"TURRET_KI_CLOSE"}, {"TURRET_KD_FAR"}, {"TURRET_KD_CLOSE"}, {"TURRET_K_HOLD_VOLTS"}, {"TURRET_FRICTION_DEADBAND_DEGREES"}, {"TURRET_MAX_I"}, {"TURRET_STRIBECK_DEGREES_PER_SECOND"}, {"TURRET_PULSE_OVER_BREAKAWAY_VOLTS"}, {"TURRET_PULSE_WAIT_SECONDS"}, {"TURRET_PULSE_ZONE_DEGREES"}, {"TURRET_FRICTION_RAMP_DEGREES_PER_SECOND"}, {"TURRET_RATE_FEEDFORWARD_SCALE"}, {"TURRET_AUTOTUNE", "String"}, {""},
                 {"DRIVE_FORWARD_KS"}, {"DRIVE_FORWARD_KV"}, {"DRIVE_FORWARD_KA"}, {"DRIVE_FORWARD_MAX_ACCEL"}, {"DRIVE_FORWARD_MAX_DECEL"}, {"DRIVE_FORWARD_BANDWIDTH"},
                 {"DRIVE_STRAFE_KS"}, {"DRIVE_STRAFE_KV"}, {"DRIVE_STRAFE_KA"}, {"DRIVE_STRAFE_MAX_ACCEL"}, {"DRIVE_STRAFE_MAX_DECEL"}, {"DRIVE_STRAFE_BANDWIDTH"},
                 {"DRIVE_TURN_KS"}, {"DRIVE_TURN_KV"}, {"DRIVE_TURN_KA"}, {"DRIVE_TURN_MAX_ACCEL"}, {"DRIVE_TURN_MAX_DECEL"}, {"DRIVE_TURN_BANDWIDTH"}, {"DRIVE_AUTOTUNE", "String"}, {""},

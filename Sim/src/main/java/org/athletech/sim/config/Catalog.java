@@ -447,7 +447,6 @@ public final class Catalog {
         p.add(in("turret.breakaway_friction_v", "V", false, "Volts needed to start the turret moving from rest. Turret Autotuner.", 0, 8, 0.75));
         p.add(in("turret.velocity_noise_dps", "deg/s", false, "Noise on the turret velocity the hub reports.", 0, 50, 0.44));
         p.add(in("turret.vibration_deg", "deg", false, "RMS turret shake with the flywheel at full speed (TunerTeleOp: TURRET_VIBRATION_RMS while holding, flywheel on).", 0, 10, 0.3));
-        p.add(der("turret.autotune_bandwidth_rad_s", "rad/s", false, "Bandwidth the robot's Turret Autotuner settles on against the sim turret (sim turret)."));
         p.add(der("turret.step_overshoot_deg", "deg", false, "Overshoot on a 30 deg turret step with the robot's TurretController (sim turret)."));
         p.add(der("turret.spin_tracking_error_deg", "deg", false, "RMS turret aim error while the robot spins in place, real TurretController (sim turret)."));
         p.add(manual("ball.pollen.diameter_m", "m", "POLLEN diameter, about 2.8 in (Competition Manual 9.8). Balls vary.", 0.071));

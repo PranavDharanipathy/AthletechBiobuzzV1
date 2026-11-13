@@ -81,13 +81,10 @@ val teamCodeSources = tasks.register<Sync>("copyTeamCodeSources") {
         include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretController.java")
         include("org/firstinspires/ftc/teamcode/Systems/Drivetrain/DriveController.java")
         include("org/firstinspires/ftc/teamcode/Systems/Turret/TurretRoute.java")
-        include("org/firstinspires/ftc/teamcode/Systems/Turret/LanyardMap.java")
-        include("org/firstinspires/ftc/teamcode/Tuners/TurretLanyardSweep.java")
         include("org/firstinspires/ftc/teamcode/Tuners/TurretAutotuneEngine.java")
         include("org/firstinspires/ftc/teamcode/Tuners/DriveAutotuneEngine.java")
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/OnlineTuner.java")
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/FlywheelHyperTuner.java")
-        include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/TurretHyperTuner.java")
         include("org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/Findings.java")
         include("org/firstinspires/ftc/teamcode/Tuners/FlywheelVoltageFilterFit.java")
     }

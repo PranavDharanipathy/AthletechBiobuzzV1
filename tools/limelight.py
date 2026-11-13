@@ -63,7 +63,7 @@ class Limelight:
             req.add_header('Content-Type', content_type)
         with urllib.request.urlopen(req, timeout=self.timeout) as r:
             raw = r.read()
-        text = raw.decode('utf-8', 'replace').strip()
+        text = str(raw, 'utf-8', 'replace').strip()
         if not text:
             return None
         try:
@@ -380,7 +380,7 @@ def cmd_push(args):
         with open(path, 'rb') as f:
             body = f.read()
         if kind == 'json':
-            json.loads(body.decode('utf-8'))
+            json.loads(str(body, 'utf-8'))
             ll.post('/upload-pipeline?index=%d' % index, body)
         else:
             ll.post('/upload-python?index=%d' % index, body, 'text/plain')

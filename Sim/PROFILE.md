@@ -258,7 +258,6 @@ Turret slew speed and accuracy.
 | parameter | `turret.breakaway_friction_v` | V | input |  | Volts needed to start the turret moving from rest. Turret Autotuner. |
 | parameter | `turret.velocity_noise_dps` | deg/s | input |  | Noise on the turret velocity the hub reports. |
 | parameter | `turret.vibration_deg` | deg | input |  | RMS turret shake with the flywheel at full speed (TunerTeleOp: TURRET_VIBRATION_RMS while holding, flywheel on). |
-| parameter | `turret.autotune_bandwidth_rad_s` | rad/s | derived |  | Bandwidth the robot's Turret Autotuner settles on against the sim turret (sim turret). |
 | parameter | `turret.step_overshoot_deg` | deg | derived |  | Overshoot on a 30 deg turret step with the robot's TurretController (sim turret). |
 | parameter | `turret.spin_tracking_error_deg` | deg | derived |  | RMS turret aim error while the robot spins in place, real TurretController (sim turret). |
 | curve | `turret.time_to_turn` | deg -> s | derived |  | Turret move + settle time. |

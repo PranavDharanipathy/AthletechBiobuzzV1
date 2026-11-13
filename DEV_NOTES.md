@@ -3,6 +3,62 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-11 — Turret hold through battery sag
+
+- Turret voltage compensation divided the command by the battery, but `lturret` / `rturret` are on hub servo ports (Control Hub
+  and Expansion Hub port 0), whose supply is regulated: the match logs fit speed-per-power slightly better with no battery term
+  (k = 0) than k = 1, though weakly. So it's off.
+- Either way the real risk was a fixed friction guess: in the sim, with the push 15% weak (sticky turret, or battery-fed servos
+  without compensation) the hold sat 3-4 deg off then lurched 13-33 deg. The pulses now learn a friction trim (+-0.03 V a step,
+  +-0.6 V max) that the PID uses too; the same cases hold ~0.5 deg. The autotuner turns learning off so its trials compare.
+
+## 2026-11-11 — Turret Autotuner run: friction is 1.18 V, not 2.3
+
+- The autotuner's false "encoder unplugged" fault: it kicked 0.55 s after START, while the servos still ignore commands
+  (~1.1 s). It now waits for `TURRET_SERVO_WAKE_SECONDS` and retries up to 0.3 s, alternating, before faulting.
+- First completed run (20280512-230114): 150 deg/s per V, kinetic = breakaway = 1.18 V (ramps 0.95-1.24), score 11.2 -> 4.0.
+  So the 2.02 / 2.33 V in use were about double: the shake was mostly overcompensated friction, and the "~2.3 V breakaway"
+  below came from what that controller pushed, not the turret. Build pull wrote it into `TunedConstants`.
+- Everything that was a fixed volt number tied to the old breakaway is now relative to `TURRET_BREAKAWAY_FRICTION`: the pulse
+  (+0.12 V), the dead-encoder cutoff (+0.5 V; at 2.6 V a dead encoder at 30 deg ran 476 deg) and the uncounted cap (+1.0 V).
+- Sim (`TurretPlants` = this autotune): plain PID and pulse hold both hold calm (~0.6 deg); with friction 20% under tuned the
+  PID shakes ~2.7/s (small) and pulses ~0.4/s, with it 20-30% over pulses rest further off (2.6-3.2 vs 1.7-2.6 deg). Pulse
+  stays on for the shake; `TURRET_PULSE_ENABLED` false favours aim.
+
+## 2026-11-11 — Blaze off, turret pulse hold
+
+Match runs 2028-05-12 (robot clock), judged with `tools/blaze_check.py`:
+
+- **Blaze feeds die.** Hub bulk and Pinpoint updates ran ~500 Hz for 0.8 s after START, then stopped with no fault. Every
+  loop then fell back to SDK reads, yet loops were slower (median 38 vs 28 ms) and one run froze 150-650 ms about once a
+  second (14% of the run). That was the "0.5 s lag". Command-to-motion lag itself was unchanged (turret ~110-130 ms, drive
+  ~170 ms). `ENABLED` is false.
+- **Motor acceleration broke the intake.** All three runs with it had the intake under half speed 100% of the trigger time
+  (normal ~10-15%). Its `setPower` skips RUN_USING_ENCODER and calls `getCurrentPosition` every write.
+- **Turret shake is stick-slip plus delay.** Breakaway ~2.3 V (1.16 V before the friction doubled), moving friction fits
+  0.95-1.7 V, ~110 ms command to motion. Pushing until motion shows means ~1.3 V too much for 110+ ms: 9.7 deg swings
+  ~10/s before, 11-12 deg at 3-5/s with the release band. No friction/gain set fixes that (sim search with the plant fit to
+  these logs, which reproduces both). Real 50-100 ms pushes moved it ~0.7 deg, so holding near a still aim is now timed
+  pushes with a learned length (`TURRET_PULSE_*`). Sim: 5x fewer swings, half the error; its turret moves more per short
+  push than the real one, so expect smaller swings on the robot. Voltage stepping up for sticky turrets made swings bigger,
+  so it isn't there; a stickier turret rests up to ~3 deg off.
+- **Test turret is the measured robot.** `TurretPlants` uses fitted numbers (97 deg/s per V, 0.95 / 2.3 V), not
+  `TurretConstants`, so lowering a constant can't also make the "robot" easier.
+- **Dead encoder.** Pulses never hold 2.6 V, so 8 pushes in a row without a count also trips the cutoff.
+
+## 2026-11-10 — One turret controller
+
+- The model-based turret controller (plan/reference, resync, kicks, stuck push, landing, vibration rejection, lanyard map) and
+  its STATIONARY/DRIVING autotuner are gone, with `LanyardMap`, the lanyard sweep and SHT's turret hypertuner. The position-PID
+  controller and its autotuner took over the plain names (`TurretController`, `TurretAutotuneEngine`, `TurretAutotuner`,
+  `TURRET_*`). Everything below about the old controller is history.
+- `TunedConstants.TURRET_*` now comes only from the new autotuner's `result.csv`; `TuningAnalyzer` skips older-format runs in
+  `tuning-data/turret-autotune`. The old turret model (lag, dead time, torque limits) is kept for the sims in
+  `TurretPlants` (tests) and the profile's `turret.*`.
+- The controller caps its speed toward an end so it can coast to a stop before it: without that, the match aim at 1.5 rad/s
+  carried the sim turret to 209 deg, past the 205 deg hard limit.
+- Friction doubled after the autotune (1.01 / 1.16 -> 2.02 / 2.33 V); the next Turret Autotuner run measures it again.
+
 ## 2026-11-07 — Turret from a real match (MatchLog 20280508-121951-BlueTeleOp) + recording everything
 
 - **The match (421 s, 13 shots):** shots 1-3 had auto aim off (gamepad 2 right bumper at 2 s, back on at 101 s). Of the rest, 7
@@ -250,7 +306,7 @@ everything against time. This supersedes "opt-in only" in the entry below.
   - **Blaze's thread:** its reads reach the log through per-source `BlazeRing`s (single producer, fixed arrays), drained at
     the top of each loop with their own timestamps.
   - **Tested:** a desktop smoke test of TemporalLog + VariableWatcher (late objects, boxed fields, static changes, enums,
-    hidden field names, Pedro Pose) decodes correctly with `tools/temporal_log.py`. Not run on the robot. Expect a few
+    hidden field names, Pedro Pose) reads back correctly with `tools/temporal_log.py`. Not run on the robot. Expect a few
     hundred KB/s; check free space.
 - **Build:**
   - `:TeamCode:assembleDebug` passes. `AutoPath` (the old movement-only route) and `docs/AUTO_PATH.md` were then deleted
@@ -537,7 +593,7 @@ everything against time. This supersedes "opt-in only" in the entry below.
     from the pivot and 59.5 in up.
   - Profile `target.cell.opening_center_height_m` = 1.5126 (manual).
   - The manual's tolerance is ±1 in; nudge on the field with the gamepad 2 dpad.
-- **`FAR_ZONE_CLOSE_ZONE_BARRIER`** was −35, from DECODE's frame. In this frame every pose has y > −35, so it always
+- **`FAR_ZONE_CLOSE_ZONE_BARRIER`** was −35, from last season's frame. In this frame every pose has y > −35, so it always
   picked CLOSE. It is now 72, mid-field: y > 72 (away from the audience) aims at the CLOSE point, below at FAR.
 - **Where the gardens are** (Competition Manual 9.3, Figures 9-2/9-5):
   - Each GARDEN is a ~23 x 2 in strip along a wall, in opposite corners.
@@ -1101,7 +1157,7 @@ bandwidth"):
 
 ## 2026-11-05 — Shooter subsystem
 
-- `Systems/Shooter` (a `Subsystem`, based on the DECODE one) owns the flywheel and turret in TeleOp. Both
+- `Systems/Shooter` (a `Subsystem`, based on last season's) owns the flywheel and turret in TeleOp. Both
   TeleOps call `shooter.start(alliance)` and `shooter.update()` after `follower.update()`.
 - Controls: gamepad 1 left bumper turns the flywheel on and off (off at start, where TeleOp used to spin up
   right away). Gamepad 2: right bumper toggles auto aim. *(Superseded: see "Relocalization at the GARDENS" above for
@@ -1113,7 +1169,7 @@ bandwidth"):
   same frame as `START_POSE`.
 - `FieldConstants.START_POSE` is (0, 0, 0), only so Pedro has a pose. Real aiming needs a real start pose,
   or relocalization at a known spot.
-- `TURRET_AIM_DIRECTION` was -1 (from DECODE's `heading - angle`) and wrong. On the robot (2026-11-06) the turret turned
+- `TURRET_AIM_DIRECTION` was -1 (from last season's `heading - angle`) and wrong. On the robot (2026-11-06) the turret turned
   the same way as the robot's spin, twice as fast. It's +1 now, which also mirrored the DRIVING autotune's targets.
   Not re-checked after the flip. `TURRET_OFFSET_X = -2.82` is from CAD. Shot lead (`SHOT_TIME_OF_FLIGHT`) and future-pose speed
   (`FLYWHEEL_SPEED_ADJUSTMENT_T`) are 0 (off) and use Pedro's `follower.velocity()`. There's no camera or

@@ -6,9 +6,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-import java.io.File;
-
-import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
@@ -105,87 +102,21 @@ public class TurretBase {
 
     public static double wrapIntoTravel(double ticks) {
 
-        double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE, margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
+        final double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE, margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
+
         double degrees = ShooterConstants.TURRET_AIM_DIRECTION * ticks / tpd;
-        while (degrees > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + margin) degrees -= 360;
-        while (degrees < ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - margin) degrees += 360;
+        while (degrees > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + margin) degrees -= 360d;
+        while (degrees < ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - margin) degrees += 360d;
+        
         return ShooterConstants.TURRET_AIM_DIRECTION * degrees * tpd;
     }
 
     public void applyConstants() {
-
-        double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
-        controller.configure(TurretConstants.TURRET_GAIN, TurretConstants.TURRET_TIME_CONSTANT, TurretConstants.TURRET_KINETIC_FRICTION, TurretConstants.TURRET_BREAKAWAY_FRICTION, TurretConstants.TURRET_DEAD_TIME, TurretConstants.TURRET_BANDWIDTH, TurretConstants.TURRET_DAMPING, TurretConstants.TURRET_INTEGRAL_RATIO, TurretConstants.TURRET_FRICTION_SCALE);
-        controller.setCapability(TurretConstants.TURRET_MAX_SPEED, TurretConstants.TURRET_MAX_ACCELERATION, TurretConstants.TURRET_MAX_DECELERATION);
-        controller.startDelay = TurretConstants.TURRET_START_DELAY > 0 ? TurretConstants.TURRET_START_DELAY : Double.NaN;
-        controller.vibrationRejection = TurretConstants.TURRET_VIBRATION_REJECTION;
-        controller.vibrationReference = TurretConstants.TURRET_VIBRATION_REFERENCE_DEGREES * tpd;
-        controller.vibrationDeadband = TurretConstants.TURRET_VIBRATION_DEADBAND_DEGREES * tpd;
-        controller.minimumBandwidthFraction = TurretConstants.TURRET_MIN_BANDWIDTH_FRACTION;
-        controller.minimumBandwidth = TurretConstants.TURRET_MIN_BANDWIDTH;
-        controller.lanyards = TurretConstants.TURRET_LANYARDS_ENABLED ? getLanyardMap() : null;
-        controller.lanyardLearning = TurretConstants.TURRET_LANYARD_LEARNING || forceLanyardLearning;
-        controller.lanyardHome = startPosition;
-        controller.lanyardTicksPerDegree = tpd;
-        controller.lanyardLearnRate = TurretConstants.TURRET_LANYARD_LEARN_RATE;
-        controller.lanyardLearnBand = TurretConstants.TURRET_LANYARD_LEARN_BAND_DEGREES * tpd;
-        controller.lanyardMaxVolts = TurretConstants.TURRET_LANYARD_MAX_VOLTS;
-        controller.lanyardStuckBand = TurretConstants.TURRET_LANYARD_STUCK_BAND_DEGREES * tpd;
-        controller.setLimits(TurretConstants.TURRET_MAX_SPEED_FRACTION, TurretConstants.TURRET_INTEGRAL_ZONE_DEGREES * tpd, TurretConstants.TURRET_MAX_INTEGRAL_VOLTS, TurretConstants.TURRET_FRICTION_RAMP_DEGREES * tpd, TurretConstants.TURRET_MOVING_DEGREES_PER_SECOND * tpd, TurretConstants.TURRET_HOLD_TOLERANCE_DEGREES * tpd);
-        controller.accelerationFraction = TurretConstants.TURRET_ACCELERATION_FRACTION;
-        controller.resyncBand = TurretConstants.TURRET_RESYNC_DEGREES * tpd;
-        controller.brakeBand = TurretConstants.TURRET_BRAKE_DEGREES * tpd;
-        controller.stuckEndZone = TurretConstants.TURRET_STUCK_END_ZONE_DEGREES * tpd;
-        controller.stuckRate = TurretConstants.TURRET_STUCK_PUSH_RATE;
-        controller.stuckMax = TurretConstants.TURRET_STUCK_PUSH_MAX;
-        controller.stuckVoltsLimit = TurretConstants.TURRET_FROZEN_ENCODER_VOLTS - 0.1;
-        controller.landingEnabled = TurretConstants.TURRET_LANDING_ENABLED;
-        controller.brakeLearning = TurretConstants.TURRET_BRAKE_LEARNING;
-        controller.setTravel(startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES * tpd, startPosition + ShooterConstants.TURRET_AIM_DIRECTION * ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES * tpd);
+        controller.applyConstants(ShooterConstants.TURRET_TICKS_PER_DEGREE);
     }
 
     public TurretController getController() {
         return controller;
-    }
-
-    private static LanyardMap lanyardMap;
-    private static boolean lanyardLearned = false;
-
-    public boolean forceLanyardLearning = false;
-
-    public static File lanyardFile() {
-        return new File(new File(AppUtil.ROBOT_DATA_DIR, "TurretLanyards"), "map.csv");
-    }
-
-    public static LanyardMap getLanyardMap() {
-
-        double margin = TurretConstants.TURRET_HARD_LIMIT_MARGIN_DEGREES;
-        double low = Math.min(ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES, -ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES) - margin;
-        double high = Math.max(ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES, -ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES) + margin;
-        LanyardMap m = lanyardMap;
-        if (m != null && m.minDegrees == low && m.maxDegrees == high && m.binDegrees == Math.max(TurretConstants.TURRET_LANYARD_BIN_DEGREES, 0.5)) return m;
-        LanyardMap fresh = new LanyardMap(low, high, TurretConstants.TURRET_LANYARD_BIN_DEGREES);
-        if (m != null) fresh.fromCsv(m.toCsv());
-        else fresh.load(lanyardFile());
-        lanyardMap = fresh;
-        return fresh;
-    }
-
-    public void saveLanyards() {
-
-        if (lanyardMap == null || !TurretConstants.TURRET_LANYARDS_ENABLED || !(controller.lanyardLearning || lanyardLearned)) return;
-        lanyardMap.save(lanyardFile());
-    }
-
-    public static void clearLanyards() {
-
-        getLanyardMap().clear();
-        lanyardLearned = true;
-        lanyardMap.save(lanyardFile());
-    }
-
-    public double getLanyardVolts() {
-        return controller.lanyard;
     }
 
     public double startPosition;
@@ -226,10 +157,6 @@ public class TurretBase {
         return currentPosition;
     }
 
-    public double getReference() {
-        return controller.getReference();
-    }
-
     private double error;
     private Double initialError = null;
     private double prevTime, currTime, dt;
@@ -241,12 +168,12 @@ public class TurretBase {
         readSensors();
         applyConstants();
 
-        double volts = controller.update(getLoopDt(), targetPosition, targetVelocity, currentPosition, velocity, getCompensationVolts());
-        p = controller.p;
-        i = controller.i;
-        d = controller.d;
-        f = controller.f;
-        v = controller.v;
+        double volts = controller.update(getLoopDt(), targetPosition, targetVelocity, currentPosition);
+        p = controller.p / controller.gain;
+        i = controller.i / controller.gain;
+        d = controller.d / controller.gain;
+        f = controller.f + controller.s;
+        v = controller.v - (controller.p + controller.i + controller.d) / controller.gain;
 
         double tpd = ShooterConstants.TURRET_TICKS_PER_DEGREE;
         double aimDegrees = ShooterConstants.TURRET_AIM_DIRECTION * (currentPosition - startPosition) / tpd, outward = ShooterConstants.TURRET_AIM_DIRECTION * volts;
@@ -254,17 +181,32 @@ public class TurretBase {
         if ((aimDegrees > ShooterConstants.MAX_TURRET_POSITION_IN_DEGREES + margin && outward > 0) || (aimDegrees < ShooterConstants.MIN_TURRET_POSITION_IN_DEGREES - margin && outward < 0)) volts = 0;
 
         double nowSeconds = MathUtil.millisecondsToSeconds(currTime);
-        if (currentPosition != lastCurrentPosition || Math.abs(lastVolts) < TurretConstants.TURRET_FROZEN_ENCODER_VOLTS) frozenSince = Double.NaN;
+        if (Math.abs(currentPosition - firstPosition) >= 3) encoderCounted = true;
+        if (Double.isNaN(firstUpdate)) firstUpdate = nowSeconds;
+        boolean awake = nowSeconds - firstUpdate >= TurretConstants.TURRET_SERVO_WAKE_SECONDS;
+        if (awake && !wasAwake) controller.reset();
+        wasAwake = awake;
+        if (!awake || currentPosition != lastCurrentPosition || Math.abs(lastVolts) < TurretConstants.TURRET_BREAKAWAY_FRICTION + TurretConstants.TURRET_FROZEN_ENCODER_OVER_BREAKAWAY_VOLTS) frozenSince = Double.NaN;
         else if (Double.isNaN(frozenSince)) frozenSince = nowSeconds;
         else if (nowSeconds - frozenSince >= TurretConstants.TURRET_FROZEN_ENCODER_SECONDS) encoderFrozen = true;
+        if (awake && controller.pulsesWithoutCounts >= TurretConstants.TURRET_PULSE_DEAD_ENCODER_PUSHES) encoderFrozen = true;
+        if (!encoderCounted) volts = MathUtil.clamp(volts, -(TurretConstants.TURRET_BREAKAWAY_FRICTION + TurretConstants.TURRET_UNCOUNTED_OVER_BREAKAWAY_VOLTS), (TurretConstants.TURRET_BREAKAWAY_FRICTION + TurretConstants.TURRET_UNCOUNTED_OVER_BREAKAWAY_VOLTS));
         if (encoderFrozen) volts = 0;
         lastVolts = volts;
 
         setVolts(volts, volts);
     }
 
-    private double frozenSince = Double.NaN, lastVolts;
-    private boolean encoderFrozen;
+    private double frozenSince = Double.NaN, lastVolts, firstPosition = Double.NaN, firstUpdate = Double.NaN;
+    private boolean encoderFrozen, encoderCounted, wasAwake;
+
+    public boolean hasEncoderCounted() {
+        return encoderCounted;
+    }
+
+    public double getVolts() {
+        return lastVolts;
+    }
 
     public boolean isEncoderFrozen() {
         return encoderFrozen;
@@ -283,6 +225,7 @@ public class TurretBase {
 
         lastCurrentPosition = currentPosition;
         currentPosition = getCurrentPosition();
+        if (Double.isNaN(firstPosition)) firstPosition = currentPosition;
 
         rawVelocity = encoder.getInternalVelocity();
         velocity = encoder.updateFilteredVelocity(now, rawVelocity);
@@ -328,14 +271,6 @@ public class TurretBase {
 
     public boolean isOnTarget() {
         return aimReady;
-    }
-
-    public double getVibrationDegrees() {
-        return controller.vibration / ShooterConstants.TURRET_TICKS_PER_DEGREE;
-    }
-
-    public double getEffectiveBandwidth() {
-        return controller.effectiveBandwidth;
     }
 
     public double getErrorMagnitude() {
