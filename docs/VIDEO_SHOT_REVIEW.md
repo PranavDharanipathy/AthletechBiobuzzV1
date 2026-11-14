@@ -82,10 +82,10 @@ python -I tools/shot_video.py report M3
   - `short`: the speed that scores is above it;
   - `long`: it's below.
 - **Distance:** `shooter.shot_distance`, turret to goal, the table's own key.
-- **Speed at contact:** a line through the raw encoder's last 0.15 s, read at the contact.
-  - The encoder steps 20 ticks/s.
-  - The filtered speed runs ahead while the wheel speeds up: 1574 filtered vs 1500 actual on the 2028-05-13 auto's first
-    ball.
+- **Speed at contact:** the filtered speed (`flywheel.velocity`) where the fall starts, the same thing the SHT tuner scores.
+  - The encoder's own speed (a line through its last 0.15 s; it steps 20 ticks/s) is in `raw_at_contact`.
+  - While the wheel is still speeding up the two can differ: 1574 filtered vs 1500 raw on the 2028-05-13 auto's first ball.
+    A ball like that deserves a note.
 - **The model:**
   - The speed that scores is the table's line plus an offset and a slope change.
   - Scoring window: ±(table ticks/s per inch × `SHOT_MISS_TOLERANCE_INCHES`).

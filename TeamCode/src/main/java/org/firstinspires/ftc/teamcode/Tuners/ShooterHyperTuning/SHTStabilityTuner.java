@@ -144,7 +144,7 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         double turretVolts = turret.getPower() * turret.getCompensationVolts() * dir;
 
         int stabilityTrials = flywheelTuner.stability.trials, shotTrials = flywheelTuner.shots.trials;
-        flywheelTuner.update(now, flywheel.getTargetVelocity(), flywheel.getCurrentVelocity(), flywheel.isFeeding(), flywheel.shotsSeen);
+        flywheelTuner.update(now, flywheel.getTargetVelocity(), flywheel.getCurrentVelocity(), flywheel.isFeeding());
         if (flywheelTuner.stability.trials > stabilityTrials) trial(t, 0, flywheelTuner.stability);
         if (flywheelTuner.shots.trials > shotTrials) trial(t, 1, flywheelTuner.shots);
         flywheelTuner.apply(flywheel, coefficients);
@@ -162,6 +162,7 @@ public class SHTStabilityTuner extends TeleOpBaseOpMode {
         telemetry.addData("Recording", folder.getName());
         telemetry.addData("Flywheel stability", status(flywheelTuner.stability, flywheelTuner.lastSteadyCost));
         telemetry.addData("Flywheel shots", status(flywheelTuner.shots, flywheelTuner.lastShotCost));
+        telemetry.addData("Last burst", "%d balls (%d total), contact %+.0f ticks/s, back in %.2f s, overshoot %.0f", flywheelTuner.ballsInBurst, flywheelTuner.balls, flywheelTuner.lastContactError, flywheelTuner.lastRecovery, flywheelTuner.lastOvershoot);
         telemetry.addData("Ball expected in", "%.2f s (first %.2f s, then every %.2f s)", flywheel.expectedContact - Clock.seconds(), flywheel.firstContactSeconds, flywheel.ballIntervalSeconds);
         telemetry.addData("Turret hold", status(turretTuner.hold, turretTuner.lastHoldCost));
         telemetry.addData("Turret track", status(turretTuner.track, turretTuner.lastTrackCost));

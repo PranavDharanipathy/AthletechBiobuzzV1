@@ -373,6 +373,12 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 `OnlineTuner`:
 - the flywheel: stability at speed, and shots, including a pre-kick just before each ball hits. `Flywheel` learns when balls
   come, from every contact: first one after the blocker opens (logs: 0.24 s), then the gap between them (0.34 s);
+  - each burst scores the speed at every ball's contact (filtered), the dips, time back to speed and the 0.6 s right after (wobble,
+    overshoot). Balls come from the tuner's own dip detection, which counts each ball once, including ones landing up to 0.8 s
+    after the blocker closes; it found 63 in the 2028-05-13 TeleOp, against 64 from `shot_video.py`. `shotsSeen` counts every
+    dip loop and missed those late balls. Later balls in a burst weigh more (x1.5, x2, ...);
+  - `OnlineTuner` measures until a change is clearly better or clearly not (1.5 sigma, noise learned across trials, at most 3x
+    the minimum). On a knob that does nothing, the old fixed rule kept ~37% of trials at 15% noise; now under 15%;
 - the turret (`TurretHyperTuner`, live through `TurretBase.overrides`): holding (aim still: error, swings, flips, counted double
   while a shot is fed) and tracking (aim moving: error) are scored apart.
 It logs everything to the SD card, and `findings.md` names principle candidates. Agents turn those into new or removed

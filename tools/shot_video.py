@@ -44,7 +44,7 @@ REVIEWS = os.path.join(ROOT, 'tuning-data', 'video-reviews')
 SHOOTER = os.path.join(ROOT, 'TeamCode', 'src', 'main', 'java', 'org', 'firstinspires', 'ftc', 'teamcode', 'Constants', 'ShooterConstants.java')
 OUTCOMES = ('score', 'short', 'long', 'left', 'right', 'rim', 'blocked', 'none', 'unknown')
 FIELDS = ['ball', 'run', 'log_t', 'video_t', 'burst', 'in_burst', 'x', 'y', 'heading', 'turret_x', 'turret_y', 'distance', 'goal_distance', 'cell',
-          'target', 'speed_at_contact', 'filtered_at_contact', 'dip', 'lowest', 'target_minus_speed', 'battery', 'robot_speed', 'omega', 'turret_error', 'aim_ready',
+          'target', 'speed_at_contact', 'raw_at_contact', 'dip', 'lowest', 'target_minus_speed', 'battery', 'robot_speed', 'omega', 'turret_error', 'aim_ready',
           'outcome', 'conf', 'note']
 
 
@@ -221,17 +221,15 @@ def find_balls(run, min_dip=40, below=25):
                 lowraw = raw[back:k + 1].min()
                 if v[back] - v[k] >= min_dip and lowraw <= target[k] - 20 and raw[max(0, back - 1):back + 1].max() - lowraw >= 30 and t[back] - last > 0.12:
                     in_burst += 1
-                    speed = contact_speed(t, raw, back)
-                    balls.append({'row': back, 'low_row': k, 'burst': burst + 1, 'in_burst': in_burst, 'log_t': float(t[back]), 'speed': speed,
-                                  'filtered': float(v[back]), 'dip': float(speed - lowraw), 'lowest': float(lowraw), 'target': float(target[back])})
+                    balls.append({'row': back, 'low_row': k, 'burst': burst + 1, 'in_burst': in_burst, 'log_t': float(t[back]), 'speed': float(v[back]),
+                                  'raw': contact_speed(t, raw, back), 'dip': float(v[back] - v[k]), 'lowest': float(v[k]), 'target': float(target[back])})
                     last = t[back]
             k += 1
     return balls
 
 
 def contact_speed(t, raw, i, span=0.15):
-    """Wheel speed when the ball hit: a line through the encoder's readings over the last 0.15 s, read at the contact.
-    The encoder steps 20 ticks/s (1 count per 50 ms) and the filtered speed runs ahead of the wheel while it speeds up."""
+    """The encoder's own speed at the contact (a line through its last 0.15 s: it steps 20 ticks/s), shown next to the filtered one."""
     js = [j for j in range(max(0, i - 12), i + 1) if t[i] - t[j] <= span + 1e-6]
     if len(js) < 3:
         return float(raw[i])
@@ -275,7 +273,7 @@ def ball_rows(name, review):
                 'turret_x': '%.1f' % tx, 'turret_y': '%.1f' % ty,
                 'distance': '%.2f' % col('shooter.shot_distance', i), 'goal_distance': '%.2f' % math.hypot(gx - tx, gy - ty),
                 'cell': 'CLOSE' if col('pose.y', i) > 72 else 'FAR',
-                'target': '%.0f' % b['target'], 'speed_at_contact': '%.0f' % b['speed'], 'filtered_at_contact': '%.0f' % b['filtered'],
+                'target': '%.0f' % b['target'], 'speed_at_contact': '%.0f' % b['speed'], 'raw_at_contact': '%.0f' % b['raw'],
                 'dip': '%.0f' % b['dip'], 'lowest': '%.0f' % b['lowest'], 'target_minus_speed': '%.0f' % (b['target'] - b['speed']),
                 'battery': '%.2f' % col('power.battery_v', i), 'robot_speed': '%.1f' % col('pose.speed', i), 'omega': '%.0f' % col('pose.omega', i),
                 'turret_error': '%.1f' % col('turret.error', i), 'aim_ready': '%.0f' % col('blocker.aim_ready', i),
@@ -341,8 +339,8 @@ def cmd_balls(a):
     review = load(a.name)
     rows = refresh_shots(a.name, review)
     for r in rows:
-        print('%s  log %8s  video %8s  burst %3s #%s  dist %6s  target %5s  speed %5s (filtered %5s)  dip %4s  turret err %5s  robot %4s in/s  %s %s' % (
-            r['ball'], r['log_t'], r['video_t'] or '-', r['burst'], r['in_burst'], r['distance'], r['target'], r['speed_at_contact'], r['filtered_at_contact'],
+        print('%s  log %8s  video %8s  burst %3s #%s  dist %6s  target %5s  speed %5s (raw %5s)  dip %4s  turret err %5s  robot %4s in/s  %s %s' % (
+            r['ball'], r['log_t'], r['video_t'] or '-', r['burst'], r['in_burst'], r['distance'], r['target'], r['speed_at_contact'], r['raw_at_contact'],
             r['dip'], r['turret_error'], r['robot_speed'], r['outcome'], r['note']))
     for k, run in enumerate(review['runs']):
         print('run R%d %s offset %s' % (k + 1, run['name'], 'not synced' if run.get('offset') is None else '%+.3f s (%s)' % (run['offset'], run.get('how', ''))))

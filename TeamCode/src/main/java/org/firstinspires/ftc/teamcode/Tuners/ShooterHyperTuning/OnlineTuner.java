@@ -29,20 +29,31 @@ public class OnlineTuner {
 
     public final String name;
     public final Knob[] knobs;
-    public double margin = 0.03, grow = 1.3, shrink = 0.6;
-    public int samplesPerTrial = 3;
+    public double margin = 0.03, grow = 1.3, shrink = 0.6, confidence = 1.5;
+    public int samplesPerTrial = 3, maxSamplesPerTrial = 9, lastSamples;
     public int trials, keeps;
+    //cost spread / cost, squared, learned from every trial (one trial's few samples alone can't say)
+    public double relativeVariance = 0.01;
     public double baseline = Double.NaN, firstBaseline = Double.NaN;
     public final Trial last = new Trial();
 
     private int index, phase, samples;
-    private double sum, saved;
+    private double sum, sumSquares, saved, baselineSamples, noiseWeight = 2;
 
     public OnlineTuner(String name, int samplesPerTrial, Knob... knobs) {
 
         this.name = name;
         this.samplesPerTrial = Math.max(1, samplesPerTrial);
+        this.maxSamplesPerTrial = 3 * this.samplesPerTrial;
         this.knobs = knobs;
+    }
+
+    private void learnNoise(double mean) {
+
+        if (samples < 2 || !(Math.abs(mean) > 1e-12)) return;
+        double variance = Math.max(0, (sumSquares - samples * mean * mean) / (samples - 1));
+        noiseWeight = Math.min(noiseWeight + 1, 30);
+        relativeVariance += (variance / (mean * mean) - relativeVariance) / noiseWeight;
     }
 
     public Knob knob(String name) {
@@ -63,28 +74,41 @@ public class OnlineTuner {
 
         if (Double.isNaN(cost) || Double.isInfinite(cost) || knobs.length == 0) return false;
         sum += cost;
+        sumSquares += cost * cost;
         if (++samples < samplesPerTrial) return false;
         double mean = sum / samples;
-        sum = samples = 0;
         Knob k = knobs[index];
         if (phase == 0) {
+            learnNoise(mean);
             baseline = mean;
+            baselineSamples = samples;
+            sum = sumSquares = samples = 0;
             if (Double.isNaN(firstBaseline)) firstBaseline = mean;
             startTrial(k, 1);
             return false;
         }
+        //how many samples depends on the noise: stop once it's clearly better or clearly not, else keep measuring up to the max
+        double gain = baseline > 1e-12 ? (baseline - mean) / baseline : baseline - mean;
+        double error = confidence * Math.sqrt(relativeVariance * (1.0 / samples + 1.0 / Math.max(1, baselineSamples)));
+        boolean better = gain > margin && gain > error;
+        boolean notBetter = gain + error <= margin;
+        if (!better && !notBetter && samples < maxSamplesPerTrial) return false;
+        learnNoise(mean);
+        lastSamples = samples;
+        sum = sumSquares = samples = 0;
         trials++;
         last.knob = k.name;
         last.from = saved;
         last.to = k.value;
         last.cost = mean;
         last.baseline = baseline;
-        last.kept = mean < baseline * (1 - margin) - 1e-12;
+        last.kept = better;
         if (last.kept) {
             keeps++;
             k.kept++;
             if (k.value <= k.min || k.value >= k.max) k.atBound++;
             baseline = mean;
+            baselineSamples = lastSamples;
             k.step *= grow;
             nextKnob();
         }
