@@ -250,6 +250,12 @@ and its own numbers with `recorder.channel(...)` / `recorder.watch(...)` in init
 `Recorder.note(...)`. Read runs with `python tools/robot_log.py` (pull, list, summary, events, meta, channels, csv); the build
 also pulls them into `tuning-data/robot-logs` (git-ignored). TunerTeleOp differs only in also tuning live.
 
+**Match video review** (`tools/shot_video.py`, steps in [docs/VIDEO_SHOT_REVIEW.md](./docs/VIDEO_SHOT_REVIEW.md)): when the user
+sends a phone video of a match with its logs, sync it to the runs (flywheel-dip balls against sound onsets, marked launches or
+an anchor; one offset per run, frame timestamps not frame numbers), look at every ball's frames, mark score/short/long/...,
+and `fit` turns every review's marks into a small `FLYWHEEL_VELOCITIES` change (max 25 ticks/s a point) or flywheel recovery
+advice.
+
 ## Turret control and tuning
 
 **`TurretConstants.TURRET_ENABLED`:** on. Turned off, `TurretBase.setVolts` sends the servos 0 in every OpMode (TeleOps, autos,

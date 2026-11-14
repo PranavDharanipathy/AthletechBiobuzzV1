@@ -88,3 +88,9 @@ tuning-data/robot-logs/
 
 # Temporal Log sessions pulled from the robot (tools/temporal_log.py pull): big binaries
 temporal-logs/
+
+# match video reviews (tools/shot_video.py): review.json, shots.csv, REPORT.md and CHANGES.md are tracked; pictures and videos aren't
+tuning-data/video-reviews/*/frames/
+tuning-data/video-reviews/*/*.png
+tuning-data/video-reviews/*/*.tsv
+tuning-data/videos/
