@@ -348,7 +348,9 @@ motion caps match tracking near 50% of loops within 2 deg; only less delay (fast
 
 The turret travels **±200° from home** (20° past straight back each way) (`ShooterConstants.MIN/MAX_TURRET_POSITION_IN_DEGREES`)
 and the robot may spin forever. `TurretRoute` follows the aim round continuously. The match aim (`Shooter`) uses the whole ±200°
-and swings a full turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`).
+and swings a full turn only once the aim is past an end (`TURRET_SWING_MARGIN_DEGREES`). An aim that jumps over 90° in one
+loop (a relocalization) is re-picked as the in-travel angle nearest the turret: following it round sent the turret to the far
+end and then a full turn back (~1 s lost, half the logged relocalizations).
 In the match TeleOps (`Shooter.update`), **gamepad 1 Y** toggles a turret lock: held still at home (0 deg) instead of aiming.
 The flywheel runs from START until the OpMode stops (no toggle), and the FIArm dropdown is down only while **gamepad 1 left
 bumper** is held.

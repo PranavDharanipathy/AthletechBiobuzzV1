@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.Systems.Turret;
 
 public class TurretRoute {
 
-    private double unwrapped = Double.NaN, outsideSince = Double.NaN, lastSwing = Double.NEGATIVE_INFINITY;
+    private double unwrapped = Double.NaN, outsideSince = Double.NaN, lastSwing = Double.NEGATIVE_INFINITY, lastAim = Double.NaN;
     private boolean swung;
 
     public void reset() {
@@ -10,27 +10,18 @@ public class TurretRoute {
         unwrapped = Double.NaN;
         outsideSince = Double.NaN;
         lastSwing = Double.NEGATIVE_INFINITY;
-    }
-
-    public double update(double aim, double aimRate, double turretNow, double min, double max, double lead, double stopDecel, double margin) {
-
-        if (Double.isNaN(unwrapped)) unwrapped = nearest(aim, turretNow, min, max);
-        else unwrapped += Math.IEEEremainder(aim - unwrapped, 360);
-        double mid = 0.5 * (min + max);
-        boolean upper = unwrapped > mid;
-        double outward = upper ? aimRate : -aimRate;
-        double room = upper ? max - unwrapped : unwrapped - min;
-        double stop = outward > 0 ? outward * lead + outward * outward / (2 * stopDecel) : 0;
-        boolean racing = outward > 0 && room < stop + margin;
-        boolean parked = room < -margin && -outward < -room - margin;
-        swung = racing || parked;
-        if (swung) unwrapped += upper ? -360 : 360;
-        return clamp(unwrapped, min, max);
+        lastAim = Double.NaN;
     }
 
     public double update(double aim, double aimRate, double turretNow, double min, double max, double margin, double now) {
 
-        if (Double.isNaN(unwrapped)) unwrapped = nearest(aim, turretNow, min, max);
+        //a relocalization teleports the aim: following it round from the old side ran to the far end then swung a full turn
+        boolean jumped = Math.abs(Math.IEEEremainder(aim - lastAim, 360)) > JUMP_DEGREES;
+        lastAim = aim;
+        if (Double.isNaN(unwrapped) || jumped) {
+            unwrapped = nearest(aim, turretNow, min, max);
+            outsideSince = Double.NaN;
+        }
         else unwrapped += Math.IEEEremainder(aim - unwrapped, 360);
         boolean upper = unwrapped > 0.5 * (min + max);
         double outside = upper ? unwrapped - max : min - unwrapped;
@@ -48,7 +39,7 @@ public class TurretRoute {
         return clamp(unwrapped, min, max);
     }
 
-    public static final double RETURN_SECONDS = 1, SWING_DELAY = 0.25, SWING_COOLDOWN = 1, FAR_PAST = 45;
+    public static final double RETURN_SECONDS = 1, SWING_DELAY = 0.25, SWING_COOLDOWN = 1, FAR_PAST = 45, JUMP_DEGREES = 90;
 
     public boolean isOutside(double min, double max) {
         return unwrapped < min || unwrapped > max;
@@ -58,15 +49,14 @@ public class TurretRoute {
         return swung;
     }
 
+    //the aim's turn nearest the turret is within 180 of it; if that's past an end the next turn in is the closest legal one
     private static double nearest(double aim, double turretNow, double min, double max) {
 
-        double best = Double.NaN;
-        for (int k = -2; k <= 2; k++) {
-            double candidate = aim + 360 * k;
-            if (candidate < min || candidate > max) continue;
-            if (Double.isNaN(best) || Math.abs(candidate - turretNow) < Math.abs(best - turretNow)) best = candidate;
-        }
-        return Double.isNaN(best) ? aim - 360 * Math.floor((aim - min) / 360) : best;
+        double c = turretNow + Math.IEEEremainder(aim - turretNow, 360);
+        if (c > max) c -= 360;
+        else if (c < min) c += 360;
+        if (c >= min && c <= max) return c;
+        return aim - 360 * Math.floor((aim - min) / 360);
     }
 
     private static double clamp(double x, double lo, double hi) {
