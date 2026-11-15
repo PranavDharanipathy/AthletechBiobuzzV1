@@ -19,7 +19,7 @@ import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretController;
 import org.firstinspires.ftc.teamcode.Utility.AutoHandoff;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazePinpointLocalizer;
+import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
@@ -63,23 +63,10 @@ public final class RobotRecording {
 
         r.channel("blaze", "open", "0/1", "started this OpMode", () -> BlazeSession.isOpen() ? 1 : 0);
         r.channel("blaze", "running", "0/1", "", () -> BlazeSession.isRunning() ? 1 : 0);
-        r.channel("blaze", "ch_age_ms", "ms", "since Blaze's last Control Hub bulk update (NaN = not fed)", () -> BlazeSession.bulkAgeMs(BlazeSession.CONTROL_HUB));
-        r.channel("blaze", "eh_age_ms", "ms", "Expansion Hub", () -> BlazeSession.bulkAgeMs(BlazeSession.EXPANSION_HUB));
-        r.channel("blaze", "ch_live", "0/1", "1 = this loop read Blaze's Control Hub data, 0 = stale so normal reads", () -> BlazeSession.fedNow(BlazeSession.CONTROL_HUB) ? 1 : 0);
-        r.channel("blaze", "eh_live", "0/1", "", () -> BlazeSession.fedNow(BlazeSession.EXPANSION_HUB) ? 1 : 0);
-        r.channel("blaze", "ch_updates", "", "Control Hub bulk updates so far", () -> BlazeSession.BULK[BlazeSession.CONTROL_HUB].total);
-        r.channel("blaze", "eh_updates", "", "", () -> BlazeSession.BULK[BlazeSession.EXPANSION_HUB].total);
-        r.channel("blaze", "pinpoint_updates", "", "Pinpoint samples from Blaze so far", () -> BlazeSession.PINPOINT.total);
-        r.channel("blaze", "pinpoint_used", "", "loops that used Blaze's Pinpoint sample", () -> {
-
-            BlazePinpointLocalizer p = BlazeSession.pinpoint();
-            return p == null ? Double.NaN : p.samples;
-        });
-        r.channel("blaze", "pinpoint_sdk_reads", "", "loops that read the Pinpoint through the SDK instead", () -> {
-
-            BlazePinpointLocalizer p = BlazeSession.pinpoint();
-            return p == null ? Double.NaN : p.sdkReads;
-        });
+        r.channel("blaze", "drives", "0/1", "the drive runs on Blaze's Pinpoint samples", () -> BlazeSession.drives() ? 1 : 0);
+        r.channel("blaze", "feeds_eh", "0/1", "flywheel, turret, intake run on Blaze's Expansion Hub reads", () -> BlazeSession.feedsExpansionHub() ? 1 : 0);
+        r.channel("blaze", "drive_updates", "", "drive callbacks so far", () -> BlazeSession.driveUpdates);
+        r.channel("blaze", "mechanism_updates", "", "mechanism callbacks so far", () -> BlazeSession.mechanismUpdates);
         r.watch("blaze", "fault", () -> BlazeSession.fault);
     }
 
@@ -135,16 +122,6 @@ public final class RobotRecording {
         r.channel("pose", "vy", "in/s", "field", () -> m.vy);
         r.channel("pose", "speed", "in/s", "", () -> Math.hypot(m.vx, m.vy));
         r.channel("pose", "omega", "deg/s", "turn rate (+ = counterclockwise)", () -> Math.toDegrees(m.omega));
-        r.channel("pose", "blaze_age_ms", "ms", "age of Blaze's Pinpoint sample (NaN = no Blaze)", () -> {
-
-            BlazePinpointLocalizer p = BlazeSession.pinpoint();
-            return p == null ? Double.NaN : 1000 * p.sampleAgeSeconds;
-        });
-        r.channel("pose", "blaze_sdk", "0/1", "1 = that sample was stale, read the SDK instead", () -> {
-
-            BlazePinpointLocalizer p = BlazeSession.pinpoint();
-            return p == null ? Double.NaN : p.usingSdk ? 1 : 0;
-        });
     }
 
     public static void drivetrain(Recorder r, final Drivetrain d) {
@@ -209,7 +186,18 @@ public final class RobotRecording {
 
         if (f == null) return;
         r.channel("flywheel", "target", "ticks/s", "", f::getTargetVelocity);
-        r.channel("flywheel", "velocity", "ticks/s", "filtered", f::getCurrentVelocity);
+        r.channel("flywheel", "velocity", "ticks/s", "what the controller uses (observer or filtered)", f::getCurrentVelocity);
+        r.channel("flywheel", "filtered", "ticks/s", "encoder's adaptive filter", f::getFilteredVelocity);
+        r.channel("flywheel", "observer", "ticks/s", "FlywheelObserver: volts sent + hub reading, lag removed", f::getObserverVelocity);
+        r.channel("flywheel", "observer_load", "V", "", () -> f.observer.load);
+        r.channel("flywheel", "observer_innovation", "ticks/s", "reading - model", () -> f.observer.innovation);
+        r.channel("flywheel", "contacts", "", "balls the observer saw hit", f::getContacts);
+        r.channel("flywheel", "contact_error", "ticks/s", "last ball's speed - target", () -> f.lastContactError);
+        r.channel("flywheel", "contact_speed", "ticks/s", "last ball's speed when it hit", () -> f.lastContactSpeed);
+        r.channel("flywheel", "contact_ago", "s", "how long ago the last ball hit", () -> Clock.seconds() - f.lastContactTime);
+        r.channel("flywheel", "ball_drop", "ticks/s", "speed a ball takes, learned", () -> f.observer.ballDrop);
+        r.channel("flywheel", "window_below", "ticks/s", "this shot's room slow (CellGeometry)", () -> f.windowBelow);
+        r.channel("flywheel", "window_above", "ticks/s", "this shot's room fast", () -> f.windowAbove);
         r.channel("flywheel", "raw_velocity", "ticks/s", "", f::getRawVelocity);
         r.channel("flywheel", "estimate", "ticks/s", "", f::getVelocityEstimate);
         r.channel("flywheel", "error", "ticks/s", "", f::getError);
@@ -251,6 +239,9 @@ public final class RobotRecording {
         r.channel("shooter", "shot_time", "s", "flight time used", () -> s.shotTime);
         r.channel("shooter", "shot_miss", "in", "+ long / - short with the speed it's at", () -> s.shotMissInches);
         r.flag("shooter", "will_score", "miss gate", Shooter::shotWillScore);
+        r.channel("shooter", "approach", "deg", "off straight-on to the CELL", () -> s.cell.approachDegrees);
+        r.channel("shooter", "window_slow", "", "fraction slower than the aim-point speed that still goes in (drag-free)", () -> s.cell.slow);
+        r.channel("shooter", "window_fast", "", "fraction faster", () -> s.cell.fast);
         r.channel("shooter", "swings", "", "count: full-turn swings", s::getSwings);
         r.channel("shooter", "relocalizations", "", "count", s::getRelocalizations);
     }
@@ -263,6 +254,12 @@ public final class RobotRecording {
         if (!gates) return;
         r.flag("blocker", "flywheel_ready", "shot gate", b::isFlywheelReady);
         r.flag("blocker", "aim_ready", "aim gate", b::isAimReady);
+        r.flag("blocker", "feed_gate_on", "FeedGate in charge", () -> b.feedGateOn);
+        r.channel("blocker", "feed_gate_predicted", "ticks/s", "wheel speed - target when the judged ball hits", () -> b.feedGate.predictedError);
+        r.channel("blocker", "feed_gate_judged_in", "s", "", () -> b.feedGate.judgedIn);
+        r.channel("blocker", "feed_gate_holds", "", "count", () -> b.feedGate.holds);
+        r.channel("blocker", "feed_gate_held_s", "s", "trigger held, blocker kept shut", () -> b.feedGate.heldSeconds);
+        r.channel("blocker", "feed_gate_starved", "", "trigger presses it let no ball out of", () -> b.feedGate.starved);
     }
 
     public static void intake(Recorder r, final Intake i) {

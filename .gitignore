@@ -85,6 +85,12 @@ tuning-data/sessions/
 tuning-data/turret-autotune/
 tuning-data/match-logs/
 tuning-data/robot-logs/
+# raw robot data pulled off the SD card (HardwareMonitor sessions are ~550 MB)
+tuning-data/hardware-monitor/
+tuning-data/hypertuning/
+tuning-data/sht-sessions/
+tuning-data/shot-experiments/
+tuning-data/drive-autotune/
 
 # Temporal Log sessions pulled from the robot (tools/temporal_log.py pull): big binaries
 temporal-logs/
@@ -94,3 +100,6 @@ tuning-data/video-reviews/*/frames/
 tuning-data/video-reviews/*/*.png
 tuning-data/video-reviews/*/*.tsv
 tuning-data/videos/
+
+# Competition Manual figures pulled by tools/manual_figures.py (copyrighted, local only)
+tuning-data/manual-figures/

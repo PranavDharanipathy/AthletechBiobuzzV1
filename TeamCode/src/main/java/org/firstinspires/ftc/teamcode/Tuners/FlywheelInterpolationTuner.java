@@ -90,13 +90,43 @@ public class FlywheelInterpolationTuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
+        follower.update();
+    }
+
+    @Override
+    protected void mechanismUpdate() {
+
+        super.intake.update();
+        //the shooter only runs once it's localized
+        if (!localized) return;
+        flywheel.update();
+        turret.update();
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
         controller1.getInformation();
-        follower.update();
+        shooter.mechanismsElsewhere = intakeSystem.motorElsewhere = !mechanismsInLoop();
+        updateFollower();
         intakeSystem.update();
-        drivetrain.update();
+        runDrive(drivetrain);
 
         if (controller1.main_buttonHasJustBeenPressed) localize();
         if (!localized) {

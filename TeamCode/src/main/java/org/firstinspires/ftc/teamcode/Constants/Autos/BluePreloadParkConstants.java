@@ -18,7 +18,7 @@ public final class BluePreloadParkConstants {
     public static double POSITION_ERROR_INCHES = 1;
     public static double HEADING_ERROR_DEGREES = 3;
     public static double SHOT_TIMEOUT_SECONDS = 4;
-    public static double SHOT_FEED_SECONDS = 2;
+    public static double SHOT_FEED_SECONDS = 4;
     //blocker stays open this long after the intake stops, then closes, then it drives
     public static double SHOT_SETTLE_SECONDS = 0.15;
     public static double FLYWHEEL_ERROR_TICKS_PER_SECOND = 50;

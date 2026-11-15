@@ -130,7 +130,7 @@ final class VariableWatcher {
         if (statics) return true;
         String name = c.getName();
         if (name.startsWith("org.firstinspires.ftc.teamcode.")) {
-            return !name.contains(".Utility.Monitoring.") && !name.contains(".Utility.TemporalLog.") && !name.contains(".Utility.Blaze.BlazeRing") && !name.endsWith("DeviceStats") && !name.endsWith("DeviceTracker") && !name.endsWith("CacheSlot") && !name.endsWith("CsvLogger") && !name.endsWith("RobotLogger");
+            return !name.contains(".Utility.Monitoring.") && !name.contains(".Utility.TemporalLog.") && !name.endsWith("DeviceStats") && !name.endsWith("DeviceTracker") && !name.endsWith("CacheSlot") && !name.endsWith("CsvLogger") && !name.endsWith("RobotLogger");
         }
         return name.startsWith("com.pedropathing.") || name.startsWith("dev.nextftc.");
     }

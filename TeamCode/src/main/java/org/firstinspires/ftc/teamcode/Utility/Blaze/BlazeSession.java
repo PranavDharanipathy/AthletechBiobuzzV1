@@ -1,210 +1,111 @@
 package org.firstinspires.ftc.teamcode.Utility.Blaze;
 
 import com.pedropathing.follower.Follower;
-import com.qualcomm.hardware.lynx.LynxModule;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.RobotLog;
 
 import org.firstinspires.ftc.teamcode.Constants.BlazeConstants;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLongArray;
+import java.lang.reflect.Field;
 
-import dev.anygeneric.blazeftc.AcceleratedMotor;
 import dev.anygeneric.blazeftc.BlazeDummyPlug;
-import dev.anygeneric.blazeftc.BlazeDummyPlugKt;
 import dev.anygeneric.blazeftc.BlazeFTC;
 import dev.anygeneric.blazeftc.Hub;
-import dev.anygeneric.blazeftc.InterfaceAccessor;
+import dev.anygeneric.blazeftc_pedro.Pedro3SingleDataLocalizer;
 import kotlin.Unit;
 
+//Blaze as its README says (github.com/owenpmckenna/blaze_ftc): it reads the Pinpoint and the Expansion Hub itself and calls us
+//the moment new data is in. The drive runs on each Pinpoint sample, the shooter's motors on each Expansion Hub bulk read
 public final class BlazeSession {
 
-    public static final int CONTROL_HUB = 0, EXPANSION_HUB = 1;
-    public static final BlazeRing[] BULK = {new BlazeRing(), new BlazeRing()};
-    public static final BlazeRing PINPOINT = new BlazeRing();
-    private static final LynxModule[] FED = new LynxModule[2];
-    private static final AtomicLongArray LAST_BULK_NS = new AtomicLongArray(2);
-    //frozen data drove the turret round
-    private static final long BULK_STALE_NS = 50_000_000L;
-    private static List<LynxModule> hubs = Collections.emptyList();
-    private static HardwareMap map;
-    private static boolean open, running, nextOwned;
-    private static BlazePinpointLocalizer pinpoint;
+    //Blaze's callbacks and the loop take turns on the robot's objects with this
+    public static final Object LOCK = new Object();
+    public static volatile long driveUpdates, mechanismUpdates;
     public static String fault = "";
+    private static boolean open, running, pinpoint, expansionHub;
 
     private BlazeSession() {}
 
-    public static boolean begin(HardwareMap hardwareMap) {
-        return begin(hardwareMap, false);
-    }
-
-    public static boolean beginNext(HardwareMap hardwareMap) {
-        return begin(hardwareMap, true);
-    }
-
-    private static synchronized boolean begin(HardwareMap hardwareMap, boolean next) {
+    //before any hardware is got
+    public static synchronized boolean begin(HardwareMap hardwareMap) {
 
         end();
         fault = "";
-        nextOwned = next;
-        hubs = hardwareMap.getAll(LynxModule.class);
-        map = hardwareMap;
+        driveUpdates = mechanismUpdates = 0;
         if (!BlazeConstants.ENABLED) return false;
         try {
             BlazeDummyPlug.initializeBlazeFTC(hardwareMap);
             open = true;
             if (BlazeConstants.MOTOR_ACCELERATION) BlazeDummyPlug.engageMotorAccel(hardwareMap);
-            return true;
         } catch (Throwable t) {
             fail("start", t);
-            return open;
         }
+        return open;
     }
 
-    public static synchronized void engage(HardwareMap hardwareMap, Follower follower) {
+    //from here Blaze owns follower.update(): drive must call it, nothing else may
+    public static synchronized void drive(final Follower follower, final Runnable drive) {
 
         if (!open) return;
-        LynxModule control = find(true), expansion = find(false);
-        if (BlazeConstants.BULK_CONTROL_HUB && control != null) bulk(hardwareMap, Hub.CtrlHub, CONTROL_HUB, control, Math.max(1, Math.min(2, BlazeConstants.CONTROL_HUB_PACKETS)));
-        if (BlazeConstants.BULK_EXPANSION_HUB && expansion != null) bulk(hardwareMap, Hub.ExHub, EXPANSION_HUB, expansion, 1);
-        attachPinpoint(follower);
-    }
-
-    public static synchronized void attachPinpoint(Follower follower) {
-
-        if (!open || follower == null || !BlazeConstants.PINPOINT_ACCELERATION) return;
         try {
-            pinpoint = BlazePinpointLocalizer.attach(follower, PINPOINT);
+            Pedro3SingleDataLocalizer.setup(follower, () -> {
+
+                synchronized (LOCK) {
+                    drive.run();
+                }
+                driveUpdates++;
+            });
+            //its localizer can't setPose (relocalizing at the GARDEN); final field, so the same reflection Blaze uses to put its own in
+            Field localizer = Follower.class.getField("localizer");
+            localizer.setAccessible(true);
+            localizer.set(follower, new BlazeLocalizer(follower.localizer));
+            pinpoint = true;
         } catch (Throwable t) {
             fail("Pinpoint", t);
         }
     }
 
-    private static void bulk(HardwareMap hardwareMap, Hub hub, final int index, LynxModule module, int packets) {
+    public static synchronized void mechanisms(HardwareMap hardwareMap, final Runnable mechanisms) {
 
+        if (!open) return;
         try {
-            final BlazeRing ring = BULK[index];
-            BlazeDummyPlug.engageBulkReadAcceleration(hardwareMap, hub, packets, () -> {
-                long now = System.nanoTime();
-                LAST_BULK_NS.set(index, now);
-                ring.push(now, ring.total, 0, 0, 0, 0, 0);
+            BlazeDummyPlug.engageBulkReadAcceleration(hardwareMap, Hub.ExHub, BlazeConstants.EXPANSION_HUB_PACKETS, () -> {
+
+                synchronized (LOCK) {
+                    mechanisms.run();
+                }
+                mechanismUpdates++;
                 return Unit.INSTANCE;
             });
-            FED[index] = module;
+            expansionHub = true;
         } catch (Throwable t) {
-            fail(hub + " bulk reads", t);
+            fail("Expansion Hub bulk reads", t);
         }
     }
 
-    static synchronized void markFed(int index, LynxModule module) {
-        FED[index] = module;
-    }
+    //at START
+    public static synchronized void run() {
 
-    public static LynxModule find(boolean control) {
-
-        for (LynxModule m : hubs) {
-            InterfaceAccessor.ModuleStatus s;
-            try {
-                s = BlazeDummyPlugKt.module_status(m);
-            } catch (Throwable t) {
-                continue;
-            }
-            if (control && s == InterfaceAccessor.ModuleStatus.Internal) return m;
-            if (!control && (s == InterfaceAccessor.ModuleStatus.RS485 || s == InterfaceAccessor.ModuleStatus.USB)) return m;
-        }
-        return null;
-    }
-
-    public static void tick() {
-
-        if (open && !running) {
+        if (!open || running) return;
+        try {
+            BlazeFTC.run(0);
             running = true;
-            if (!nextOwned) {
-                try {
-                    BlazeFTC.run(0);
-                } catch (Throwable t) {
-                    fail("run", t);
-                }
-            }
-        }
-        clearUnfed();
-    }
-
-    public static void clearUnfed() {
-
-        for (int k = 0; k < hubs.size(); k++) {
-            LynxModule m = hubs.get(k);
-            if (!feeds(m)) m.clearBulkCache();
+        } catch (Throwable t) {
+            fail("run", t);
         }
     }
 
-    public static boolean feeds(LynxModule module) {
-
-        if (module == null || !running) return false;
-        for (int i = 0; i < 2; i++) {
-            if (module == FED[i]) return System.nanoTime() - LAST_BULK_NS.get(i) < BULK_STALE_NS;
-        }
-        return false;
-    }
-
+    //must happen or the robot restarts; MonitorOpModeHook also calls it after every OpMode
     public static synchronized void end() {
 
-        if (open && !nextOwned) {
+        if (open) {
             try {
                 BlazeDummyPlug.closeBlazeFTC();
             } catch (Throwable t) {
                 RobotLog.ee("Blaze", t, "close failed");
             }
         }
-        if (open) {
-            for (LynxModule m : hubs) {
-                try {
-                    m.setBulkCachingMode(LynxModule.BulkCachingMode.OFF);
-                } catch (Throwable ignored) {
-                }
-            }
-        }
-        restoreMotors();
-        open = running = nextOwned = false;
-        map = null;
-        FED[0] = FED[1] = null;
-        LAST_BULK_NS.set(0, 0);
-        LAST_BULK_NS.set(1, 0);
-        pinpoint = null;
-        BULK[0].clear();
-        BULK[1].clear();
-        PINPOINT.clear();
-    }
-
-    //the map outlives the OpMode, give the SDK motors back
-    private static void restoreMotors() {
-
-        if (map == null) return;
-        try {
-            for (String name : map.getAllNames(DcMotorEx.class)) {
-                DcMotorEx m = map.get(DcMotorEx.class, name);
-                if (!(m instanceof AcceleratedMotor)) continue;
-                map.dcMotor.remove(name);
-                map.dcMotor.put(name, ((AcceleratedMotor) m).getDcMotorEx());
-            }
-        } catch (Throwable t) {
-            RobotLog.ee("Blaze", t, "couldn't put the SDK motors back");
-        }
-    }
-
-    //ms since that hub's last Blaze bulk update, NaN when Blaze doesn't feed it
-    public static double bulkAgeMs(int index) {
-
-        long t = LAST_BULK_NS.get(index);
-        if (FED[index] == null || !running || t == 0) return Double.NaN;
-        return (System.nanoTime() - t) * 1e-6;
-    }
-
-    public static boolean fedNow(int index) {
-        return FED[index] != null && feeds(FED[index]);
+        open = running = pinpoint = expansionHub = false;
     }
 
     public static boolean isOpen() {
@@ -215,22 +116,22 @@ public final class BlazeSession {
         return running;
     }
 
-    public static BlazePinpointLocalizer pinpoint() {
-        return pinpoint;
+    //Blaze runs follower.update() and the drive, so the loop mustn't
+    public static boolean drives() {
+        return running && pinpoint;
+    }
+
+    //Blaze fills the Expansion Hub's bulk data, so don't clear it
+    public static boolean feedsExpansionHub() {
+        return running && expansionHub;
     }
 
     public static String status() {
 
         if (!BlazeConstants.ENABLED) return "off (BlazeConstants.ENABLED)";
         if (!open) return "not started" + (fault.isEmpty() ? "" : ": " + fault);
-        String s = (running ? "running" : "ready") + ", bulk " + hubStatus("CH", 0) + hubStatus("EH", 1) + (pinpoint != null ? ", Pinpoint " + (pinpoint.usingSdk ? "SDK" : "Blaze") : "");
+        String s = (running ? "running" : "ready") + ", drive updates " + driveUpdates + ", mechanism updates " + mechanismUpdates;
         return fault.isEmpty() ? s : s + " | " + fault;
-    }
-
-    private static String hubStatus(String name, int i) {
-
-        if (FED[i] == null) return "";
-        return name + (feeds(FED[i]) ? " live " : " STALE (normal reads) ");
     }
 
     private static void fail(String what, Throwable t) {

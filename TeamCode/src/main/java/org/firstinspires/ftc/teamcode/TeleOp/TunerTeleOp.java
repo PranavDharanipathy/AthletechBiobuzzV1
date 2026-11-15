@@ -105,18 +105,46 @@ public class TunerTeleOp extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
+        follower.update();
+    }
+
+    @Override
+    protected void mechanismUpdate() {
+
+        flywheel.update();
+        turret.update();
+        super.intake.update();
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
 
         controller1.getInformation();
         controller2.getInformation();
 
+        shooter.mechanismsElsewhere = intake.motorElsewhere = !mechanismsInLoop();
         blocker.update();
-        follower.update();
+        updateFollower();
         intake.update();
         shooter.update();
-        drivetrain.update();
+        runDrive(drivetrain);
 
         log();
 

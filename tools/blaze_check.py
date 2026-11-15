@@ -4,7 +4,7 @@
   python -I tools/blaze_check.py [RUN] [--base RUN]
 
 RUN defaults to the newest run, --base to the newest earlier run of a TeleOp with BlazeConstants.ENABLED false.
-Covers: Blaze's hub and Pinpoint feeds, faults, loop times, command-to-motion lag (turret, drive), pose resets and
+Covers: how often Blaze ran the drive (each Pinpoint sample) and the shooter motors (each Expansion Hub read), faults, loop times, command-to-motion lag (turret, drive), pose resets and
 jumps, turret hold and tracking, intake, and a verdict.
 """
 import argparse
@@ -96,7 +96,7 @@ def report(r):
     t = r.t
     dt = np.diff(t)
     dur = t[-1] - t[0] if len(t) > 1 else 0
-    print('=== %s  (%.0f s, %d loops, Blaze %s, motor accel %s, Pinpoint accel %s)' % (r.name, dur, len(t), r.blaze(), r.meta.get('BlazeConstants.MOTOR_ACCELERATION'), r.meta.get('BlazeConstants.PINPOINT_ACCELERATION')))
+    print('=== %s  (%.0f s, %d loops, Blaze %s, motor accel %s)' % (r.name, dur, len(t), r.blaze(), r.meta.get('BlazeConstants.MOTOR_ACCELERATION')))
 
     lm = r.c('loop.loop_ms')
     out['loop50'], out['loop95'] = q(lm, 50), q(lm, 95)
@@ -105,25 +105,25 @@ def report(r):
     if r.has('blaze.open'):
         print('-- Blaze')
         print('open %.0f%% of loops, running %.0f%%' % (100 * np.nanmean(r.c('blaze.open')), 100 * np.nanmean(r.c('blaze.running'))))
-        for hub, key in (('Control Hub', 'ch'), ('Expansion Hub', 'eh')):
-            age = r.c('blaze.%s_age_ms' % key)
-            live = r.c('blaze.%s_live' % key)
-            upd = r.c('blaze.%s_updates' % key)
-            if not np.isfinite(age).any():
-                print('%-13s not fed by Blaze' % hub)
+        # the callbacks: drive on each Pinpoint sample, flywheel/turret/intake on each Expansion Hub bulk read
+        for name, key, flag in (('drive', 'drive_updates', 'drives'), ('mechanisms', 'mechanism_updates', 'feeds_eh')):
+            if not r.has('blaze.' + key):
+                print('%-11s not recorded (older run)' % name)
                 continue
-            rate = (upd[-1] - upd[np.isfinite(upd)][0]) / dur if dur else np.nan
-            out[key + '_stale'] = 1 - np.nanmean(live)
-            out[key + '_age95'] = q(age, 95)
-            print('%-13s updates %.0f Hz   age ms p50 %.1f p95 %.1f max %.0f   stale (normal reads) %.1f%% of loops' % (hub, rate, q(age, 50), q(age, 95), np.nanmax(age), 100 * out[key + '_stale']))
-        pa = r.c('pose.blaze_age_ms')
-        if np.isfinite(pa).any():
-            sdk = r.c('pose.blaze_sdk')
-            pu = r.c('blaze.pinpoint_updates')
-            out['pp_age95'], out['pp_sdk'] = q(pa, 95), np.nanmean(sdk)
-            print('Pinpoint      samples %.0f Hz   age ms p50 %.1f p95 %.1f max %.0f   SDK fallback %.1f%% of loops' % ((pu[-1] - pu[np.isfinite(pu)][0]) / dur, q(pa, 50), q(pa, 95), np.nanmax(pa), 100 * out['pp_sdk']))
-        else:
-            print('Pinpoint      not fed by Blaze')
+            on = r.c('blaze.' + flag)
+            upd = r.c('blaze.' + key)
+            live = on > 0.5
+            if not live.any():
+                print('%-11s never hooked' % name)
+                out[key + '_hz'] = 0.0
+                continue
+            span = t[live][-1] - t[live][0]
+            hz = (upd[live][-1] - upd[live][0]) / span if span > 0 else np.nan
+            # longest stretch of loops with no callback between them
+            gaps = np.diff(t[live])[np.diff(upd[live]) == 0]
+            out[key + '_hz'] = hz
+            out[key + '_gap'] = float(gaps.sum()) if len(gaps) else 0.0
+            print('%-11s %.0f Hz over %.0f s   loops with no callback in between: %.1f s in all' % (name, hz, span, out[key + '_gap']))
         faults = [e for e in r.events if e[1] == 'blaze' and not e[2].endswith('=')]
         out['faults'] = len(faults)
         for e in faults:
@@ -222,13 +222,11 @@ def main():
     bad = []
     if R.get('faults'):
         bad.append('Blaze reported %d faults' % R['faults'])
-    for k, name in (('ch', 'Control Hub'), ('eh', 'Expansion Hub')):
-        if R.get(k + '_stale', 0) > 0.05:
-            bad.append('%s data stale %.0f%% of loops' % (name, 100 * R[k + '_stale']))
-    if R.get('pp_sdk', 0) > 0.1:
-        bad.append('Pinpoint fell back to the SDK %.0f%% of loops' % (100 * R['pp_sdk']))
-    if R.get('pp_age95', 0) > 50:
-        bad.append('Pinpoint sample p95 %.0f ms old' % R['pp_age95'])
+    for k, name, least in (('drive_updates', 'drive callbacks', 100), ('mechanism_updates', 'mechanism callbacks', 200)):
+        if k + '_hz' in R and R[k + '_hz'] < least:
+            bad.append('%s only %.0f Hz (Blaze should give %d+)' % (name, R[k + '_hz'], least))
+        if R.get(k + '_gap', 0) > 1:
+            bad.append('%s stopped for %.1f s in all' % (name, R[k + '_gap']))
     if R.get('pose_resets') and (not B or R['pose_resets'] > B.get('pose_resets', 0)):
         bad.append('pose reset to (0,0,0) %d times' % R['pose_resets'])
     elif R.get('pose_resets'):

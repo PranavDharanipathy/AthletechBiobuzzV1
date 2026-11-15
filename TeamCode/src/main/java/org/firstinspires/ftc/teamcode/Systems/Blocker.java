@@ -5,11 +5,13 @@ import com.qualcomm.robotcore.hardware.Servo;
 import org.firstinspires.ftc.teamcode.Constants.BlockerConstants;
 import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.FeedGate;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotGate;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
 import org.firstinspires.ftc.teamcode.Utility.BetterGamepad;
+import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Subsystem;
 
 public class Blocker extends Subsystem {
@@ -79,12 +81,16 @@ public class Blocker extends Subsystem {
 
     private Flywheel flywheel;
     private ShotGate shotGate;
+    public final FeedGate feedGate = new FeedGate();
+    public boolean feedGateOn = FlywheelConstants.FEED_GATE;
+    private FeedGate.Predictor predictor;
 
     public void provideComponents(Blocker blocker, BetterGamepad controller1, Flywheel flywheel) {
 
         provideComponents(blocker, controller1);
 
         this.flywheel = flywheel;
+        predictor = flywheel::predictVelocity;
 
         shotGate = new ShotGate(
                 FlywheelConstants.SHOT_GATE_ENTER_BAND_BELOW, FlywheelConstants.SHOT_GATE_ENTER_BAND_ABOVE,
@@ -122,7 +128,13 @@ public class Blocker extends Subsystem {
             flywheel.setFeeding(state == BlockerState.CLEAR);
         }
 
-        if (controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD)) {
+        boolean shoot = controller1.left_trigger(GeneralConstants.TRIGGER_THRESHOLD);
+        if (feedGateOn && flywheel != null) {
+            feedGate.commit = FlywheelConstants.FEED_GATE_COMMIT;
+            feedGate.early = FlywheelConstants.FEED_GATE_EARLY;
+            shoot = feedGate.update(Clock.seconds(), shoot, flywheel.getTargetVelocity(), predictor, flywheel.expectedContact, flywheel.firstContactSeconds, flywheel.ballIntervalSeconds, flywheel.windowBelow, flywheel.windowAbove);
+        }
+        if (shoot) {
             setState(BlockerState.CLEAR);
         }
         else {

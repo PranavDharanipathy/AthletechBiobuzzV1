@@ -13,6 +13,8 @@ import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
 import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
+import org.firstinspires.ftc.teamcode.Utility.Clock;
+import org.firstinspires.ftc.teamcode.Utility.Recording.Recorder;
 import org.firstinspires.ftc.teamcode.Utility.TemporalLog.TemporalLog;
 
 import java.io.File;
@@ -21,6 +23,7 @@ import java.io.File;
 public class TemporalLogRedTeleOp extends RedTeleOp {
 
     private File dir;
+    private double nextSyncMark = Double.NEGATIVE_INFINITY;
 
     @Override
     public void init() {
@@ -54,6 +57,13 @@ public class TemporalLogRedTeleOp extends RedTeleOp {
 
         TemporalLog.beginLoop();
         super.loop();
+        //same instant in both logs: lines this log up with the robot log, and through it with a video (tools/shot_video.py link)
+        double clock = Clock.seconds();
+        if (clock >= nextSyncMark) {
+            TemporalLog.mark("sync", clock);
+            Recorder.note("sync", "temporal log", clock);
+            nextSyncMark = clock + 10;
+        }
         TemporalLog.endLoop();
     }
 

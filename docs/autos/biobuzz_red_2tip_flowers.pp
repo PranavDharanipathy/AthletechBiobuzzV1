@@ -18,8 +18,8 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 19.47,
-        "y": 47
+        "x": 20.47,
+        "y": 48
       },
       "controlPoints": [
         {
@@ -49,7 +49,7 @@
       "kind": "atomic",
       "endPoint": {
         "x": 12.49,
-        "y": 47
+        "y": 48
       },
       "controlPoints": [],
       "heading": {
@@ -69,8 +69,8 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 19.47,
-        "y": 47
+        "x": 20.47,
+        "y": 48
       },
       "controlPoints": [],
       "heading": {
@@ -90,7 +90,7 @@
       "waitAfterName": "Dropdown down",
       "kind": "atomic",
       "endPoint": {
-        "x": 46.75,
+        "x": 48.75,
         "y": 122.03
       },
       "controlPoints": [
@@ -120,7 +120,7 @@
       "waitAfterName": "Shoot alliance FLOWER POLLEN: TIP 2 (CLOSE cell)",
       "kind": "atomic",
       "endPoint": {
-        "x": 46.75,
+        "x": 48.75,
         "y": 124.51
       },
       "controlPoints": [],
@@ -141,7 +141,7 @@
       "waitAfterName": "Sit in the FLOWER shooting every ball",
       "kind": "atomic",
       "endPoint": {
-        "x": 46.75,
+        "x": 48.75,
         "y": 131.01
       },
       "controlPoints": [],
@@ -162,7 +162,7 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 46.75,
+        "x": 48.75,
         "y": 122.03
       },
       "controlPoints": [],

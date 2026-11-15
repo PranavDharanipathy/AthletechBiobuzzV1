@@ -46,14 +46,39 @@ public class BlueTeleOp extends TeleOpBaseOpMode {
 
         clearCacheOfLynxModule();
 
-        controller1.getInformation();
-        controller2.getInformation();
+        synchronized (lock) {
+            controller1.getInformation();
+            controller2.getInformation();
+            shooter.mechanismsElsewhere = intake.motorElsewhere = !mechanismsInLoop();
 
-        blocker.update();
+            blocker.update();
+            updateFollower();
+            intake.update();
+            shooter.update();
+            runDrive(drivetrain);
+        }
+    }
+
+    @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    //each Pinpoint sample
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
         follower.update();
-        intake.update();
-        shooter.update();
-        drivetrain.update();
+    }
 
+    //each Expansion Hub bulk read: the flywheel, the turret's encoder and the intake are on it
+    @Override
+    protected void mechanismUpdate() {
+
+        if (!shooter.mechanismsElsewhere) return;
+        flywheel.update();
+        turret.update();
+        super.intake.update();
     }
 }

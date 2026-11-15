@@ -8,6 +8,7 @@ import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 
 import dev.nextftc.robot.Mechanism;
@@ -39,12 +40,25 @@ public final class Shooter implements Mechanism {
     @Override
     public void periodic() {
 
-        if (started) shooter.updateAutonomous(rampUp, aim);
-        else if (locked) {
-            turret.setPosition(turret.startPosition);
-            turret.setTargetVelocity(0);
+        synchronized (BlazeSession.LOCK) {
+            shooter.mechanismsElsewhere = BlazeSession.feedsExpansionHub();
+            if (started) shooter.updateAutonomous(rampUp, aim);
+            else if (locked) {
+                turret.setPosition(turret.startPosition);
+                turret.setTargetVelocity(0);
+                if (!shooter.mechanismsElsewhere) turret.update();
+            }
+        }
+    }
+
+    //Blaze: the flywheel and turret loops on each Expansion Hub read
+    public void control() {
+
+        if (started) {
+            flywheel.update();
             turret.update();
         }
+        else if (locked) turret.update();
     }
 
     public void setRampUp(boolean rampUp) {
@@ -79,8 +93,10 @@ public final class Shooter implements Mechanism {
 
     public void stopNow() {
 
-        started = rampUp = locked = false;
-        flywheel.reset();
-        turret.setVolts(0, 0);
+        synchronized (BlazeSession.LOCK) {
+            started = rampUp = locked = false;
+            flywheel.reset();
+            turret.setVolts(0, 0);
+        }
     }
 }

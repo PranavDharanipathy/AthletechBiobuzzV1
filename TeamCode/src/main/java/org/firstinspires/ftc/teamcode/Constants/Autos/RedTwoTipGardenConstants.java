@@ -11,18 +11,19 @@ public final class RedTwoTipGardenConstants {
     //both FLOWERS on our half. At each: stop at the stage (far enough out that the dropdown swinging down, 13.77 in ahead of the drive
     //center mid-swing, misses the FLOWER), drop it, creep in until its roller (12.19 in ahead when down) touches, take the POLLEN, back
     //out to the stage, raise it
-    //Red Alliance FLOWER (red wall, face x 3.8, y 47): stage 3.8 + 13.77 + 1.9, touch 3.8 + 12.19 - 3.5
+    //Red Alliance FLOWER (red wall, face x 3.8, y 47): stage 3.8 + 13.77 + 2.9 (it grazed the FLOWER with 1.9), touch 3.8 + 12.19 - 3.5;
+    //y 48: it sat too far right from the drivers' side (+y is their left)
     public static double[] ALLIANCE_FLOWER_CONTROLS = {48, 24, 24, 40};
-    public static double[] ALLIANCE_FLOWER_STAGE = {19.47, 47, 180};
-    public static double[] ALLIANCE_FLOWER_TOUCH = {12.49, 47, 180};
+    public static double[] ALLIANCE_FLOWER_STAGE = {20.47, 48, 180};
+    public static double[] ALLIANCE_FLOWER_TOUCH = {12.49, 48, 180};
     //tip 2 is shot at this FLOWER: dropdown down at the stage, in to the shot pose (closer to the FLOWER, farther from the goal) to shoot
     //what the alliance FLOWER gave, then sitting in it every ball as it comes in
     //Scoring-Side FLOWER (far wall, face y 137.7, x 46.75): stage 137.7 - 13.77 - 1.9, touch 137.7 - 12.19 + 5.5,
-    //shot 137.7 - 12.19 - 1 (roller 1 in short of the face, dropdown already down)
+    //shot 137.7 - 12.19 - 1 (roller 1 in short of the face, dropdown already down); x 46.75 + 2: the FLOWER 2 in left of the robot's center
     public static double[] SIDE_FLOWER_CONTROLS = {24, 116, 40, 108};
-    public static double[] SIDE_FLOWER_STAGE = {46.75, 122.03, 90};
-    public static double[] SIDE_FLOWER_SHOT = {46.75, 124.51, 90};
-    public static double[] SIDE_FLOWER_TOUCH = {46.75, 131.01, 90};
+    public static double[] SIDE_FLOWER_STAGE = {48.75, 122.03, 90};
+    public static double[] SIDE_FLOWER_SHOT = {48.75, 124.51, 90};
+    public static double[] SIDE_FLOWER_TOUCH = {48.75, 131.01, 90};
     public static double[] PARK_CONTROLS = {16, 108, 32, 116};
     public static double[] PARK = {15, 108, 0};
 

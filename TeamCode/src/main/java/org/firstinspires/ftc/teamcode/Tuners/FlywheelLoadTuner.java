@@ -79,7 +79,33 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
+        follower.update();
+    }
+
+    @Override
+    protected void mechanismUpdate() {
+
+        flywheel.update();
+        super.intake.update();
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
 
@@ -99,11 +125,12 @@ public class FlywheelLoadTuner extends TeleOpBaseOpMode {
 
         flywheel.setVelocity(TARGET_VELOCITY, true);
 
+        intake.motorElsewhere = !mechanismsInLoop();
         blocker.update();
-        follower.update();
+        updateFollower();
         intake.update();
-        flywheel.update();
-        drivetrain.update();
+        if (mechanismsInLoop()) flywheel.update();
+        runDrive(drivetrain);
 
         if (!finished) {
             record();

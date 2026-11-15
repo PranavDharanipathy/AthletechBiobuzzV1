@@ -60,7 +60,7 @@ public class HyperTuningTest {
 
         FlywheelPIDVSCoefficients c = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
         FlywheelPIDVSCoefficients copy = new FlywheelPIDVSCoefficients(c.kpFar, c.kpClose, c.kiFar, c.kiClose, c.kd, c.kv, c.ks, c.ksSignWidth, c.iSwitch, c.pSwitch, c.kISmash, c.minP, c.maxP, c.minI, c.maxI, c.minD, c.maxD);
-        return new FlywheelHyperTuner(copy, 0, 0, 0.08, 0, 0.04);
+        return new FlywheelHyperTuner(copy, 0.35, 0.035, 165, 0.0005);
     }
 
     static double burstCost(double dip) {
@@ -177,18 +177,64 @@ public class HyperTuningTest {
         assertTrue("balls " + h.balls + " bursts " + h.bursts, Math.abs(h.balls - 64) <= 6 && h.bursts > 25);
     }
 
+    //the battery running down makes every later sample cheaper (or dearer): judged against an old baseline that drift looks like a
+    //better knob; paired trials see the same drift on both halves
+    @Test
+    public void pairedTrialsDoNotKeepDrift() {
+
+        int paired = driftKeeps(true), plain = driftKeeps(false);
+        assertTrue("paired kept " + paired + ", plain " + plain, paired <= 2 && plain > paired + 3);
+    }
+
+    static int driftKeeps(boolean paired) {
+
+        Random rnd = new Random(7);
+        OnlineTuner t = new OnlineTuner("drift", 2, new OnlineTuner.Knob("a", 1, 0, 2, 0.2, 0.01), new OnlineTuner.Knob("b", 1, 0, 2, 0.2, 0.01));
+        t.paired = paired;
+        for (int k = 0; k < 400; k++) t.submit(20 - 0.03 * k + 0.3 * rnd.nextGaussian());
+        return t.keeps;
+    }
+
+    //balls the observer saw: one at the edge of its window costs far more than a centered one, and one past it is counted
+    @Test
+    public void flywheelTunerScoresContactsAgainstTheirWindows() {
+
+        double centered = contactCost(5), edge = contactCost(-55);
+        assertTrue("centered " + centered + " edge " + edge, edge > 5 * centered);
+        FlywheelHyperTuner h = tuner();
+        contactBurst(h, -80);
+        assertEquals(1, h.outside);
+    }
+
+    static double contactCost(double error) {
+
+        FlywheelHyperTuner h = tuner();
+        contactBurst(h, error);
+        assertEquals(1, h.bursts);
+        return h.lastShotCost;
+    }
+
+    static void contactBurst(FlywheelHyperTuner h, double error) {
+
+        for (double t = 0; t < 4; t += 0.02) {
+            boolean feeding = t > 1 && t < 1.4;
+            h.update(t, 1450, 1450, feeding);
+            if (Math.abs(t - 1.3) < 0.01) h.contact(error, 60, 40);
+        }
+    }
+
     @Test
     public void findingsCallOutAPinnedKnob() {
 
         FlywheelPIDVSCoefficients c = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
-        FlywheelHyperTuner f = new FlywheelHyperTuner(c, 0, 0, 0.08, 0, 0.04);
-        OnlineTuner.Knob boost = f.shots.knob("feed_boost_volts");
-        boost.value = boost.max;
-        boost.kept = 3;
-        boost.atBound = 2;
+        FlywheelHyperTuner f = new FlywheelHyperTuner(c, 0.35, 0.035, 165, 0.0005);
+        OnlineTuner.Knob lag = f.shots.knob("observer_lag");
+        lag.value = lag.max;
+        lag.kept = 3;
+        lag.atBound = 2;
         String md = Findings.markdown("test", 60, f, new TurretHyperTuner());
-        assertTrue(md, md.contains("feed_boost_volts wants past its top"));
-        assertTrue(md, md.contains("iterative learning control"));
+        assertTrue(md, md.contains("observer_lag wants past its top"));
+        assertTrue(md, md.contains("loop order"));
     }
 
     //a shaky hold costs more than a still one, shaking while a shot is fed costs more again, and moving aims are scored apart

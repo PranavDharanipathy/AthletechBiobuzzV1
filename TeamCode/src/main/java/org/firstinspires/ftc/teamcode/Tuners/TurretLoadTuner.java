@@ -86,7 +86,34 @@ public class TurretLoadTuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
+        follower.update();
+    }
+
+    @Override
+    protected void mechanismUpdate() {
+
+        flywheel.update();
+        turret.update();
+        super.intake.update();
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
 
@@ -111,12 +138,15 @@ public class TurretLoadTuner extends TeleOpBaseOpMode {
 
         flywheel.setVelocity(FLYWHEEL_VELOCITY, true);
 
+        intake.motorElsewhere = !mechanismsInLoop();
         blocker.update();
-        follower.update();
+        updateFollower();
         intake.update();
-        flywheel.update();
-        turret.update();
-        drivetrain.update();
+        if (mechanismsInLoop()) {
+            flywheel.update();
+            turret.update();
+        }
+        runDrive(drivetrain);
 
         if (now - lastVoltageRead >= VOLTAGE_READ_PERIOD) {
             lastVoltageRead = now;

@@ -45,13 +45,19 @@ public class TurretManualTuner extends OpMode {
     public void init() {
 
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
+        //before any hardware
         BlazeSession.begin(hardwareMap);
         turret = new TurretBase(hardwareMap);
         flywheel = new Flywheel(new MonitoredDcMotorEx(hardwareMap, DeviceConstants.flywheelMotorDeviceName, false));
         flywheel.initVoltageSensor(hardwareMap);
         flywheel.setVelocityPIDVSCoefficients(FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS);
         controller1 = new BetterGamepad(gamepad1);
-        BlazeSession.engage(hardwareMap, null);
+        //Blaze: the turret and flywheel loops on each Expansion Hub read
+        BlazeSession.mechanisms(hardwareMap, () -> {
+
+            flywheel.update();
+            turret.update();
+        });
         TARGET_DEGREES = 0;
         telemetry.addLine("Turret must point straight when you INIT. dpad left/right = step, dpad down = center, A = sine on/off, B = flywheel on/off.");
         telemetry.addLine("Edit TurretConstants on the dashboard, it applies live.");
@@ -61,14 +67,25 @@ public class TurretManualTuner extends OpMode {
 
     @Override
     public void start() {
+
         sineStart = time;
+        BlazeSession.run();
     }
 
     @Override
     public void loop() {
 
-        BlazeSession.tick();
         HardwareMonitor.get().update();
+        synchronized (BlazeSession.LOCK) {
+            step();
+        }
+        //outside the lock, or Blaze's callbacks wait it out
+        if (LOOP_TIME > 0) sleep(LOOP_TIME);
+    }
+
+    private void step() {
+
+        boolean inLoop = !BlazeSession.feedsExpansionHub();
         controller1.getInformation();
 
         if (controller1.dpad_rightHasJustBeenPressed) TARGET_DEGREES += STEP_DEGREES;
@@ -76,7 +93,7 @@ public class TurretManualTuner extends OpMode {
         if (controller1.dpad_downHasJustBeenPressed) TARGET_DEGREES = 0;
         if (controller1.bHasJustBeenPressed) flywheelOn = !flywheelOn;
         flywheel.setVelocity(flywheelOn ? FLYWHEEL_VELOCITY : 0, !flywheelOn);
-        flywheel.update();
+        if (inLoop) flywheel.update();
         if (controller1.aHasJustBeenPressed) {
             SINE = !SINE;
             sineStart = time;
@@ -94,7 +111,7 @@ public class TurretManualTuner extends OpMode {
         turret.setVoltageCompensation(VOLTAGE_COMPENSATION);
         turret.setPosition(turret.startPosition + degrees * tpd);
         turret.setTargetVelocity(degreesPerSecond * tpd);
-        turret.update();
+        if (inLoop) turret.update();
 
         TurretController c = turret.getController();
         telemetry.addData("target (deg)", degrees);
@@ -113,16 +130,14 @@ public class TurretManualTuner extends OpMode {
         telemetry.addData("dividing by (V)", "%.2f", turret.getCompensationVolts());
         telemetry.addData("loop (ms)", "%.1f", 1000 * turret.getLoopDt());
         telemetry.update();
-
-        if (LOOP_TIME > 0) sleep(LOOP_TIME);
     }
 
     @Override
     public void stop() {
 
+        BlazeSession.end();
         turret.setVolts(0, 0);
         flywheel.setVelocity(0, true);
         flywheel.update();
-        BlazeSession.end();
     }
 }

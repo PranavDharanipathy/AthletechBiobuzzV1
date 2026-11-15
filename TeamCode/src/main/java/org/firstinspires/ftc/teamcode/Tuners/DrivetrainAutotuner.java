@@ -8,6 +8,7 @@ import org.firstinspires.ftc.robotcore.internal.system.AppUtil;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Drivetrain.DriveController;
 import org.firstinspires.ftc.teamcode.TeleOp.TeleOpBaseOpMode;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredVoltageSensor;
 import org.firstinspires.ftc.teamcode.Utility.VoltageCompensator;
@@ -63,27 +64,57 @@ public class DrivetrainAutotuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    //with Blaze the engine runs on each Pinpoint sample, and its powers go out through the follower (Blaze writes those)
+    @Override
+    protected void driveUpdate() {
+
+        stepDrive(true);
+        follower.update();
+    }
+
+    private void stepDrive(boolean throughFollower) {
+
+        if (started) {
+            Pose pose = follower.pose();
+            Velocity velocity = follower.velocity();
+            engine.update(Clock.seconds(), pose.x(), pose.y(), pose.heading(), velocity.vx, velocity.vy, velocity.omega, voltage.volts());
+        }
+        double[] u = started ? engine.getPower() : idle;
+        DriveController.wheels(u[0], u[1], u[2], wheels);
+        if (throughFollower) {
+            follower.manual(u[0], u[1], u[2]);
+            return;
+        }
+        left_front.setPower(wheels[0]);
+        right_front.setPower(wheels[1]);
+        left_back.setPower(wheels[2]);
+        right_back.setPower(wheels[3]);
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
         controller1.getInformation();
-        follower.update();
+        boolean blaze = BlazeSession.drives();
+        if (!blaze) follower.update();
         double now = Clock.seconds();
         if (voltage.shouldSample(now)) voltage.addSample(battery.getVoltage(), now);
         if (!started && controller1.aHasJustBeenPressed) started = true;
         boolean sticks = Math.abs(controller1.left_stick_x()) > 0.3 || Math.abs(controller1.left_stick_y()) > 0.3 || Math.abs(controller1.right_stick_x()) > 0.3;
         if (started && !engine.isDone() && !engine.isFaulted() && (sticks || controller1.b())) engine.stop("stopped by the driver");
-        if (started) {
-            Pose pose = follower.pose();
-            Velocity velocity = follower.velocity();
-            engine.update(now, pose.x(), pose.y(), pose.heading(), velocity.vx, velocity.vy, velocity.omega, voltage.volts());
-        }
-        double[] u = started ? engine.getPower() : idle;
-        DriveController.wheels(u[0], u[1], u[2], wheels);
-        left_front.setPower(wheels[0]);
-        right_front.setPower(wheels[1]);
-        left_back.setPower(wheels[2]);
-        right_back.setPower(wheels[3]);
+        if (!blaze) stepDrive(false);
         if ((engine.isDone() || engine.isFaulted()) && !saved) save();
 
         telemetry.addLine("DRIVETRAIN AUTOTUNER");

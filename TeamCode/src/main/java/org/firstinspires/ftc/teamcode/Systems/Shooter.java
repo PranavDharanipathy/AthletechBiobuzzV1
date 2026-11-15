@@ -4,6 +4,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 
+import org.firstinspires.ftc.teamcode.Constants.FlywheelConstants;
 import org.firstinspires.ftc.teamcode.Constants.GeneralConstants;
 import org.firstinspires.ftc.teamcode.Constants.ShooterConstants;
 import org.firstinspires.ftc.teamcode.Constants.TurretConstants;
@@ -11,6 +12,7 @@ import org.firstinspires.ftc.teamcode.Field.Garden;
 import org.firstinspires.ftc.teamcode.Field.Goal;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.Alliance;
 import org.firstinspires.ftc.teamcode.Systems.Alliance.AllianceState;
+import org.firstinspires.ftc.teamcode.Systems.Flywheel.CellGeometry;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelVelocityModel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.ShotSolver;
@@ -94,6 +96,8 @@ public class Shooter extends Subsystem {
 
     public double flywheelTargetVelocity;
     public double manualFlywheelVelocity = Double.NaN;
+    //added to the table's speed (the SHT's probes)
+    public double tableOffset;
     //a live tuner's TURRET_RATE_FEEDFORWARD_SCALE, NaN = the constant
     public double turretRateScale = Double.NaN;
 
@@ -167,8 +171,9 @@ public class Shooter extends Subsystem {
         }
         else shotDistance = Double.NaN;
         double fitted = goalSet && ShooterConstants.FLYWHEEL_DISTANCE_FIT ? getFlywheelTargetVelocityFromInterpolation(shotDistance) : Double.NaN;
-        flywheelTargetVelocity = fitted == fitted ? fitted : ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
+        flywheelTargetVelocity = fitted == fitted ? fitted + tableOffset : ShooterConstants.FLYWHEEL_DEFAULT_SHOOT_VELOCITY;
         if (manualFlywheelVelocity == manualFlywheelVelocity) flywheelTargetVelocity = manualFlywheelVelocity;
+        shotWindow(goalSet);
 
         double gx = goalSet ? goalCoordinate.x() - turretPose.x() : 0;
         double gy = goalSet ? goalCoordinate.y() - turretPose.y() : 0;
@@ -221,8 +226,26 @@ public class Shooter extends Subsystem {
         turret.setPosition(turretAimPosition);
         turret.setTargetVelocity(turretAimVelocity);
 
-        flywheel.update();
-        turret.update();
+        //with Blaze they run on each Expansion Hub bulk read instead
+        if (!mechanismsElsewhere) {
+            flywheel.update();
+            turret.update();
+        }
+    }
+
+    public boolean mechanismsElsewhere;
+
+    public final CellGeometry cell = new CellGeometry();
+
+    //how far under / over the target still goes in from here, for the feed gate and the logs
+    private void shotWindow(boolean goalSet) {
+
+        double exit = CellGeometry.aimZ() - ShooterConstants.SHOT_RISE_INCHES;
+        boolean in = goalSet && cell.update(goalCoordinate.x(), goalCoordinate.y(), closeCell, turretPose.x(), turretPose.y(), exit, ShooterConstants.SHOT_LAUNCH_ANGLE_DEGREES);
+        double scale = FlywheelConstants.FEED_GATE_WINDOW_SCALE * flywheelTargetVelocity;
+        double min = FlywheelConstants.FEED_GATE_MIN_BAND, max = FlywheelConstants.FEED_GATE_MAX_BAND;
+        flywheel.windowBelow = in ? MathUtil.clamp(scale * cell.slow, min, max) : FlywheelConstants.FEED_GATE_DEFAULT_BELOW;
+        flywheel.windowAbove = in ? MathUtil.clamp(scale * cell.fast, min, max) : FlywheelConstants.FEED_GATE_DEFAULT_ABOVE;
     }
 
     private static final FlywheelVelocityModel FLYWHEEL_MODEL = new FlywheelVelocityModel();

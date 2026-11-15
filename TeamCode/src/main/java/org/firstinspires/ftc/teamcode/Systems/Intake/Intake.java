@@ -109,6 +109,9 @@ public class Intake extends Subsystem {
             arm.setState(controller1.left_bumper() ? FIArm.FIArmState.DEPLOY : FIArm.FIArmState.RETRACT);
         }
 
-        ((GeneralVeloMotor) ((Intake) intake).getIntake()).update();
+        if (!motorElsewhere) ((GeneralVeloMotor) ((Intake) intake).getIntake()).update();
     }
+
+    //with Blaze its speed loop runs on each Expansion Hub bulk read instead
+    public boolean motorElsewhere;
 }

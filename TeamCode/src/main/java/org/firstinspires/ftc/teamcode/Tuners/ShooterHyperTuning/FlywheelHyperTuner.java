@@ -10,8 +10,11 @@ public class FlywheelHyperTuner {
     //a ball: speed falls minDip from where it was within lookBack and ends belowTarget under the target (overshoot settling never does)
     public double minDip = 40, belowTarget = 25, lookBack = 0.35, sameBall = 0.12, afterClose = 0.8, dipEndRise = 20, settleWindow = 0.6;
     public double recoveryWeight = 300, dipWeight = 0.5, settleWeight = 1, overshootWeight = 0.5, laterBallWeight = 0.5, targetStep = 10;
-    public double lastSteadyCost = Double.NaN, lastShotCost = Double.NaN, lastContactError = Double.NaN, lastRecovery = Double.NaN, lastOvershoot = Double.NaN;
-    public int bursts, balls, ballsInBurst;
+    //with the observer's contacts: each ball's error over its own window (1 = at the edge), the gate's holding, the overshoot after
+    public double windowWeight = 100, holdWeight = 50;
+    public double lastContactTime = Double.NaN, lastContactSpeed = Double.NaN, lastSteadyCost = Double.NaN, lastShotCost = Double.NaN, lastContactError = Double.NaN, lastRecovery = Double.NaN, lastOvershoot = Double.NaN;
+    public double lastWindowScore = Double.NaN, lastHeld = Double.NaN;
+    public int bursts, balls, ballsInBurst, contacts, outside, starvedBursts;
 
     private static final int HISTORY = 40;
     private final double[] historyTime = new double[HISTORY], historyVelocity = new double[HISTORY];
@@ -21,31 +24,58 @@ public class FlywheelHyperTuner {
     private boolean inBurst, inDip;
     private double feedEnd = Double.NaN, lastContact = -1e9, low, recoveredSince = Double.NaN, settleStart = Double.NaN, recovery;
     private double weightSum, errorSum, errorSq, dipSum, settleE2, settleN, overshoot;
+    private double windowSum, windowWeights, heldTotal, heldAtFinish;
+    private int contactsInBurst;
 
-    public FlywheelHyperTuner(FlywheelPIDVSCoefficients start, double feedBoostVolts, double shotKickVolts, double shotKickTime, double preKickVolts, double preKickLead) {
+    //most-telling first: a session only gets through a few trials per tuner. kp_close is a shots knob: ball dips (~100) stay under
+    //its switch (110), so it sets the recovery, and the balls also score the holding it does before the first one
+    public FlywheelHyperTuner(FlywheelPIDVSCoefficients start, double observerGain, double observerLag, double accelPerVolt, double observerLoadGain) {
 
-        stability = new OnlineTuner("flywheel stability", 2, new OnlineTuner.Knob("kp_close", start.kpClose, 0.2 * start.kpClose, 3 * start.kpClose, 0.15 * start.kpClose, 0.02 * start.kpClose), new OnlineTuner.Knob("kd", start.kd, 0, Math.max(5 * start.kd, 0.002), Math.max(0.3 * start.kd, 0.0002), 0.00002));
-        shots = new OnlineTuner("flywheel shots", 2, new OnlineTuner.Knob("feed_boost_volts", feedBoostVolts, 0, 3, 0.4, 0.05), new OnlineTuner.Knob("shot_kick_volts", shotKickVolts, 0, 6, 0.8, 0.1), new OnlineTuner.Knob("shot_kick_time", shotKickTime, 0.02, 0.3, 0.04, 0.01), new OnlineTuner.Knob("kp_far", start.kpFar, 0.3 * start.kpFar, 3 * start.kpFar, 0.2 * start.kpFar, 0.02 * start.kpFar), new OnlineTuner.Knob("max_p", start.maxP, 2, 12, 1, 0.25), new OnlineTuner.Knob("pre_kick_volts", preKickVolts, 0, 4, 0.5, 0.1), new OnlineTuner.Knob("pre_kick_lead", preKickLead, 0, 0.15, 0.03, 0.01));
+        stability = new OnlineTuner("flywheel stability", 2, new OnlineTuner.Knob("kd", start.kd, 0, Math.max(5 * start.kd, 0.002), Math.max(0.3 * start.kd, 0.0002), 0.00002), new OnlineTuner.Knob("observer_load_gain", observerLoadGain, 0, 0.003, 0.0003, 0.00005));
+        shots = new OnlineTuner("flywheel shots", 2, new OnlineTuner.Knob("kp_close", start.kpClose, 0.2 * start.kpClose, 3 * start.kpClose, 0.2 * start.kpClose, 0.02 * start.kpClose), new OnlineTuner.Knob("accel_per_volt", accelPerVolt, 100, 260, 20, 5), new OnlineTuner.Knob("observer_lag", observerLag, 0, 0.08, 0.012, 0.003), new OnlineTuner.Knob("kp_far", start.kpFar, 0.3 * start.kpFar, 3 * start.kpFar, 0.2 * start.kpFar, 0.02 * start.kpFar), new OnlineTuner.Knob("observer_gain", observerGain, 0.1, 0.8, 0.1, 0.02), new OnlineTuner.Knob("max_p", start.maxP, 2, 12, 1, 0.25), new OnlineTuner.Knob("burst_lift", org.firstinspires.ftc.teamcode.Constants.FlywheelConstants.FLYWHEEL_BURST_LIFT_SHARE, 0, 0.7, 0.1, 0.02), new OnlineTuner.Knob("burst_feed", org.firstinspires.ftc.teamcode.Constants.FlywheelConstants.FLYWHEEL_BURST_FEED_SHARE, 0, 1.2, 0.2, 0.05));
     }
 
     public void apply(Flywheel flywheel, FlywheelPIDVSCoefficients coefficients) {
 
-        coefficients.kpClose = stability.value("kp_close");
+        coefficients.kpClose = shots.value("kp_close");
         coefficients.kpFar = shots.value("kp_far");
         flywheel.kd = stability.value("kd");
+        flywheel.observer.loadGain = stability.value("observer_load_gain");
         flywheel.maxP = shots.value("max_p");
-        flywheel.feedBoostVolts = shots.value("feed_boost_volts");
-        flywheel.shotKickVolts = shots.value("shot_kick_volts");
-        flywheel.shotKickTime = shots.value("shot_kick_time");
-        flywheel.preKickVolts = shots.value("pre_kick_volts");
-        flywheel.preKickLead = shots.value("pre_kick_lead");
+        flywheel.observer.accelPerVolt = shots.value("accel_per_volt");
+        flywheel.observer.lag = shots.value("observer_lag");
+        flywheel.observer.gain = shots.value("observer_gain");
+        flywheel.burstLiftShare = shots.value("burst_lift");
+        flywheel.burstFeedShare = shots.value("burst_feed");
     }
 
-    //velocity = the flywheel's filtered speed
+    //a ball the flywheel's observer saw hit: its speed - target, and the shot's window under / over the target
+    public void contact(double error, double below, double above) {
+
+        if (!inBurst || Double.isNaN(error)) return;
+        lastContactError = error;
+        contacts++;
+        contactsInBurst++;
+        double n = error / Math.max(1, error < 0 ? below : above), w = ballWeight(contactsInBurst);
+        if (Math.abs(n) > 1) outside++;
+        windowSum += w * n * n;
+        windowWeights += w;
+    }
+
+    //the feed gate's total time holding a ball back so far
+    public void held(double totalSeconds) {
+        heldTotal = totalSeconds;
+    }
+
     public boolean update(double now, double target, double velocity, boolean feeding) {
+        return update(now, target, velocity, velocity, feeding);
+    }
+
+    //velocity = what the controller uses, raw = the hub's reading (the steady score's truth, the same for every estimate)
+    public boolean update(double now, double target, double velocity, double raw, boolean feeding) {
 
         boolean finished = false;
-        double error = target - velocity;
+        double error = target - velocity, rawError = target - raw;
         if (Math.abs(target - lastTarget) > targetStep) resetSteady();
         lastTarget = target;
         if (feeding) lastFeedEnd = now;
@@ -54,7 +84,7 @@ public class FlywheelHyperTuner {
         if (target > 0 && !feeding && now - lastFeedEnd > quietAfterFeed && Math.abs(error) < steadyBand && !Double.isNaN(lastVelocity)) {
             if (Double.isNaN(steadyStart)) steadyStart = now;
             double jitter = velocity - lastVelocity;
-            sumE2 += error * error;
+            sumE2 += rawError * rawError;
             sumJ2 += jitter * jitter;
             steadyN++;
             if (now - steadyStart >= steadyWindow && steadyN > 10) {
@@ -121,6 +151,8 @@ public class FlywheelHyperTuner {
         ballsInBurst = 0;
         weightSum = errorSum = errorSq = dipSum = 0;
         settleE2 = settleN = overshoot = recovery = 0;
+        windowSum = windowWeights = 0;
+        contactsInBurst = 0;
         feedEnd = Double.NaN;
         settleStart = Double.NaN;
         recoveredSince = Double.NaN;
@@ -148,6 +180,8 @@ public class FlywheelHyperTuner {
         balls++;
         settleStart = Double.NaN;
         lastContact = topTime;
+        lastContactTime = topTime;
+        lastContactSpeed = top;
         double w = ballWeight(ballsInBurst), e = top - target;
         weightSum += w;
         errorSum += w * e;
@@ -159,16 +193,38 @@ public class FlywheelHyperTuner {
         return 1 + laterBallWeight * Math.max(0, ball - 1);
     }
 
+    //a trigger press the feed gate let no ball out of: as bad as a burst at the window's edge, plus the wait. Without it a knob
+    //value the gate won't feed is never judged and stays on
+    public boolean starved() {
+
+        if (inBurst) return false;
+        lastHeld = Math.max(0, heldTotal - heldAtFinish);
+        heldAtFinish = heldTotal;
+        lastWindowScore = 1;
+        lastShotCost = windowWeight + holdWeight * lastHeld;
+        bursts++;
+        starvedBursts++;
+        return shots.submit(lastShotCost);
+    }
+
     private boolean finishBurst() {
 
         inBurst = false;
-        if (ballsInBurst == 0) return false;
-        double mean = errorSum / weightSum, spread = Math.sqrt(Math.max(0, errorSq / weightSum - mean * mean));
+        if (ballsInBurst == 0 && contactsInBurst == 0) return false;
         double settle = settleN > 0 ? Math.sqrt(settleE2 / settleN) : 0;
-        lastContactError = mean;
         lastRecovery = recovery;
         lastOvershoot = overshoot;
-        lastShotCost = Math.abs(mean) + spread + dipWeight * dipSum / weightSum + recoveryWeight * recovery + settleWeight * settle + overshootWeight * Math.max(0, overshoot);
+        lastHeld = Math.max(0, heldTotal - heldAtFinish);
+        heldAtFinish = heldTotal;
+        if (contactsInBurst > 0) {
+            lastWindowScore = Math.sqrt(windowSum / windowWeights);
+            lastShotCost = windowWeight * lastWindowScore + holdWeight * lastHeld + overshootWeight * Math.max(0, overshoot);
+        }
+        else {
+            double mean = errorSum / weightSum, spread = Math.sqrt(Math.max(0, errorSq / weightSum - mean * mean));
+            lastContactError = mean;
+            lastShotCost = Math.abs(mean) + spread + dipWeight * dipSum / weightSum + recoveryWeight * recovery + settleWeight * settle + overshootWeight * Math.max(0, overshoot);
+        }
         bursts++;
         return shots.submit(lastShotCost);
     }

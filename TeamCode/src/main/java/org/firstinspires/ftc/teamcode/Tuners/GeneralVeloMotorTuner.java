@@ -36,9 +36,11 @@ public class GeneralVeloMotorTuner extends OpMode {
     @Override
     public void init() {
 
+        //before any hardware
         BlazeSession.begin(hardwareMap);
         motor = new GeneralVeloMotor(hardwareMap, motorName);
-        BlazeSession.engage(hardwareMap, null);
+        //Blaze: its loop on each Expansion Hub read
+        BlazeSession.mechanisms(hardwareMap, motor::update);
 
         telemetry = new MultipleTelemetry(super.telemetry, FtcDashboard.getInstance().getTelemetry());
 
@@ -46,16 +48,19 @@ public class GeneralVeloMotorTuner extends OpMode {
     }
 
     @Override
+    public void start() {
+        BlazeSession.run();
+    }
+
+    @Override
     public void loop() {
 
-        BlazeSession.tick();
-        motor.setDirection(DIRECTION);
-
-        motor.setVelocityPDFCoefficients(KP, KD, KFF);
-
-        motor.setVelocity(VELOCITY);
-
-        motor.update();
+        synchronized (BlazeSession.LOCK) {
+            motor.setDirection(DIRECTION);
+            motor.setVelocityPDFCoefficients(KP, KD, KFF);
+            motor.setVelocity(VELOCITY);
+            if (!BlazeSession.feedsExpansionHub()) motor.update();
+        }
 
         telemetry.addData("velocity", motor.getVelocity());
         telemetry.addData("power", motor.getPower());

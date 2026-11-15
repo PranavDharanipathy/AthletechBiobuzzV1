@@ -1,0 +1,52 @@
+{
+ "name": "sht-20280515",
+ "made": "2026-11-14T01:06:09",
+ "video": {
+  "path": "C:\\Users\\prana\\Downloads\\oldsht_video.MOV",
+  "width": 1920,
+  "height": 1080,
+  "rotation": -90,
+  "start_time": 0.0,
+  "duration": 581.913333,
+  "frames": 17450,
+  "fps_median": 30.0,
+  "frame_gap_ms": {
+   "min": 31.67,
+   "median": 33.33,
+   "max": 41.67
+  },
+  "variable_frame_rate": true,
+  "audio": true,
+  "created": "2026-11-14T06:29:26.000000Z",
+  "autorotate": false
+ },
+ "runs": [
+  {
+   "name": "20280515-002933-SHTStabilityTuner",
+   "folder": "C:\\Users\\prana\\StudioProjects\\AthletechBiobuzzV1\\tuning-data\\robot-logs\\20280515-002933-SHTStabilityTuner",
+   "opmode": "SHTStabilityTuner",
+   "started": "Mon May 15 00:29:33 CDT 2028",
+   "offset": 24.599999999999994,
+   "how": "anchor video 195.912 = log 171.312 (171.312)"
+  }
+ ],
+ "table": {
+  "distances": [
+   36.0,
+   42.0,
+   51.0,
+   53.0,
+   58.8
+  ],
+  "velocities": [
+   1450.0,
+   1450.0,
+   1460.0,
+   1485.0,
+   1520.0
+  ],
+  "degree": 1,
+  "miss_tolerance_inches": 4.0
+ },
+ "motion_roi": "0.585,0.50,0.68,0.67"
+}

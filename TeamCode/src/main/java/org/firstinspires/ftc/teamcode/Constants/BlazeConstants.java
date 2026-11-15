@@ -2,15 +2,11 @@ package org.firstinspires.ftc.teamcode.Constants;
 
 public class BlazeConstants {
 
-    //150-650 ms freezes about every second
+    //match TeleOps: drive on each Pinpoint sample, shooter motors on each Expansion Hub bulk read (Utility/Blaze/BlazeSession)
     public static boolean ENABLED = false;
-    //drive lag and the intake stopping; it also ignores RUN_USING_ENCODER and getPower() goes stale
+    //Blaze's own motor writes: the intake's PID sits on RUN_USING_ENCODER, which they skip (under half speed, 2028-05-12)
     public static boolean MOTOR_ACCELERATION = false;
-    public static boolean BULK_CONTROL_HUB = true, BULK_EXPANSION_HUB = true;
-
-    public static int CONTROL_HUB_PACKETS = 1;
-    public static boolean PINPOINT_ACCELERATION = true;
-    public static double PINPOINT_STALE_SECONDS = 0.1;
-    public static boolean PINPOINT_RAW_MM = true;
+    //1 = a read every ~2 ms, 2 = ~1 ms (the README says no higher)
+    public static int EXPANSION_HUB_PACKETS = 1;
 
 }

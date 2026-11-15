@@ -25,7 +25,7 @@ What each command does:
   timeout faults the auto.
 - **`robot.shoot(pose)`:** holds the pose and waits for the flywheel to be up to speed (within `FLYWHEEL_ERROR_TICKS_PER_SECOND`
   of its target, or feeds anyway after `SHOT_TIMEOUT_SECONDS`), then opens the blocker and runs the intake for
-  `SHOT_FEED_SECONDS` (2 s) in one go, stops the intake, keeps the blocker open `SHOT_SETTLE_SECONDS` (0.15 s) so the last ball
+  `SHOT_FEED_SECONDS` (4 s in Preload + Park, 2 s in 2 Tip Flowers) in one go, stops the intake, keeps the blocker open `SHOT_SETTLE_SECONDS` (0.15 s) so the last ball
   clears, then closes it before driving off. No per-ball gating.
 - **End of the routine:** everything stops, and the turret goes back home and holds there (TeleOp takes its INIT position as home).
 - **`drive.approach(path, still, stall, max)`:** for touching things: ends at the path end, when the robot has stopped (it touched),
@@ -68,11 +68,11 @@ Everything uses the turret's frame (`FieldConstants`): Pedro inches, (0, 0) in t
 | Preload (1 tip): to LZ controls | (23, 34), (23, 50); clears the HIVE by 3.9 in | (130, 104), (114, 92); 3.9 in either way it turns |
 | Park (LOADING ZONE) | (15, 108, 0°), red LZ x 0–11, y 96–120 | (129, 36, 180°), blue LZ x 133–144, y 24–48 |
 | 2 Tip Flowers start | (59.25, 9.72, 90°), back on the audience wall under the FAR CELL | (84.75, 134.28, −90°), back on the far wall over the CLOSE CELL |
-| 2 Tip Flowers: alliance FLOWER stage (dropdown goes down here) | Red Alliance FLOWER: (19.47, 47, 180°), controls (48, 24), (24, 40); face x 3.8 + swing 13.77 + 1.9 | Blue Alliance FLOWER: (122.03, 94.75, 0°), controls (100, 120), (108, 112); face x 137.7 − 13.77 − 1.9 |
-| 2 Tip Flowers: alliance FLOWER touch | (12.49, 47, 180°): face + roller reach 12.19 − 3.5 | (129.01, 94.75, 0°) |
-| 2 Tip Flowers: side FLOWER stage | Scoring-Side FLOWER: (46.75, 122.03, 90°), controls (24, 116), (40, 108) | Audience-Side FLOWER: (94.475, 19.47, −90°), controls (116, 16), (108, 48) |
-| 2 Tip Flowers: side FLOWER shot (dropdown already down) | (46.75, 124.51, 90°): roller 1 in short of the face | (94.475, 16.99, −90°) |
-| 2 Tip Flowers: side FLOWER touch (sits here shooting) | (46.75, 131.01, 90°): 5.5 in past the face | (94.475, 10.49, −90°) |
+| 2 Tip Flowers: alliance FLOWER stage (dropdown goes down here) | Red Alliance FLOWER: (20.47, 48, 180°), controls (48, 24), (24, 40); face x 3.8 + swing 13.77 + 2.9 (it grazed the FLOWER with 1.9); y 1 in to the drivers' left of the FLOWER (it sat too far right) | Blue Alliance FLOWER: (121.03, 93.75, 0°), controls (100, 120), (108, 112); face x 137.7 − 13.77 − 2.9 |
+| 2 Tip Flowers: alliance FLOWER touch | (12.49, 48, 180°): face + roller reach 12.19 − 3.5 | (129.01, 93.75, 0°) |
+| 2 Tip Flowers: side FLOWER stage | Scoring-Side FLOWER: (48.75, 122.03, 90°), controls (24, 116), (40, 108); x 2 in off the FLOWER so it's 2 in left of the robot's center | Audience-Side FLOWER: (92.475, 19.47, −90°), controls (116, 16), (108, 48) |
+| 2 Tip Flowers: side FLOWER shot (dropdown already down) | (48.75, 124.51, 90°): roller 1 in short of the face | (92.475, 16.99, −90°) |
+| 2 Tip Flowers: side FLOWER touch (sits here shooting) | (48.75, 131.01, 90°): 5.5 in past the face | (92.475, 10.49, −90°) |
 | 2 Tip Flowers: back out to each stage, then to LZ controls | (16, 108), (32, 116) | (112, 26), (104, 26) |
 | Dropdown (Onshape Main, 2026-11-12) | deployed roller front 12.19 in ahead of the drive center, 2.46 in past the bash bar (9.73), 13.7 in wide, 0.4–1.2 in off the floor; pivot 6.07 in ahead, arm 7.70 in, so it sweeps out to 13.77 in while dropping | |
 
@@ -94,6 +94,6 @@ The robot outline (front 9.72 in, side 7.64 in) was checked along every path aga
 - Does the dropdown roller take the FLOWER's POLLEN at the touch pose, and does it stop gently (no bending)? If it stops short, move `FLOWER_TOUCH` 0.5 in at a time toward the FLOWER (red: y up, blue: y down); if it pushes, raise `FLOWER_STILL_INCHES_PER_SECOND` so it stalls out sooner.
 - Does the dropdown clear each FLOWER as it swings down at the stage (1.9 in to spare)?
 - Does one 4-POLLEN volley tip the CELL?
-- Is `SHOT_FEED_SECONDS` (2 s) long enough to empty 4, and does the last ball clear before the blocker shuts (`SHOT_SETTLE_SECONDS`)?
+- Is `SHOT_FEED_SECONDS` (4 s Preload + Park, 2 s 2 Tip Flowers) long enough to empty 4, and does the last ball clear before the blocker shuts (`SHOT_SETTLE_SECONDS`)?
 - Turret straight at INIT, as for every shooting OpMode.
 - Not yet run on the robot.

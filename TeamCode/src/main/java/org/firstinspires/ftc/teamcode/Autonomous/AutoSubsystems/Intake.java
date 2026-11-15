@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.Constants.DeviceConstants;
 import org.firstinspires.ftc.teamcode.Constants.IntakeConstants;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 
@@ -26,12 +27,19 @@ public final class Intake implements Mechanism {
     @Override
     public void periodic() {
 
-        if (velocity == 0) {
-            motor.getMotor().setPower(0);
-            return;
+        synchronized (BlazeSession.LOCK) {
+            if (velocity == 0) {
+                motor.getMotor().setPower(0);
+                return;
+            }
+            motor.setVelocity(velocity);
+            if (!BlazeSession.feedsExpansionHub()) motor.update();
         }
-        motor.setVelocity(velocity);
-        motor.update();
+    }
+
+    //Blaze: its speed loop on each Expansion Hub read
+    public void control() {
+        if (velocity != 0) motor.update();
     }
 
     public void setVelocity(double velocity) {
@@ -48,7 +56,9 @@ public final class Intake implements Mechanism {
 
     public void stopNow() {
 
-        velocity = 0;
-        motor.getMotor().setPower(0);
+        synchronized (BlazeSession.LOCK) {
+            velocity = 0;
+            motor.getMotor().setPower(0);
+        }
     }
 }

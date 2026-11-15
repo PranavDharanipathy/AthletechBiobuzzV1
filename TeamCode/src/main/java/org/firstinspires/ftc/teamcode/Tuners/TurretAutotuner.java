@@ -40,7 +40,7 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     private String lastStage = "";
     private int stageNumber = 0;
     private boolean saved = false, stopped = false;
-    private double startTime;
+    private double startTime, volts;
     private Telemetry telemetry;
 
     @Override
@@ -81,18 +81,42 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    //with Blaze the engine runs on each Expansion Hub read, where the turret's encoder is
+    @Override
+    protected void mechanismUpdate() {
+        if (engine != null) stepTurret();
+    }
+
+    private void stepTurret() {
+
+        turret.readSensors();
+        double now = System.nanoTime() * 1e-9 - startTime;
+        if (!stopped) engine.update(now, turret.getPosition() - turret.startPosition);
+        volts = stopped ? 0 : engine.getVolts();
+        turret.setVolts(volts, volts);
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
         controller1.getInformation();
         //B after the step moves keeps what's tuned; before that, nothing is used
         if (controller1.bHasJustBeenPressed && engine != null && !engine.keepEarly()) stopped = true;
 
-        turret.readSensors();
+        if (mechanismsInLoop()) stepTurret();
         double now = System.nanoTime() * 1e-9 - startTime;
-        if (!stopped) engine.update(now, turret.getPosition() - turret.startPosition);
-        double volts = stopped ? 0 : engine.getVolts();
-        turret.setVolts(volts, volts);
 
         left_front.setPower(0);
         right_front.setPower(0);
@@ -113,6 +137,8 @@ public class TurretAutotuner extends TeleOpBaseOpMode {
     @Override
     public void stop() {
 
+        //Blaze's callback writes 0 from here on too
+        stopped = true;
         if (engine != null && !saved) save();
         if (logger != null) logger.close();
         turret.setVolts(0, 0);

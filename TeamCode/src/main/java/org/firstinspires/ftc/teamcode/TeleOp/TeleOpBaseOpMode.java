@@ -69,6 +69,38 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
     protected final TickRateChecker tickRate = new TickRateChecker();
 
+    protected final Object lock = BlazeSession.LOCK;
+
+    //an OpMode that returns true gets Blaze: driveUpdate runs on each Pinpoint sample (and must call follower.update()),
+    //mechanismUpdate on each Expansion Hub bulk read (flywheel, turret encoder, intake); the loop keeps buttons, aim, telemetry
+    protected boolean usesBlaze() {
+        return false;
+    }
+
+    protected void driveUpdate() {
+        follower.update();
+    }
+
+    protected void mechanismUpdate() {}
+
+    //with Blaze, follower.update() is driveUpdate's (each Pinpoint sample)
+    protected void updateFollower() {
+        if (!BlazeSession.drives()) follower.update();
+    }
+
+    //the loop's drive: with Blaze it only takes the drive's buttons, driveUpdate drives on each Pinpoint sample
+    protected void runDrive(Drivetrain drivetrain) {
+
+        drivetrain.throughFollower = BlazeSession.drives();
+        if (drivetrain.throughFollower) drivetrain.readButtons();
+        else drivetrain.update();
+    }
+
+    //false while Blaze runs the motor loops on each Expansion Hub read
+    protected boolean mechanismsInLoop() {
+        return !BlazeSession.feedsExpansionHub();
+    }
+
     @Override
     public void stop() {
 
@@ -99,12 +131,16 @@ public abstract class TeleOpBaseOpMode extends OpMode {
     @Override
     public void init_loop() {
 
-        if (robotHubs != null) {
-            for (LynxModule hub : robotHubs) {
-                if (!BlazeSession.feeds(hub)) hub.clearBulkCache();
-            }
-        }
+        clearCaches();
         if (turret != null) turret.readSensors();
+    }
+
+    private void clearCaches() {
+
+        if (robotHubs == null) return;
+        for (LynxModule hub : robotHubs) {
+            if (hub.isParent() || !BlazeSession.feedsExpansionHub()) hub.clearBulkCache();
+        }
     }
 
     public void addLoopTimeTelemetry() {
@@ -119,12 +155,16 @@ public abstract class TeleOpBaseOpMode extends OpMode {
             hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         }
 
-        BlazeSession.engage(hardwareMap, follower);
+        if (usesBlaze()) {
+            BlazeSession.drive(follower, this::driveUpdate);
+            BlazeSession.mechanisms(hardwareMap, this::mechanismUpdate);
+        }
     }
 
     public void clearCacheOfLynxModule() {
 
-        BlazeSession.tick();
+        BlazeSession.run();
+        clearCaches();
         tickRate.tick();
 
         HardwareMonitor.get().update();
@@ -135,8 +175,9 @@ public abstract class TeleOpBaseOpMode extends OpMode {
 
         this.alliance = new AllianceState(alliance);
 
-        //Blaze first: it swaps the hardwareMap's motors
-        BlazeSession.begin(hardwareMap);
+        //Blaze before any hardware (its motor acceleration swaps the hardwareMap's motors)
+        if (usesBlaze()) BlazeSession.begin(hardwareMap);
+        else BlazeSession.end();
 
         left_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.leftFrontMotorDeviceName, false);
         right_front = new MonitoredDcMotor(hardwareMap, DeviceConstants.rightFrontMotorDeviceName, false);

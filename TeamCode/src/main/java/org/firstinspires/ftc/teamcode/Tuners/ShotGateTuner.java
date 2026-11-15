@@ -113,7 +113,34 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
     }
 
     @Override
+    protected boolean usesBlaze() {
+        return true;
+    }
+
+    @Override
+    protected void driveUpdate() {
+
+        drivetrain.driveFromSticks();
+        follower.update();
+    }
+
+    @Override
+    protected void mechanismUpdate() {
+
+        flywheel.update();
+        super.intake.update();
+        if (RUN_TURRET) turret.update();
+    }
+
+    @Override
     public void loop() {
+
+        synchronized (lock) {
+            step();
+        }
+    }
+
+    private void step() {
 
         clearCacheOfLynxModule();
 
@@ -160,14 +187,15 @@ public class ShotGateTuner extends TeleOpBaseOpMode {
                 break;
         }
 
-        follower.update();
+        intake.motorElsewhere = !mechanismsInLoop();
+        updateFollower();
         intake.update();
-        flywheel.update();
-        drivetrain.update();
+        if (mechanismsInLoop()) flywheel.update();
+        runDrive(drivetrain);
         if (RUN_TURRET) {
             turret.setPosition(turret.startPosition);
             turret.setTargetVelocity(0);
-            turret.update();
+            if (mechanismsInLoop()) turret.update();
         }
         else turret.setVolts(0, 0);
 

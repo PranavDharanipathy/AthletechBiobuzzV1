@@ -115,7 +115,7 @@ with `=`. Genuine AGP DSL methods (`keyAlias`, `pickFirst`, `abiFilters`,
 | Pedro tuning | `com.pedropathing:tuning:1.0.1` (pulls Sloth) | Maven Central + `https://repo.dairy.foundation/releases/` |
 | NextFTC v2 | `dev.nextftc.v2:control` / `hardware` / `robot`, all `0.3.0` | Maven Central |
 | Ivy Pedro commands | `com.pedropathing.ivy:pedro:1.1.1` (`PedroCommands`) | Maven Central |
-| BlazeFTC (beta, **off**) | `dev.anygeneric:blazeftc:0.1.66` | `https://maven.anygeneric.dev/` |
+| BlazeFTC (beta, **off**) | `dev.anygeneric:blazeftc:0.1.66` + `blazeftc_pedro3:0.1.66` | `https://maven.anygeneric.dev/` |
 | Apache Commons Math | `org.apache.commons:commons-math3:3.6.1` | Maven Central |
 | Kotlin stdlib | `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` | Maven Central |
 
@@ -134,36 +134,56 @@ Never add NextFTC v1 (`dev.nextftc:ftc`, `dev.nextftc:hardware`) or `dev.nextftc
 v1 clashes with v2, and the extension pulls `com.pedropathing:ftc:2.0.0`. Keep exactly one
 `NextRobot` (`Systems/AthletechRobot`) with no hardware access in its constructor. Details are in DEV_NOTES.
 
-**BlazeFTC** (`dev.anygeneric:blazeftc` 0.1.66) runs the hub link for every robot OpMode and every tuner except `Testing/`
-testers and the utility OpModes. It's a beta Rust runtime with its own native threads. All of it goes through
-`Utility/Blaze/BlazeSession`, switched by `Constants/BlazeConstants`. **`ENABLED` is false**: in the 2028-05-12 match runs
-its hub and Pinpoint feeds died ~0.8 s after START with no fault (every loop fell back to SDK reads), loops went 28 -> 38 ms
-median with 150-650 ms freezes about once a second (the "lag"), and `MOTOR_ACCELERATION` left the intake under half speed
-the whole time (its `setPower` ignores RUN_USING_ENCODER). Don't turn it on again without a `blaze_check.py` run that passes.
-Every TeleOp records `blaze.*` (hub data age and staleness, update counts, Pinpoint use, faults) and `pose.blaze_age_ms`;
-`python -I tools/blaze_check.py [RUN]` judges a run against the newest Blaze-off TeleOp (feeds, faults, loop times,
-command-to-motion lag, pose resets, turret, intake).
+**BlazeFTC** (`dev.anygeneric:blazeftc` + `blazeftc_pedro3`, 0.1.66) is used **the way its README says**
+(github.com/owenpmckenna/blaze_ftc). Blaze reads the Pinpoint and the hubs on its own threads and calls you the moment new
+data is in; the robot's control runs in those callbacks. Don't wrap it, buffer its data or poll it from the loop: its author
+read our old 240-line wrapper (it only timestamped the callbacks and kept everything in the slow loop) and said exactly that.
 
-- **TeleOps and tuners:**
-  - `TeleOpBaseOpMode` calls `begin` (first thing in `initializeComponents`), `engage` (in `setUpLynxModule`), `tick` (in
-    `clearCacheOfLynxModule`) and `end` (in `stop`).
-  - The four standalone tuners call the same four themselves.
-  - Pedro's Foresight tuner and Tests get their Mecanum through `Tuning.blazeMecanum` (`begin` + `tick`, motors only, so a
-    no-op while `MOTOR_ACCELERATION` is off).
-- **Autos:** plain `NextOpMode`, no Blaze. As `BlazeOpMode`s, NextFTC started Blaze's proxy for them even with Blaze off, and
-  the hubs retransmitted packets every auto (robot log 2028-05-08).
-- **What Blaze does:**
-  - motor `setPower` goes straight to Blaze (only with `MOTOR_ACCELERATION`, off);
-  - each hub's bulk data is kept fresh in the background, and `tick` never clears a hub Blaze feeds;
-  - `BlazePinpointLocalizer` gets Pedro its Pinpoint data from Blaze, falling back to an SDK read when Blaze's sample is
-    stale. Its `setPose` is a software offset.
-- **Clean-up:** `MonitorOpModeHook` calls `BlazeSession.end()` after every OpMode, crashed or not. That closes Blaze, puts the
-  SDK motors back in the hardwareMap and sets the hubs back to the SDK's bulk mode.
-- **Rules:**
-  - Blaze callbacks only copy data in; never touch the follower or hardware from them.
-  - Get hardware only after `begin`.
-  - Don't use Blaze's Pedro add-on: its `setPose` throws and it writes the drive from Blaze's thread.
-  - Bump Blaze and NextFTC v2 together.
+- **All of it is `Utility/Blaze/BlazeSession`** (begin, drive, mechanisms, run, end) plus `BlazeLocalizer`. `BlazeLocalizer`
+  is Blaze's `Pedro3SingleDataLocalizer` with `setPose` added; Blaze's own throws "not implemented", and the GARDEN
+  relocalize needs it.
+- **Built into every OpMode that drives or runs the shooter, and all of it is OFF** (`BlazeConstants.ENABLED = false`; the
+  user doesn't want it used). With it off, every OpMode runs exactly as before, in the same order.
+  - **Which:**
+    - the TeleOps;
+    - every `TeleOpBaseOpMode` tuner (SHT, Flywheel Interpolation, TunerTeleOp, Flywheel/Turret Load, Shot Gate, Turret
+      and Drivetrain Autotuners);
+    - the six autos (through `AthletechRobot`);
+    - Flywheel Tuner, Flywheel Voltage Filter Tuner, GeneralVeloMotor Tuner, Turret Manual Tuner.
+  - **Not:** Pedro's own tuners (they run `follower.update()` inside Pedro's procedures), `Testing/` testers and the
+    utility OpModes.
+  - **TeleOp base:** `usesBlaze()` opts in. `updateFollower()` and `runDrive()` do the loop's share; `driveUpdate()` /
+    `mechanismUpdate()` are the callbacks.
+  - **The autotuners:** the Turret Autotuner's engine runs in the Expansion Hub callback. The Drivetrain Autotuner's runs
+    in the Pinpoint callback and drives through `follower.manual`.
+  - **Autos:** `Drive` starts paths and holds under the lock, so the follower is only changed between Blaze's updates (its
+    README warns about that). The auto Shooter/Intake have `control()` for the callback.
+- **Where things run:**
+  - `driveUpdate()`, on each Pinpoint sample through `Pedro3SingleDataLocalizer.setup`: the drive from the sticks, then
+    `follower.update()`. With Blaze, Blaze owns `follower.update()` and nothing else may call it. The drive goes out through
+    `follower.manual(...)`, the same wheel mixing as `DriveController`, and Blaze writes it after the callback (a direct
+    motor write would be overwritten by the follower's stop).
+  - `mechanismUpdate()`, on each Expansion Hub bulk read (`engageBulkReadAcceleration`, Hub.ExHub, where the flywheel,
+    turret encoder and intake are): `flywheel.update()`, `turret.update()`, the intake's speed loop.
+  - The loop: gamepads, buttons (once per press), blocker, aim and flywheel targets (`Shooter.update` with
+    `mechanismsElsewhere`), telemetry, recording. The Control Hub cache is cleared each loop; the Expansion Hub's isn't,
+    because Blaze fills it.
+- **One lock** (`BlazeSession.LOCK`): both callbacks and every loop body (and every follower change in the autos) take
+  turns on the robot's objects. Never `sleep` while holding it.
+  `TemporalLog.record` is synchronized because hardware calls now come from Blaze's threads.
+- **Lifecycle:**
+  - `begin` (initialize, before any hardware) in `initializeComponents`;
+  - the hooks in `setUpLynxModule`;
+  - `run` on the first loop;
+  - `end` (`closeBlazeFTC`, or the robot restarts) in `stop` and again in `MonitorOpModeHook` after every OpMode.
+  - Blaze's motors stay in the hardwareMap: no swapping SDK motors back.
+- **Switches:**
+  - `BlazeConstants.ENABLED` is **false** until the new way passes `python -I tools/blaze_check.py` on the robot (callback
+    rates, gaps, loop times, lag, pose, turret, intake). The old way froze loops 150-650 ms about every second
+    (2028-05-12).
+  - `MOTOR_ACCELERATION` is off: Blaze's motor writes skip RUN_USING_ENCODER, which the intake's speed loop sits on (it ran
+    under half speed). Blaze's README calls faster writes secondary anyway.
+- **Recorded:** `blaze.drives`, `blaze.feeds_eh`, `blaze.drive_updates`, `blaze.mechanism_updates`, faults.
 
 Details and what's unproven are in DEV_NOTES.
 
@@ -172,7 +192,6 @@ Details and what's unproven are in DEV_NOTES.
 
 - every hardware read and write, with its value and duration (`DeviceTracker` and HardwareMonitor's hub samples);
 - every variable of the TeleOp's object graph and of the Constants, whenever it changes (`VariableWatcher`);
-- Blaze's background reads;
 - loops and phases.
 
 Files go to `/sdcard/FIRST/data/TemporalLog/<time>/`. Read them with `python tools/temporal_log.py` (pull, summary, csv,
@@ -255,6 +274,21 @@ sends a phone video of a match with its logs, sync it to the runs (flywheel-dip 
 an anchor; one offset per run, frame timestamps not frame numbers), look at every ball's frames, mark score/short/long/...,
 and `fit` turns every review's marks into a small `FLYWHEEL_VELOCITIES` change (max 25 ticks/s a point) or flywheel recovery
 advice.
+
+The first review (`tuning-data/video-reviews/sht-20280515`, the old SHT run) put `FLYWHEEL_VELOCITIES` 8 ticks/s under the
+old table (1436 at 38 in, 1482 at 54): on-target balls arrived high on the CELL.
+- **Exit gain:** how wide the window is in wheel speed (exit gain 0.3-1) isn't known yet, so the fit keeps every gain the
+  balls allow.
+- **Trust:** it never puts the table more than 10 outside the speeds seen to score. Its first cut (−23, assuming gain 1) was
+  below every ball that scored.
+- **Probes:** the SHT shoots some bursts off the table to measure the window.
+- **Contacts:** newer logs list every ball the observer saw. The old dip detector missed later balls of a burst.
+
+**Field measurements** are all in [docs/FIELD.md](./docs/FIELD.md), from the manual's figures. Re-extract them with
+`tools/manual_figures.py`. The field CAD is Onshape and needs a login. The CELL opening is a 20 in wide, 14 in tall pentagon
+(a peaked roof above 7.61 in sides) leaning back 30°. So the speed range that goes in depends on the approach angle, not
+just the distance: from the side, the fast side shrinks. `tools/field_geometry.py` models it, and the video fit judges
+every ball by its own window. Account for it whenever the flywheel table is tuned.
 
 ## Turret control and tuning
 
@@ -367,20 +401,67 @@ one self-contained class in `Autonomous/Autos/` with its own `Constants/Autos/<A
 - **Visualizer projects:** `docs/autos/*.pp`.
 - **Rules, routes and field checks:** `docs/AUTOS.md`.
 
+## Flywheel control
+
+The wheel **can't be braked**: with the power cut it only coasts down (~100 ticks/s², 2028-05-15 logs). So any overshoot
+lasts ~0.4 s, and the old controller overshot +30..+55 after every ball (its filter lags and runs past the end of a
+recovery). Second balls came in a median +21 fast and went long, slow ones went short (old SHT video, 49 balls marked).
+
+- **`FlywheelObserver`** (`FLYWHEEL_OBSERVER`, on) is what the controller runs on. It carries the hub's reading (a 50 ms count
+  read ~35 ms late) to now with the volts sent and the coast-only model. Its disturbance is the load, and a reading far under
+  the model while a ball can hit is a contact. It also dates each ball and learns how much speed one takes.
+  - It always runs (contacts, logs, the gate), even with the switch off.
+  - Sim (`FlywheelBurstTest`, real `Flywheel` on the logged wheel, windows at exit gain 0.6): 40 misses in 150 balls → 0, p95
+    46 → 9 ticks/s. 0 misses with the wheel off from the model every way the logs allow (accel 120-210, coast, lag, kv ±5%,
+    10 V, sags, 50 ms loops). Balls 0.2 s apart still miss: they're past the blocker before the dip shows.
+  - **Not fixed by the wheel:** the old video's first balls missed as if balls varied ~14 ticks/s on their own. If that's
+    real, the sim says ~4-5% still miss (`oldSystemMissesLikeTheVideo`).
+- **`FeedGate`** (`FEED_GATE`, **off** in the match TeleOps, on in the SHT) holds a ball the wheel won't be inside the shot's
+  window for when it arrives. Balls already past the blocker (`FEED_GATE_COMMIT`) count against the prediction.
+  - The window is `CellGeometry`'s (the CELL pentagon, drag-free, `Shooter.cell`) for where the turret is, ×
+    `FEED_GATE_WINDOW_SCALE` (0.6, the exit gain until the SHT probes measure it), kept in 25..80 ticks/s.
+  - In normal shooting it holds a few times in 150 balls. At 10 V with sags and heavy balls: 22 misses → 0, 0.29 → 0.39 s
+    a ball.
+  - It never shuts for a later ball before the first ball of an opening is surely past the blocker (`firstGuard`). Doing
+    that stopped both, every time, and a badly tuned wheel got almost no balls out (SHT sim: 9.4 s a ball → 0.42).
+  - `Flywheel` learns the first ball's time only from openings with nothing still in flight.
+  - `starved` counts trigger presses it let no ball out of. The SHT scores those against the knob value on trial.
+  - Off in matches until an SHT run backs it: the old ShotGate stuttered the autos.
+- **Gains from the logs** (docs/VIDEO_SHOT_REVIEW.md):
+  - `tools/flywheel_fit.py` fits the wheel and the balls from the logged speed, power and supply into the Sim.
+  - `FlywheelTuning` (`FLYWHEEL_TUNE=1`) tries small gain steps there.
+  - The 2028-05-15 logs show balls **0.17 s apart**, and feeding stays that fast (the user's call). No gain, gate, kick, burst
+    lift (`FLYWHEEL_BURST_LIFT_SHARE`) or continuous burst push (`FLYWHEEL_BURST_FEED_SHARE`) scores those reliably. Both are
+    off, and the SHT tries them: the balls scatter (gaps 0.08-0.25 s, drops 40-180), and those only move the average.
+  - The Sim's miss rate on those balls runs from 2% to 29%, depending on the window width the SHT probes will measure.
+    At 0.30 s it would be 0.3%.
+- **Aim point:** the top middle of the opening's rectangle (7.61 in up the face, `FieldConstants` goals), not its middle.
+  `docs/FIELD.md`.
+
 ## Hypertuning and system evolution
 
-**SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp. While it's played it keeps tuning, with
-`OnlineTuner`:
-- the flywheel: stability at speed, and shots, including a pre-kick just before each ball hits. `Flywheel` learns when balls
-  come, from every contact: first one after the blocker opens (logs: 0.24 s), then the gap between them (0.34 s);
-  - each burst scores the speed at every ball's contact (filtered), the dips, time back to speed and the 0.6 s right after (wobble,
-    overshoot). Balls come from the tuner's own dip detection, which counts each ball once, including ones landing up to 0.8 s
-    after the blocker closes; it found 63 in the 2028-05-13 TeleOp, against 64 from `shot_video.py`. `shotsSeen` counts every
-    dip loop and missed those late balls. Later balls in a burst weigh more (x1.5, x2, ...);
-  - `OnlineTuner` measures until a change is clearly better or clearly not (1.5 sigma, noise learned across trials, at most 3x
-    the minimum). On a knob that does nothing, the old fixed rule kept ~37% of trials at 15% noise; now under 15%;
+**SHT Stability Tuner** (`Tuners/ShooterHyperTuning`) is the full RED TeleOp with the feed gate on. While it's played it
+keeps tuning, with `OnlineTuner`:
+- the flywheel. **Shots** (`kp_close`, `accel_per_volt`, `observer_lag`, `kp_far`, `observer_gain`, `max_p`): every ball the
+  observer sees hit scores its speed error over that shot's window (1 = at the edge, past it = a predicted miss; later balls
+  weigh more), plus the gate's holding and the overshoot after. **Stability** (`kd`, `observer_load_gain`): holding at speed,
+  on the hub's raw reading. `Flywheel` learns when balls come (first after the blocker opens, then the gap);
+  - telemetry "Balls" shows how many hit outside their window;
+  - **paired trials:** each trial alternates the new and old value burst by burst (ABBA) and judges the differences, so the
+    battery running down can't fake a better knob (the 2028-05-15 baseline drifted 9.1 → 11.3 while 6 changes were kept). It
+    measures until clearly better or clearly not (1.5 sigma, noise learned across trials);
+  - sessions only resume from ones with `format.txt` = `SHTStabilityTuner.FORMAT` (2), so older gains don't come back;
+  - a trigger press the gate let no ball out of counts as a burst at the window's edge plus the wait, so a value the gate
+    won't feed can't stay on unjudged;
+  - **probes** (`PROBE`, on): some bursts shoot off the table (`PROBE_OFFSETS`, −35..+12) so the video measures the window
+    (docs/VIDEO_SHOT_REVIEW.md). Some of those balls miss on purpose;
+  - sim: `FlywheelBurstTest.shtTunerFixesABadModelInOneSession` plays 15 min from a bad start: every ball still goes, 3 of 540
+    miss, and the gate's waiting falls 39 → 30 s a third;
 - the turret (`TurretHyperTuner`, live through `TurretBase.overrides`): holding (aim still: error, swings, flips, counted double
   while a shot is fed) and tracking (aim moving: error) are scored apart.
+It also keeps a **temporal log** (`TEMPORAL_LOG`, on): every read/write and every variable of the OpMode (shooter, flywheel,
+turret, blocker, intake, pose, both tuners) plus the shooter Constants. Every 10 s it drops a `sync` mark in both the temporal
+log and the robot log, as Temporal Log Red does, so `shot_video.py link` lines it up exactly with a video of the session.
 It logs everything to the SD card, and `findings.md` names principle candidates. Agents turn those into new or removed
 control features by the protocol in
 [SYSTEM_EVOLUTION.md](./TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Tuners/ShooterHyperTuning/SYSTEM_EVOLUTION.md):

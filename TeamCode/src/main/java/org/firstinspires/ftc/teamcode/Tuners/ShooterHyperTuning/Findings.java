@@ -52,6 +52,12 @@ public final class Findings {
                 return top ? "The ball's load is bigger than a short push: feed a learned per-ball load profile forward from the blocker opening." : "Expecting the ball doesn't help: contact timing may vary too much, check first_contact / interval spread in loop.csv.";
             case "pre_kick_lead":
                 return top ? "It wants to push well before contact: the motor's lag is longer than thought, raise the lead range." : "Pushing early overspeeds: contact timing is tight, the reactive kick is enough.";
+            case "accel_per_volt":
+                return top ? "The wheel speeds up faster than any setting: the model is missing something (a lighter wheel, less friction, the battery reading high)." : "It recovers slower than the model at any setting: the balls take longer to leave the wheel, or the supply sags more under full power than the reading shows.";
+            case "observer_lag":
+                return top ? "The reading is older than 80 ms: check the loop order (the flywheel should read right after the bulk read) and the hub's velocity window." : "No lag fits best: the hub's speed may not be a window average after all, try the encoder position instead.";
+            case "observer_gain":
+                return top ? "The model can't be trusted between readings: a load it doesn't know about (belt slip, rubbing); look at observer_innovation in the robot log." : "The model alone does best: the reading is too noisy to lean on; a finer encoder would help.";
             case "turret_pulse_zone_degrees":
                 return top ? "Pulse hold helps everywhere it's allowed: widen the zone." : "Pulse hold hurts: the plain PID holds better on this turret.";
             case "turret_rate_feedforward_scale":

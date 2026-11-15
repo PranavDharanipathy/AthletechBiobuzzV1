@@ -13,10 +13,11 @@ public class FieldConstants {
     public static double ROBOT_CENTER_TO_FRONT = 9.72;
     public static double ROBOT_CENTER_TO_SIDE = 7.64;
 
-    public static double RED_GOAL_CLOSE_X = 59.25, RED_GOAL_CLOSE_Y = 87.77;
-    public static double RED_GOAL_FAR_X = 59.25, RED_GOAL_FAR_Y = 56.23;
+    //aim at the top middle of the opening's rectangle (7.61 in up the face, under the roof), not its middle: 0.3 in toward the pivot
+    public static double RED_GOAL_CLOSE_X = 59.25, RED_GOAL_CLOSE_Y = 87.47;
+    public static double RED_GOAL_FAR_X = 59.25, RED_GOAL_FAR_Y = 56.53;
 
-    public static double BLUE_GOAL_CLOSE_X = 84.75, BLUE_GOAL_CLOSE_Y = 87.77;
-    public static double BLUE_GOAL_FAR_X = 84.75, BLUE_GOAL_FAR_Y = 56.23;
+    public static double BLUE_GOAL_CLOSE_X = 84.75, BLUE_GOAL_CLOSE_Y = 87.47;
+    public static double BLUE_GOAL_FAR_X = 84.75, BLUE_GOAL_FAR_Y = 56.53;
 
 }

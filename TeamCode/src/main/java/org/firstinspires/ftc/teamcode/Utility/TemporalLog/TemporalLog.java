@@ -2,8 +2,6 @@ package org.firstinspires.ftc.teamcode.Utility.TemporalLog;
 
 import com.qualcomm.robotcore.util.RobotLog;
 
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeRing;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.DeviceTracker;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.HwOp;
 
@@ -41,11 +39,7 @@ public final class TemporalLog {
     private static File dir;
     public static long records, dropped;
     private static VariableWatcher watcher;
-    private static int loopKey, watchKey, droppedKey, blazeDropKey;
-    private static final int[] bulkKey = new int[2];
-    private static final int[] pinKey = new int[6];
-    private static final BlazeRing.Sink[] bulkSinks = new BlazeRing.Sink[2];
-    private static BlazeRing.Sink pinSink;
+    private static int loopKey, watchKey, droppedKey;
 
     private TemporalLog() {}
 
@@ -83,27 +77,6 @@ public final class TemporalLog {
         loopKey = key("loop", "loop", "");
         watchKey = key("meta", "temporal.watch_us", "");
         droppedKey = key("meta", "temporal.dropped_records", "");
-        blazeDropKey = key("meta", "blaze.dropped_samples", "");
-        bulkKey[0] = key("blaze", "blaze.bulk.control_hub", "");
-        bulkKey[1] = key("blaze", "blaze.bulk.expansion_hub", "");
-        String[] pin = {"x_raw", "y_raw", "heading_rad", "vx_raw", "vy_raw", "omega_rad_s"};
-        for (int k = 0; k < 6; k++) pinKey[k] = key("blaze", "blaze.pinpoint." + pin[k], "");
-        for (int k = 0; k < 2; k++) {
-            final int hub = k;
-            bulkSinks[k] = (t, a, b, c, d, e, f) -> record(t, bulkKey[hub], 0, a);
-        }
-        pinSink = (t, a, b, c, d, e, f) -> {
-
-            record(t, pinKey[0], 0, a);
-            record(t, pinKey[1], 0, b);
-            record(t, pinKey[2], 0, c);
-            record(t, pinKey[3], 0, d);
-            record(t, pinKey[4], 0, e);
-            record(t, pinKey[5], 0, f);
-        };
-        BlazeSession.BULK[0].clear();
-        BlazeSession.BULK[1].clear();
-        BlazeSession.PINPOINT.clear();
         writing = true;
         writer = new Thread(TemporalLog::write, "TemporalLog");
         writer.setPriority(Thread.MIN_PRIORITY);
@@ -133,9 +106,6 @@ public final class TemporalLog {
         record(now, loopKey, (int) loops, (now - lastLoopNs) * 1e-9);
         lastLoopNs = now;
         loops++;
-        BlazeSession.BULK[0].drain(bulkSinks[0]);
-        BlazeSession.BULK[1].drain(bulkSinks[1]);
-        BlazeSession.PINPOINT.drain(pinSink);
     }
 
     public static void endLoop() {
@@ -146,8 +116,6 @@ public final class TemporalLog {
         long t1 = System.nanoTime();
         record(t1, watchKey, 0, (t1 - t0) * 1e-3);
         if (dropped > 0) record(t1, droppedKey, 0, dropped);
-        long blazeDrops = BlazeSession.BULK[0].dropped + BlazeSession.BULK[1].dropped + BlazeSession.PINPOINT.dropped;
-        if (blazeDrops > 0) record(t1, blazeDropKey, 0, blazeDrops);
         if (t1 - lastHandoff > 200_000_000L) handoff();
     }
 
@@ -198,7 +166,7 @@ public final class TemporalLog {
         return sb.toString();
     }
 
-    static int key(String kind, String name, String labels) {
+    static synchronized int key(String kind, String name, String labels) {
 
         if (keyCount >= MAX_KEYS) return MAX_KEYS - 1;
         int id = keyCount++;
@@ -215,7 +183,8 @@ public final class TemporalLog {
         }
     }
 
-    static void record(long tNs, int key, int aux, double value) {
+    //Blaze's callbacks read and write hardware on its own threads, and every call is recorded
+    static synchronized void record(long tNs, int key, int aux, double value) {
 
         ByteBuffer b = current;
         if (b == null || b.remaining() < RECORD) {
@@ -234,7 +203,7 @@ public final class TemporalLog {
         records++;
     }
 
-    private static void handoff() {
+    private static synchronized void handoff() {
 
         ByteBuffer b = current;
         if (b != null && b.position() > 0) {

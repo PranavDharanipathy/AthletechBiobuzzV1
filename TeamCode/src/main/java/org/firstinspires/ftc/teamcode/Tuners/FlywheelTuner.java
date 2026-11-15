@@ -1,7 +1,6 @@
 package org.firstinspires.ftc.teamcode.Tuners;
 
 import org.firstinspires.ftc.teamcode.Systems.Turret.TurretBase;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
@@ -18,6 +17,7 @@ import org.firstinspires.ftc.teamcode.Constants.TunedConstants;
 import org.firstinspires.ftc.teamcode.Systems.Blocker;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.Flywheel;
 import org.firstinspires.ftc.teamcode.Systems.Flywheel.FlywheelPIDVSCoefficients;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.GeneralVeloMotor;
 import org.firstinspires.ftc.teamcode.Utility.Hardware.MonitoredDcMotorEx;
 import org.firstinspires.ftc.teamcode.Utility.Monitoring.HardwareMonitor;
@@ -76,7 +76,7 @@ public class FlywheelTuner extends LinearOpMode {
         Telemetry telemetry = new MultipleTelemetry(this.telemetry, FtcDashboard.getInstance().getTelemetry());
 
         telemetry.setMsTransmissionInterval(12);
-
+        //before any hardware
         BlazeSession.begin(hardwareMap);
 
         intake = new GeneralVeloMotor(hardwareMap, DeviceConstants.intakeMotorDeviceName);
@@ -98,54 +98,62 @@ public class FlywheelTuner extends LinearOpMode {
         coefficients = FlywheelConstants.FLYWHEEL_PIDVS_COEFFICIENTS;
         flywheel.setVelocityPIDVSCoefficients(coefficients);
 
-        TurretBase turret = new TurretBase(hardwareMap);
+        final TurretBase turret = new TurretBase(hardwareMap);
         turret.setVolts(0, 0);
+        //Blaze: the flywheel, intake and turret loops on each Expansion Hub read
+        BlazeSession.mechanisms(hardwareMap, () -> {
 
-        BlazeSession.engage(hardwareMap, null);
+            flywheel.update();
+            intake.update();
+            if (RUN_TURRET) turret.update();
+        });
+
 
         if (isStopRequested()) return;
         waitForStart();
 
         flywheel.reset();
+        BlazeSession.run();
 
         intake.setVelocity(IntakeConstants.INTAKE_VELOCITY);
 
         while (opModeIsActive()) {
 
-            BlazeSession.tick();
             HardwareMonitor.get().update();
+            boolean inLoop = !BlazeSession.feedsExpansionHub();
+            synchronized (BlazeSession.LOCK) {
+                coefficients.updateCoefficients(
+                        KP_FAR, KP_CLOSE,
+                        KI_FAR, KI_CLOSE,
+                        KD,
+                        KV,
+                        KS,
+                        KS_SIGN_WIDTH,
+                        I_SWITCH,
+                        P_SWITCH,
+                        KI_SMASH,
+                        P_MIN, P_MAX,
+                        I_MIN, I_MAX,
+                        D_MIN, D_MAX
+                );
 
-            coefficients.updateCoefficients(
-                    KP_FAR, KP_CLOSE,
-                    KI_FAR, KI_CLOSE,
-                    KD,
-                    KV,
-                    KS,
-                    KS_SIGN_WIDTH,
-                    I_SWITCH,
-                    P_SWITCH,
-                    KI_SMASH,
-                    P_MIN, P_MAX,
-                    I_MIN, I_MAX,
-                    D_MIN, D_MAX
-            );
+                telemetry.addData("voltage", batteryVoltageSensor.getVoltage());
 
-            telemetry.addData("voltage", batteryVoltageSensor.getVoltage());
+                flywheel.setVelocityPIDVSCoefficients(coefficients);
+                flywheel.setVoltageFilter(VOLTAGE_SAMPLE_PERIOD, VOLTAGE_FILTER_TAU);
 
-            flywheel.setVelocityPIDVSCoefficients(coefficients);
-            flywheel.setVoltageFilter(VOLTAGE_SAMPLE_PERIOD, VOLTAGE_FILTER_TAU);
+                flywheel.setVelocity(VELOCITY, true);
 
-            flywheel.setVelocity(VELOCITY, true);
-
-            intake.update();
-            blocker.setState(SHOOT ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
-            flywheel.update();
-            if (RUN_TURRET) {
-                turret.setPosition(turret.startPosition);
-                turret.setTargetVelocity(0);
-                turret.update();
+                if (inLoop) intake.update();
+                blocker.setState(SHOOT ? Blocker.BlockerState.CLEAR : Blocker.BlockerState.BLOCK);
+                if (inLoop) flywheel.update();
+                if (RUN_TURRET) {
+                    turret.setPosition(turret.startPosition);
+                    turret.setTargetVelocity(0);
+                    if (inLoop) turret.update();
+                }
+                else turret.setVolts(0, 0);
             }
-            else turret.setVolts(0, 0);
 
             telemetry.addData("filtered voltage", flywheel.getFilteredVolts());
             telemetry.addData("Target Velocity", flywheel.getTargetVelocity());
@@ -171,5 +179,6 @@ public class FlywheelTuner extends LinearOpMode {
 
             sleep(LOOP_TIME);
         }
+        BlazeSession.end();
     }
 }

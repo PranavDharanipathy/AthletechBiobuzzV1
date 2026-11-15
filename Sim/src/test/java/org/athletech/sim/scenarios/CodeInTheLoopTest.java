@@ -95,8 +95,8 @@ public class CodeInTheLoopTest {
     public void flywheelExpectsTheBall() {
 
         FlywheelCodeScenario.Setup s = FlywheelCodeScenario.setup(new RobotParams(db), ctx);
-        //the example ball is light (~11 ticks/s a hit): about the robot's real dip instead
-        s.ballMass *= 5;
+        //the example ball is light (~11 ticks/s a hit): about the robot's real dip instead (~100, logs 2028-05-15)
+        s.ballMass *= 9;
         double without = dip(s, 0), with = dip(s, 2);
         System.out.printf(java.util.Locale.ROOT, "FLYWHEEL dip after each ball: %.1f ticks/s without the pre-kick, %.1f with 2 V%n", without, with);
         assertTrue("pre-kick helps: " + with + " vs " + without, with < without);

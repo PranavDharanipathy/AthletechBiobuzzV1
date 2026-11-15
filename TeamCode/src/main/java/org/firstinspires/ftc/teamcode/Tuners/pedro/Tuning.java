@@ -11,7 +11,6 @@ import org.firstinspires.ftc.teamcode.Tuners.pedro.procedures.ForesightTuner;
 import org.firstinspires.ftc.teamcode.Tuners.pedro.procedures.MecanumTuner;
 import org.firstinspires.ftc.teamcode.pedro.procedures.PinpointTuner;
 import org.firstinspires.ftc.teamcode.Tuners.pedro.procedures.Tests;
-import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 
 public class Tuning {
 
@@ -27,19 +26,15 @@ public class Tuning {
 
     @Tuner
     public static Procedure foresightTuner() {
-        return new ForesightTuner((hardwareMap) -> new PinpointLocalizer(hardwareMap, DrivetrainConstants.localizerConfig), Tuning::blazeMecanum);
+        return new ForesightTuner((hardwareMap) -> new PinpointLocalizer(hardwareMap, DrivetrainConstants.localizerConfig), Tuning::mecanum);
     }
 
     @Tuner
     public static Procedure tests() {
-        return new Tests(Tuning::blazeMecanum, null, null);
+        return new Tests(Tuning::mecanum, null, null);
     }
 
-    //Blaze before the motors are got, it swaps them in the hardwareMap; MonitorOpModeHook closes it
-    private static Mecanum blazeMecanum(HardwareMap hardwareMap) {
-
-        BlazeSession.begin(hardwareMap);
-        BlazeSession.tick();
+    private static Mecanum mecanum(HardwareMap hardwareMap) {
         return new Mecanum(hardwareMap, DrivetrainConstants.driveConfig);
     }
 }

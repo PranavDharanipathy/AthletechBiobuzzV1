@@ -3,13 +3,14 @@ package org.firstinspires.ftc.teamcode.Autonomous.AutoSubsystems;
 import com.pedropathing.api.Paths;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Command;
-import com.pedropathing.ivy.pedro.PedroCommands;
+import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.Constants.DrivetrainConstants;
+import org.firstinspires.ftc.teamcode.Utility.Blaze.BlazeSession;
 import org.firstinspires.ftc.teamcode.Utility.Clock;
 import org.firstinspires.ftc.teamcode.Utility.Recording.Recorder;
 
@@ -29,9 +30,25 @@ public final class Drive implements Mechanism {
         follower.setPose(start);
     }
 
+    //with Blaze, follower.update() runs on each Pinpoint sample instead, and every change to the follower takes the lock
     @Override
     public void periodic() {
-        follower.update();
+
+        if (BlazeSession.drives()) return;
+        synchronized (BlazeSession.LOCK) {
+            follower.update();
+        }
+    }
+
+    private CommandBuilder start(final Path path) {
+        return new CommandBuilder().setStart(() -> locked(() -> follower.follow(path)));
+    }
+
+    private static void locked(Runnable r) {
+
+        synchronized (BlazeSession.LOCK) {
+            r.run();
+        }
     }
 
     public void configure(double positionInches, double headingDegrees, double timeoutSeconds) {
@@ -49,7 +66,7 @@ public final class Drive implements Mechanism {
 
         final Pose end = path.endPose();
         final double[] started = {Double.NaN}, stillSince = {Double.NaN};
-        return PedroCommands.follow(follower, path)
+        return start(path)
                 .requiring(this)
                 .setExecute(() -> {
                     double now = Clock.seconds();
@@ -90,7 +107,7 @@ public final class Drive implements Mechanism {
 
         final Pose end = path.endPose();
         final double[] started = {Double.NaN}, stillSince = {Double.NaN};
-        return PedroCommands.follow(follower, path)
+        return start(path)
                 .requiring(this)
                 .setExecute(() -> {
                     double now = Clock.seconds();
@@ -113,14 +130,14 @@ public final class Drive implements Mechanism {
                     return there || stalled || now - started[0] >= maxSeconds;
                 })
                 .setEnd(condition -> {
-                    follower.hold(follower.pose());
+                    locked(() -> follower.hold(follower.pose()));
                     started[0] = Double.NaN;
                     stillSince[0] = Double.NaN;
                 });
     }
 
     public Command hold(final Pose pose) {
-        return instant(() -> follower.hold(pose));
+        return instant(() -> locked(() -> follower.hold(pose)));
     }
 
     public boolean isAt(Pose target) {
@@ -135,7 +152,7 @@ public final class Drive implements Mechanism {
     }
 
     public void stop() {
-        follower.stop();
+        locked(follower::stop);
     }
 
     public static Pose pose(double[] p) {

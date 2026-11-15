@@ -84,9 +84,22 @@ public class Drivetrain {
         controller.accelFraction = DrivetrainConstants.DRIVE_ACCEL_FRACTION;
     }
 
+    //Blaze: powers go through the follower, which it writes after each Pinpoint sample (else its stop() would win)
+    public boolean throughFollower;
+
     public void update() {
 
+        readButtons();
+        driveFromSticks();
+    }
+
+    //once per press: with Blaze the sticks are driven many times between loops
+    public void readButtons() {
         if (controller1.backHasJustBeenPressed) holdEnabled = !holdEnabled;
+    }
+
+    public void driveFromSticks() {
+
         command[DriveController.FORWARD] = forwardRatio * shape(-controller1.left_stick_y());
         command[DriveController.LEFT] = -strafeRatio * shape(controller1.left_stick_x());
         command[DriveController.TURN] = -turnRatio * shape(controller1.right_stick_x());
@@ -107,8 +120,12 @@ public class Drivetrain {
             holding = controller.update(dt, robotCommand, pose.x(), pose.y(), pose.heading(), velocity.vx, velocity.vy, velocity.omega, voltage.volts());
         }
         else controller.reset();
-        if (holding) DriveController.wheels(controller.power[0], controller.power[1], controller.power[2], wheels);
-        else DriveController.wheels(robotCommand[0], robotCommand[1], robotCommand[2], wheels);
+        double[] p = holding ? controller.power : robotCommand;
+        DriveController.wheels(p[0], p[1], p[2], wheels);
+        if (throughFollower) {
+            follower.manual(p[DriveController.FORWARD], p[DriveController.LEFT], p[DriveController.TURN]);
+            return;
+        }
         leftFront.setPower(wheels[0]);
         rightFront.setPower(wheels[1]);
         leftBack.setPower(wheels[2]);

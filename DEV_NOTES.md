@@ -3,6 +3,201 @@
 Project decisions, gotchas and caveats. Referenced by [AGENTS.md](./AGENTS.md).
 Newest notes at the top.
 
+## 2026-11-14 (later still) — Flywheel gains from the logs; balls come 0.17 s apart
+
+- **`tools/flywheel_fit.py`:** runs the observer's model over the logged loops (speed, power × supply) and fits the wheel.
+  It also measures the balls, the battery and the loops. Output: `tuning-data/flywheel-fit/plant.properties`, read by
+  `FlywheelBursts.Config.fitted()`.
+- **On the 2028-05-15 SHT log:**
+  - **The wheel:** accel 153, coast 0.40 V, kv 0.00467, lag 0.023. That's only 4% less surprise than the code's (165, 0.70,
+    0.00475, 0.035), inside the hub's 20 ticks/s steps. So the Sim keeps the code's wheel (`wheelFit=0`), and so do the
+    observer's constants.
+  - **The balls:** drop median 70 ticks/s (spread 34; the biggest look like two balls at once).
+  - **Timing:** first ball 0.25 s after opening, then every **0.17 s** (40 gaps; most 0.12-0.20).
+    - The readings show the wheel re-dipping, so most are real balls. The −101 short ball was 0.148 s after the one before.
+    - A guard counting a contact only when the reading falls changed little (89 → 82 contacts).
+    - The Sim had assumed 0.30 s.
+  - **The rest:** battery 12.9 → 11.5 V with 1.6 V dips; loops 34 ms.
+- **What spacing does** (`FlywheelTuning.verify`, the logs' balls, 8 wheel cases × 3 seeds × 15 min, about 10,800 balls
+  each):
+
+  | Ball spacing | Misses, no gate | Misses, gate |
+  |---|---|---|
+  | 0.17 s (as logged) | 19% | 13.5% |
+  | 0.22 s | 6.5% | 4.5% |
+  | 0.30 s | 0.4% | 0.5% |
+
+  No gain fixes 0.17 s. The gate can't either: the next ball is past the blocker before the first one's dip shows. Spacing
+  the balls would fix it, but the user wants feeding as fast as possible, so that's out.
+- **What fast feeding leaves** (session's balls, the table's own error per gain):
+  - **Burst lift** (`FLYWHEEL_BURST_LIFT_SHARE`): aim a share of the fast-side window over the target while feeding.
+    - Alone it helps: 15 → 11% (narrow windows), 5.5 → 2.9% (wide).
+    - With the table's error in, it only trades first balls long for later ones short: 14.7% at 0, 14.1% at 0.1, 16.1% at 0.3.
+    - So it's **off**, and the SHT tries it (`burst_lift` knob).
+  - **Pre-kick at the expected contact:** 15 → 12% at best. The gaps vary ±0.06 s, so it's off.
+  - **One continuous shot** (`FLYWHEEL_BURST_FEED_SHARE`, the user's idea): while balls flow, push the share of the learned
+    drop over the learned gap.
+    - It centers later balls (ball 2 median −15 → −1 at 0.75).
+    - Misses don't fall: 14.7% at 0, 15.0% at 0.5, 17.1% at 0.75, 22.8% at 1. A long gap leaves the wheel fast; a short one
+      still leaves it slow.
+    - The miss rate is set by how much the balls scatter, not by their average. So it's off, and the SHT tries it
+      (`burst_feed` knob).
+  - **What's left are the tails:** gaps of 0.08-0.12 s and 120-180 drops (two balls at once). The observer needs 60-85 ms to
+    see a ball.
+  - **Hardware what-ifs** (spread 10, gains 0.4-1): as is 13.7%; wheel 1.5-2× heavier 12.8-13.4%; a second motor 9.4%; both 8.0%.
+  - **`oldSystemMissesLikeTheVideo` now runs on that session's balls:**
+    - Old system: later balls 25-58% out, first 5-16% (video: 71% / 20%). The narrow windows (gain 0.4) come closest.
+    - New system: 2.4% out (gain 1) to 29% (gain 0.4) at spread 6. So the window width the SHT probes measure decides how
+      many still miss.
+- **Gain search** (`FLYWHEEL_TUNE=1 ... --tests *FlywheelTuning*`, steps x0.8-1.25, 2 passes): kp_close 0.072 → 0.09,
+  kd 0.0003 → 0.00027, observer gain 0.35 → 0.44, observer lag 0.035 → 0.032.
+  - **On the logs' balls:** 19.1% → 16.0% misses at 0.17 s, 6.5 → 5.1% at 0.22 s, 0.4 → 0.3% at 0.30 s. With the gate:
+    13.5 → 12.7%.
+  - **On the Sim's old ball guess** (95 ± 15, 0.30 s): 7 → 16 misses in 10,800.
+  - A half step got less on the first and cost about the same on the second, so the full step went in.
+  - kp_far and max_p stay.
+- **Tests:** `oldSystemMissesLikeTheVideo` keeps the old gains for "old". The SHT tuner test's waiting check is now "no
+  worse" (≤1.15×): from its bad start the tuner's gains move within the noise. 102 tests, 0 failed, 3 skipped (2 need
+  `FLYWHEEL_TUNE` / `FLYWHEEL_CANDIDATE`).
+
+## 2026-11-14 (later) — Table re-fit, gate starvation, SHT probes
+
+- **The −23 table change was too far.** It assumed exit speed proportional to wheel speed (exit gain 1), which makes each
+  ball's window ~110 ticks/s wide.
+  - The old video's balls all sat within about ±15 of the table's speed, so they only pin the fast edge (old table +5..+15).
+    Every gain 0.35-1 explains them about as well.
+  - The 1425 table ran 1412-1418 at 36-38 in, 9-27 under every ball that scored. No ball scored under 1446 at 38-40 in.
+  - Physics doesn't settle it: 72° with gain ~0.45, or ~68° with gain 1, both fit the table's slope.
+- **`shot_video.py fit` now:**
+  - keeps gains 0.3-1, weighed by the evidence, and samples gain and middle together;
+  - picks the line that scores most often (`--spread` 12);
+  - never puts the table more than `--trust` 10 outside the speeds seen to score near each distance;
+  - finds balls from the observer's contacts in newer logs.
+
+  Result: `FLYWHEEL_VELOCITIES` [1425, 1425, 1440, 1467, 1507] → [1442, 1442, 1452, 1477, 1512], the old table minus 8 (1436 at 38 in,
+  1459 at 46, 1482 at 54). Modeled chance to score 0.972 → 0.989 (spread 8).
+- **Sim windows** narrowed to exit gain 0.6 (−39/+28). `FEED_GATE_WINDOW_SCALE` 1 → 0.6.
+- **Sim vs video** (`oldSystemMissesLikeTheVideo`, old controller + old table at each gain, table error from the fit):
+  - Later balls: 65-81% out at every gain (video 5 of 7).
+  - First balls: 2-3% out with 6 ticks/s of ball-to-ball spread, 13-18% with 14 (video 8 of 41, half low-confidence rims).
+  - So the video's first-ball misses need ~14 of spread the wheel can't see (ball differences, aim). With it, the new system
+    still misses ~4-5% (gain 0.6-1) to 14% (0.4). Unproven: the SHT video says.
+- **Gate starvation (sim, badly tuned wheel):** 9.4 s a ball. Two causes, both fixed:
+  - **It shut for the next ball while the first wasn't past the blocker yet** (the gate's 0.12 s commit vs the sim's 0.10).
+    That stopped both, and with no ball out it reopened and did it again. Now later balls only count once the first is past
+    `commit` + `firstGuard` (40 ms) after opening.
+  - **Reopening with a ball in flight taught `Flywheel` a short first-ball time** (0.24 → 0.15). It now learns that only from
+    openings with nothing in flight (shut ≥ `FLYWHEEL_CONTACT_AFTER_CLOSE`).
+
+  After: 0.42 s a ball, 540 of 540 balls out, 3 misses. At 10 V + sags + heavy balls: 0 misses at 0.39 s a ball (was 66 balls
+  at 1.72).
+- **Tuner stall:** a trigger press the gate let no ball out of never started a burst, so the knob value on trial was never
+  judged and stayed on. `FeedGate.starved` counts those presses, and `FlywheelHyperTuner.starved()` scores them as a burst at
+  the window's edge plus the wait.
+- **SHT test changed:** with the gate on, a bad model shows up as waiting, not ball error. So `shtTunerFixesABadModelInOneSession`
+  now checks that every ball goes, ≤1% miss, ≤1 late miss, and the wait falls (39 → 30 s a third). It no longer checks the
+  error drop.
+- **SHT probes** (`SHTStabilityTuner.PROBE`, on): bursts in turn at {0, 0, −20, 0, 0, +12, 0, 0, −35} off the table, changed
+  once a burst's balls are in.
+  - Recorded as `sht.probe` and the `table_probe` column; `Shooter.tableOffset` applies it.
+  - Some probe balls miss on purpose: they measure the slow edge and so the exit gain.
+- **New log channels:** `flywheel.contact_speed`, `flywheel.contact_ago`, `blocker.feed_gate_starved`.
+- **Checked:** the Sim passes (100 tests, 0 failed, 1 skipped), TeamCode compiles, the new ball finder was tested on a
+  synthetic log. None of it has run on the robot.
+
+## 2026-11-14 — Flywheel observer, feed gate, aim point, SHT v2 (old SHT run 2028-05-15: logs + video)
+
+- **Video** (`tuning-data/video-reviews/sht-20280515`, 49 of 52 logged balls marked):
+  - Misses: about 17 of ~95 balls in view. Long (clipping the top of the CELL and bouncing out): second balls at +21..+42
+    (the overshoot) and some on-target balls. Short (dropping off the bottom lip): later balls in a burst; the clearest is
+    −101 → short.
+  - Bursts are 2-4 balls ~0.26-0.34 s apart; the log's dip detector only logged 52 balls (it misses later balls).
+  - The camera sat on the far side looking at the audience; the HIVE tips between two positions during the session.
+- **Table** (`shot_video.py fit --sigma 15 --apply`, windows centered on the new aim point): the speed that scores is −23 ticks/s
+  from the table at 47.5 in (80%: −29..−17), slope +0.91/in steeper. Every variant (spread 6-20, first balls only,
+  high-confidence marks only) said −18..−32. `FLYWHEEL_VELOCITIES` [1450, 1450, 1460, 1485, 1520] → [1425, 1425, 1440, 1467, 1507]
+  (the 25 cap binds at 36/42 in).
+- **Aim point** moved from the middle of the 14 in to the top middle of the rectangle (7.61 in up the face): goals y 87.77 →
+  87.47 / 56.23 → 56.53, `SHOT_RISE_INCHES` 48.05 → 48.58 (same 11.5 in exit). Head-on that leaves 4.9% slow / 3.6% fast.
+- **The wheel can't be braked:** with the power at 0.2-0.4 (2-4 V under what holds it) it only slowed ~100 ticks/s², where
+  linear braking would be ~500. A model with coast-limited slowing fits the log far better (one-step error 11.7 vs 17.9 ticks/s).
+  So overshoot is what has to go: the encoder's filter lags and also runs 20-30 past every raw sample at the end of a
+  recovery, and P drives on it.
+- **`FlywheelObserver`:** volts sent through the model, hub reading compared at its lag (35 ms), a ball = a reading 45+ under
+  the model while one can hit (all of it to speed, none to load). It learns the drop a ball takes from what the model couldn't
+  explain in the 0.12 s after (the most-fallen estimate undercounted: 51 vs 95), dates contacts 20 ms before the reading
+  (it's a 50 ms average), and reseeds if it disagrees by 150+ for 0.25 s.
+  - Contact timing (`firstContactSeconds`, `ballIntervalSeconds`) learns from the observer only when it's on: the filtered-drop
+    detector also fires on recovery wobble, learned a too-short gap, and had the gate holding constantly (271 holds in the sim).
+- **`FeedGate`:** judges the first ball it can still stop, `FEED_GATE_EARLY` (50 ms) sooner than due, with every committed
+  ball's learned drop taken off first. It predicts with 0.85 of the model's speed-up (the supply sags more at full power than
+  the reading shows). Window: `CellGeometry` × target, 25..80 ticks/s, 8 margin to stay open, 15 to open.
+- **Sim harness** (`Sim/src/test/.../FlywheelBursts`): the real `Flywheel` and `FeedGate` on the logged wheel.
+  - The wheel: accel 165 per volt, coast 0.7 V, kv/ks as in code; the hub's 50 ms count read 0-12 ms late; command mid-loop;
+    lognormal loops (median 34 ms).
+  - The match: battery 13.3 → 11 V with drive sags, motor warming (load −0.2 → −0.7 V), 95 ± 15 ticks/s balls 0.30 s apart.
+  - The old controller there: second/third balls +26 (log: +21), 7% misses, so it reproduces the problem.
+  - Results (`FlywheelBurstTest.report`):
+
+    | Wheel | Old controller | Observer | Observer + gate |
+    |---|---|---|---|
+    | As logged | 11 misses / 150 | 0 | 0 (0 holds) |
+    | Every mismatch the logs allow | 1-25 | 0 | 0 |
+    | 10 V + sags + heavy balls | 4 | 7 | 1 (0.37 s/ball) |
+    | 10 V, balls 0.2 s apart | 12 | 12 | 6 (balls past the blocker before the first dip shows: nothing can stop those) |
+- **SHT v2:**
+  - Paired ABBA trials (`OnlineTuner.paired`): falling-cost drift kept ≤ 2 trials paired vs many unpaired
+    (`pairedTrialsDoNotKeepDrift`).
+  - Shots are scored per ball against its window.
+  - `kp_close` moved to the shots tuner: ball dips (~100) stay under its 110 switch, so it is the recovery gain.
+  - The boost and kick knobs are gone from the tuner (never kept). Format marker so the old session's gains aren't resumed.
+  - Sim: 15 min from a bad start, ball error 20 → 7.
+- **Not proven on the robot:** the observer's lag/accel/coast are from the logs and the existing constants, and the gate's
+  window is drag-free. The next SHT run (with a video) checks all of it: compare `flywheel.observer` with `raw_velocity`,
+  `blocker.feed_gate_predicted` with each ball's `flywheel.contact_error`, and the balls in the video against
+  `window_below/above`.
+
+## 2026-11-14 — Blaze redone the way its README says
+
+- **Why:** Blaze's author (owenpmckenna) read our `BlazeSession` and said it made no sense:
+  - its callbacks only timestamped the data into `BlazeRing`s;
+  - the loop still did everything at ~30 ms;
+  - it swapped SDK motors back at the end ("blaze outlives the opmode too");
+  - it was 240 lines around a 5-method API.
+
+  His instructions: use Blaze to get data fast and run the robot in a callback when new data comes. All of the old
+  wrapper is gone (`BlazeRing`, `BlazePinpointLocalizer`, `BlazeHubHook`, `tick`/`feeds`/staleness, the mm-scale guess).
+- **Units:** the Pinpoint data is already in inches and radians. Blaze's Rust driver converts it (`pinpoint_i2c.rs`
+  `MM_TO_IN`), so `PINPOINT_RAW_MM` was a guess at a problem that wasn't there.
+- **Now, for Red/Blue TeleOp only (opt-in `usesBlaze()`):**
+  - `Pedro3SingleDataLocalizer.setup` calls `driveUpdate()` on each Pinpoint sample: sticks → `follower.manual`, then
+    `follower.update()`.
+  - `engageBulkReadAcceleration(ExHub)` calls `mechanismUpdate()` on each Expansion Hub read: flywheel, turret, intake speed
+    loop.
+  - The loop does buttons, aim, telemetry and recording.
+  - One lock between them.
+- **What the bytecode showed** (blazeftc_pedro3 0.1.66 `Pedro3SingleDataLocalizer`):
+  - It sets its pose, runs the callback, then writes the follower's drive motors in one `setMotorPowers` batch.
+  - Pedro's `Follower.update()` stops the drive when it isn't following, so TeleOp must drive through `follower.manual`.
+    A direct motor write is overwritten by those zeros.
+  - Pedro's Mecanum mixes exactly like `DriveController.wheels`: fl = f − s − t, fr = f + s + t, strafe = left,
+    turn = CCW.
+  - Its `setPose` throws, so `BlazeLocalizer` wraps it with an offset (GARDEN relocalize, auto handoff).
+- **Not run on the robot. `ENABLED` stays false until `blaze_check.py` passes. What to watch:**
+  - **Faster control rates:** the flywheel and turret were tuned at ~30 ms loops and now run every ~2-5 ms. Their filters
+    and PIDs use dt, but check for buzz or overshoot.
+  - **Cost of each mechanism callback:** it does SDK servo and motor writes (no motor acceleration). If they're slow it runs
+    at under 200 Hz; `blaze_check` flags that.
+  - **Brake mode:** `follower.manual` uses Pedro's `manualBrakeMode` for brake/float, where our drive set BRAKE.
+  - **Shot detection:** `Flywheel` counts a contact from a per-loop speed drop (`FLYWHEEL_SHOT_DETECT_DROP` 25). At 2 ms
+    per update the drop per update is smaller, so the pre-kick timing learns from fewer contacts.
+- **Same day, rolled out everywhere but turned off** (the user wants it in, not used):
+  - **Which OpModes have it:** every `TeleOpBaseOpMode` tuner, the autos (`AthletechRobot` + `Drive`/`Shooter`/`Intake`)
+    and the four standalone tuners. Pedro's tuners, the testers and the utility OpModes don't.
+  - **Off is unchanged:** with `ENABLED` false, each loop runs the same calls in the same order as before. The only
+    differences are an uncontended lock and the autos' `follow` starting the path itself the way Ivy's
+    `PedroCommands.follow` did.
+
 ## 2026-11-11 — Turret hold through battery sag
 
 - Turret voltage compensation divided the command by the battery, but `lturret` / `rturret` are on hub servo ports (Control Hub

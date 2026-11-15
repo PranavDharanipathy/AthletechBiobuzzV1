@@ -63,11 +63,12 @@ public final class AthletechRobot implements NextRobot {
 
     public void init(HardwareMap hardwareMap, Pose start) {
 
+        //before any hardware
+        BlazeSession.begin(hardwareMap);
         hubs = hardwareMap.getAll(LynxModule.class);
         for (LynxModule hub : hubs) hub.setBulkCachingMode(GeneralConstants.BULK_CACHING_MODE);
         clearCaches();
         drive = new Drive(hardwareMap, start);
-        BlazeSession.attachPinpoint(drive.follower);
         intake = new Intake(hardwareMap);
         fiArm = new FIArm(hardwareMap);
         blocker = new Blocker(hardwareMap);
@@ -78,6 +79,13 @@ public final class AthletechRobot implements NextRobot {
         mechanisms.add(fiArm);
         mechanisms.add(blocker);
         mechanisms.add(shooter);
+        //Blaze: paths on each Pinpoint sample, the shooter's and intake's loops on each Expansion Hub read
+        BlazeSession.drive(drive.follower, drive.follower::update);
+        BlazeSession.mechanisms(hardwareMap, () -> {
+
+            shooter.control();
+            intake.control();
+        });
         status = "Init";
         fault = "";
         shotsTaken = shotTimeouts = 0;
@@ -92,6 +100,7 @@ public final class AthletechRobot implements NextRobot {
         recorder = RobotRecording.open(auto);
         RobotRecording.context(recorder, auto, "", hardwareMap);
         RobotRecording.loop(recorder);
+        RobotRecording.blaze(recorder);
         RobotRecording.pose(recorder, drive.follower);
         RobotRecording.turret(recorder, shooter.turret);
         RobotRecording.flywheel(recorder, shooter.flywheel);
@@ -128,7 +137,7 @@ public final class AthletechRobot implements NextRobot {
     private void clearCaches() {
 
         for (LynxModule hub : hubs) {
-            if (!BlazeSession.feeds(hub)) hub.clearBulkCache();
+            if (hub.isParent() || !BlazeSession.feedsExpansionHub()) hub.clearBulkCache();
         }
     }
 
@@ -141,6 +150,8 @@ public final class AthletechRobot implements NextRobot {
     }
 
     public void start(Alliance alliance) {
+
+        BlazeSession.run();
         shooter.start(new AllianceState(alliance));
     }
 
@@ -268,6 +279,7 @@ public final class AthletechRobot implements NextRobot {
         if (intake != null) intake.stopNow();
         if (shooter != null) shooter.stopNow();
         if (drive != null) drive.stop();
+        BlazeSession.end();
     }
 
     public void showInit(String name, boolean shoots) {
